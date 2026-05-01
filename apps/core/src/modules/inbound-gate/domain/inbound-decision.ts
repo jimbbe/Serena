@@ -16,5 +16,14 @@ export type InboundDecision = {
     senderKnown: boolean;
     receivedAt: string;
     audited: boolean;
+    policyVersion: string;
+    matchedSignals: readonly string[];
+    precedence:
+      | "invalid_sender"
+      | "invalid_text"
+      | "unknown_sender"
+      | "urgent_or_risk_over_mediation"
+      | "mediation_over_conversation"
+      | "conversation_default";
   };
 };

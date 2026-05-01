@@ -25,7 +25,7 @@ Not verified by SSH in T03:
 - Publish `serena-core` later as its own Docker Compose project attached to the external `proxy` network.
 - Do not publish host ports from `serena-core`; Caddy should reach it by container name on the shared network.
 - Route Caddy later from `serena.goingmerry01.tech` to `serena-core:3000`.
-- Keep PostgreSQL out of the VPS template for now because the current app does not use database persistence.
+- Keep PostgreSQL out of the T03 VPS template because the app did not use database persistence at that point. T04 later incorporated private PostgreSQL into the VPS stack.
 - Keep local T02 PostgreSQL in the root `docker-compose.yml` for development only.
 
 ## Do Not Touch In T03
@@ -53,9 +53,9 @@ Run only on the VPS after preflight and after the repository or release artifact
 
 ```sh
 cd /docker/serena
-docker compose -f infra/vps/docker-compose.yml config
-docker compose -f infra/vps/docker-compose.yml up -d --build
-docker compose -f infra/vps/docker-compose.yml ps
+docker compose --env-file .env -f infra/vps/docker-compose.yml config
+docker compose --env-file .env -f infra/vps/docker-compose.yml up -d --build
+docker compose --env-file .env -f infra/vps/docker-compose.yml ps
 ```
 
 Then add the Serena route from `infra/vps/Caddyfile.serena.example` to the active Caddy edge configuration. The observed Caddy project generates `/config-src/Caddyfile` from the `caddyfile-writer` service in `/docker/caddy-edge/docker-compose.yml`, so T04 should back up and edit that compose file rather than guessing a separate host Caddyfile path.
@@ -99,7 +99,7 @@ Do not expect the app to answer on a VPS host port; the template intentionally u
 
 ```sh
 cd /docker/serena
-docker compose -f infra/vps/docker-compose.yml down
+docker compose --env-file .env -f infra/vps/docker-compose.yml down
 docker logs --tail=100 caddy-edge
 ```
 
@@ -117,8 +117,12 @@ docker exec caddy-edge caddy reload --config /config-src/Caddyfile --adapter cad
 
 ## Risks And Open Dependencies
 
+Historical T03 risks before T04:
+
 - DNS for `serena.goingmerry01.tech` is not created yet.
 - SSH access and keys were not verified in T03.
 - Docker/Compose versions were not verified by SSH in T03.
 - The `proxy` network is assumed from the existing Caddy strategy but must be checked before deployment.
 - The app currently has only a health endpoint and no business behavior.
+
+T04 later resolved the infrastructure preflight items, deployed the stack, and added private PostgreSQL on `serena-internal`.

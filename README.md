@@ -6,7 +6,7 @@ La Fase 1 apunta a mediacion prudente por WhatsApp: Serena recibe un pedido, ide
 
 ## Estado Actual
 
-Este repositorio esta en bootstrap inicial.
+Este repositorio esta en bootstrap inicial con el stack base ya desplegado en la VPS para T04.
 
 Lo que existe hoy:
 
@@ -15,15 +15,18 @@ Lo que existe hoy:
 - workspace Node.js/TypeScript preparado sin logica de negocio
 - espacio reservado para modulos Go, sin fijar todavia una ruta de modulo Go
 - Docker Compose local T02 con `postgres` y `serena-core`
-- templates T03 para desplegar luego `serena-core` detras del Caddy edge del VPS
+- templates T03 para desplegar `serena-core` detras del Caddy edge del VPS
+- preflight T03.1 de VPS documentado
+- despliegue T04 aplicado en `/docker/serena` con `serena-core` y `serena-postgres` healthy
+- ruta publica activa `https://serena.goingmerry01.tech/health` via Caddy
 
 Lo que no existe todavia:
 
 - logica conversacional de Serena
 - integracion con WhatsApp
-- conexion real a PostgreSQL
 - panel web
-- despliegue productivo ejecutado
+- features productivas mas alla del healthcheck
+- conexion real a PostgreSQL desde la aplicacion
 
 ## Forma De Trabajo
 
@@ -147,15 +150,39 @@ Ese comando valida la estructura base sin levantar servicios ni requerir depende
 T03 deja documentado y versionado el camino de despliegue para `serena-core`, sin tocar produccion:
 
 - `docs/deployment-t03.md` describe estrategia, preflight, comandos de deploy, verificacion y rollback.
-- `infra/vps/docker-compose.yml` define `serena-core` para una futura publicacion detras de Caddy, unido a la red externa `proxy` y sin puertos host.
+- `infra/vps/docker-compose.yml` definia el camino inicial de `serena-core` detras de Caddy, unido a la red externa `proxy` y sin puertos host. T04 lo extendio con PostgreSQL privado.
 - `infra/vps/Caddyfile.serena.example` contiene solo la ruta futura `serena.goingmerry01.tech -> serena-core:3000`.
+
+## Preflight VPS Real (T03.1)
+
+T03.1 releva la VPS real sin hacer deploy:
+
+- `docs/deployment-t03-1-preflight.md` consolida inventario, DNS, Caddy/proxy, comandos de deploy/verify/rollback y bloqueos.
+- VPS confirmada: `srv1619520.hstgr.cloud` / `177.7.32.90`.
+- Caddy confirmado en `/docker/caddy-edge/docker-compose.yml`.
+- Los bloqueos de SSH, DNS, Docker/Compose, `proxy` y backup quedaron resueltos durante T04.
+
+## Despliegue VPS Base (T04)
+
+T04 dejo operativo el stack base en la VPS:
+
+- path remoto: `/docker/serena`
+- servicios: `serena-core` healthy y `serena-postgres` healthy
+- redes: `serena-core` en `proxy` + `serena-internal`; `serena-postgres` solo en `serena-internal`
+- sin host ports publicados por Serena
+- ruta publica: `https://serena.goingmerry01.tech/health`
+- Caddy valida y recarga correctamente con la ruta `serena.goingmerry01.tech -> serena-core:3000`
+
+Runbook operativo: `docs/deployment-t04.md`.
 
 ## Proximos Pasos
 
-T04 deberia validar SSH, DNS, red `proxy`, estado de Caddy y versiones Docker/Compose antes de cualquier deploy productivo.
+El siguiente paso deberia ser definir la primera funcionalidad de producto o la conexion real de la aplicacion a PostgreSQL, sin mezclarlo con cambios de infraestructura.
 
 Ver tambien:
 
 - `docs/project-status.md`
 - `docs/open-questions.md`
 - `docs/deployment-t03.md`
+- `docs/deployment-t03-1-preflight.md`
+- `docs/deployment-t04.md`

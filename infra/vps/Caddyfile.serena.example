@@ -1,0 +1,4 @@
+serena.goingmerry01.tech {
+  encode gzip
+  reverse_proxy serena-core:3000
+}

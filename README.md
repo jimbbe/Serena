@@ -14,15 +14,16 @@ Lo que existe hoy:
 - documentacion inicial del stack, forma de trabajo y preguntas abiertas
 - workspace Node.js/TypeScript preparado sin logica de negocio
 - espacio reservado para modulos Go, sin fijar todavia una ruta de modulo Go
+- Docker Compose local T02 con `postgres` y `serena-core`
+- templates T03 para desplegar luego `serena-core` detras del Caddy edge del VPS
 
 Lo que no existe todavia:
 
 - logica conversacional de Serena
 - integracion con WhatsApp
 - conexion real a PostgreSQL
-- Docker Compose local
 - panel web
-- despliegue
+- despliegue productivo ejecutado
 
 ## Forma De Trabajo
 
@@ -62,7 +63,7 @@ apps/
   panel/         # placeholder para futuro panel, si corresponde
 packages/
   shared/        # tipos, contratos y utilidades compartidas no acopladas a infraestructura
-infra/           # futura infraestructura local y deploy; T02 deberia agregar Docker Compose
+infra/           # infraestructura local y templates de despliegue
 docs/            # estado, decisiones y preguntas abiertas
 tests/           # pruebas transversales o de aceptacion cuando existan
 scripts/         # tooling local del repositorio
@@ -141,16 +142,20 @@ npm run check
 
 Ese comando valida la estructura base sin levantar servicios ni requerir dependencias externas.
 
+## Despliegue VPS Preparado (T03)
+
+T03 deja documentado y versionado el camino de despliegue para `serena-core`, sin tocar produccion:
+
+- `docs/deployment-t03.md` describe estrategia, preflight, comandos de deploy, verificacion y rollback.
+- `infra/vps/docker-compose.yml` define `serena-core` para una futura publicacion detras de Caddy, unido a la red externa `proxy` y sin puertos host.
+- `infra/vps/Caddyfile.serena.example` contiene solo la ruta futura `serena.goingmerry01.tech -> serena-core:3000`.
+
 ## Proximos Pasos
 
-T02 deberia agregar infraestructura local minima:
-
-- Docker Compose
-- PostgreSQL local
-- al menos un servicio con healthcheck
-- documentacion de como levantar y apagar el entorno
+T04 deberia validar SSH, DNS, red `proxy`, estado de Caddy y versiones Docker/Compose antes de cualquier deploy productivo.
 
 Ver tambien:
 
 - `docs/project-status.md`
 - `docs/open-questions.md`
+- `docs/deployment-t03.md`

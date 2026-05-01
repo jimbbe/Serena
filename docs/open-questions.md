@@ -21,7 +21,15 @@ These questions are intentionally left open until a task needs the decision.
 
 ## Infrastructure
 
-- What deployment target and rollback process will be used after local development works?
+- Preflight for T04: who has SSH access to the VPS and which key should be used?
+- Preflight for T04: when will DNS for `serena.goingmerry01.tech` be created and pointed to the VPS?
+- Preflight for T04: what exact Docker and Docker Compose versions are installed on the VPS?
+- Preflight for T04: confirm the external Docker network `proxy` and the active Caddyfile location on the VPS.
+
+## Prepared In T03
+
+- Deployment target/path: future `serena-core` Compose project on the VPS, attached to external Docker network `proxy`, routed by existing Caddy edge.
+- Rollback process: stop the `serena-core` Compose project, revert the Serena Caddy route, reload Caddy, and inspect Caddy/app logs.
 
 ## Resolved In T02
 

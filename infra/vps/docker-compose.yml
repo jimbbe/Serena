@@ -1,0 +1,34 @@
+name: serena
+
+services:
+  serena-core:
+    build:
+      context: ../..
+      dockerfile: apps/core/Dockerfile
+    container_name: serena-core
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - proxy
+
+networks:
+  proxy:
+    external: true
+    name: proxy

@@ -10,14 +10,16 @@
   ],
   "scripts": {
     "check": "npm run check:structure && npm run typecheck",
-    "check:structure": "node scripts/check-structure.mjs",
-    "typecheck": "npm run -w @serena/core typecheck"
+    "check:structure": "node --experimental-strip-types scripts/check-structure.ts",
+    "typecheck": "npm run typecheck:core && npm run typecheck:scripts",
+    "typecheck:core": "npm run -w @serena/core typecheck",
+    "typecheck:scripts": "tsc -p scripts/tsconfig.json"
   },
   "devDependencies": {
     "@types/node": "^22.19.17",
     "typescript": "^5.9.3"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.6.0"
   }
 }

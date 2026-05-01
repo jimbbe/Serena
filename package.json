@@ -9,6 +9,7 @@
     "packages/*"
   ],
   "scripts": {
+    "test": "npm run -w @serena/core test",
     "check": "npm run check:structure && npm run typecheck",
     "check:structure": "node --experimental-strip-types scripts/check-structure.ts",
     "typecheck": "npm run typecheck:core && npm run typecheck:scripts",

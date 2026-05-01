@@ -27,6 +27,15 @@ La Fase 1 apunta a mediacion prudente por WhatsApp: Serena puede recibir un pedi
 - Documentar preguntas abiertas en `docs/open-questions.md`.
 - Mantener modulos separados y limites claros.
 
+## Protocolo PR-only
+
+- Toda tarea con cambios mergeables debe terminar en Pull Request.
+- No se mergea directo a `main`.
+- Aplica a codigo, documentacion, configuracion, contratos operativos y scripts de build/test.
+- El PR debe ser revisado y aprobado por Marco antes del merge.
+- Recien despues de esa aprobacion se puede mergear.
+- Despues del merge, borrar la rama de trabajo si corresponde.
+
 ## Stack Base
 
 - Node.js + TypeScript para producto, APIs, tooling web e integraciones donde convenga el ecosistema web.

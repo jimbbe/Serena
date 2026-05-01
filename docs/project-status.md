@@ -34,6 +34,7 @@ The current goal is to keep a clean base so later tasks can add behavior without
 - Keep secrets out of Git.
 - Add modules only when a task needs them.
 - Use `npm run check` as the current bootstrap sanity check.
+- Mergeable changes must go through a PR reviewed and approved by Marco before merge; no direct merges to `main`.
 
 ## Implemented In T02
 

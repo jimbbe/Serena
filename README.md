@@ -82,7 +82,7 @@ Archivos relevantes:
 
 - `package.json` define scripts minimos del workspace.
 - `tsconfig.base.json` define una base estricta para futuros modulos TypeScript.
-- `scripts/check-structure.mjs` valida que la estructura inicial exista.
+- `scripts/check-structure.ts` valida que la estructura inicial exista.
 
 ## Go
 

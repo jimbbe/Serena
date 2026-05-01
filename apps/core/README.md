@@ -1,15 +1,36 @@
 # Serena Core
 
-Placeholder for the future core product module.
+Minimal local service for T02.
 
-Expected responsibility:
+## Scope (T02)
 
-- conversation/application use cases
-- domain boundaries
-- ports for external dependencies
+- expose `GET /health` over HTTP
+- keep service framework-free (`node:http`)
+- receive PostgreSQL config by environment only
+- do **not** connect to PostgreSQL yet
 
-Not implemented yet:
+## Run inside Docker Compose
 
-- business rules
-- persistence
-- provider integrations
+From repository root:
+
+```sh
+docker compose up --build
+```
+
+Check health endpoint:
+
+```sh
+curl http://localhost:3000/health
+```
+
+Expected response (example):
+
+```json
+{"status":"ok","service":"serena-core","environment":"local"}
+```
+
+Stop stack:
+
+```sh
+docker compose down
+```

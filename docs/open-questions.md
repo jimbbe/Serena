@@ -21,6 +21,9 @@ These questions are intentionally left open until a task needs the decision.
 
 ## Infrastructure
 
-- What local ports should be reserved for services?
-- What environment variable names are required once Docker Compose exists?
 - What deployment target and rollback process will be used after local development works?
+
+## Resolved In T02
+
+- Local default ports: `CORE_PORT=3000` maps to the core container port `3000`; `POSTGRES_PORT=5432` maps to the PostgreSQL container port `5432`.
+- Baseline environment variable names: `APP_ENV`, `NODE_ENV`, `CORE_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_PORT`, `DATABASE_URL`, `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`.

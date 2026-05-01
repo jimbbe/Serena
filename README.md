@@ -88,9 +88,48 @@ Motivo: no hay servicio Go concreto ni ruta de modulo decidida. Crear un `go.mod
 
 ## Configuracion Local
 
-Crear un `.env` local a partir de `.env.example` cuando una tarea necesite variables de entorno reales.
+Crear un `.env` local a partir de `.env.example` para personalizar puertos o credenciales locales de desarrollo.
 
 No se deben commitear secretos.
+
+## Entorno Local Con Docker Compose (T02)
+
+La raiz del repo ahora incluye `docker-compose.yml` con:
+
+- `postgres` (PostgreSQL local con volumen nombrado persistente)
+- `serena-core` (servicio Node.js/TypeScript en `apps/core`)
+
+### Levantar
+
+```sh
+docker compose up --build
+```
+
+### Verificar health
+
+```sh
+curl http://localhost:3000/health
+```
+
+Respuesta esperada (ejemplo):
+
+```json
+{"status":"ok","service":"serena-core","environment":"local"}
+```
+
+### Apagar
+
+```sh
+docker compose down
+```
+
+Para borrar tambien el volumen persistente local de PostgreSQL:
+
+```sh
+docker compose down -v
+```
+
+Nota: dentro de Docker Compose, `DATABASE_URL` usa el hostname `postgres`. Para herramientas ejecutadas desde la maquina host, usar `localhost` con `POSTGRES_PORT`.
 
 ## Verificacion
 

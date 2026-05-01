@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-Serena is in initial repository bootstrap.
+Serena is in early bootstrap with local development infrastructure baseline (T02).
 
-The current goal is to prepare a clean base so later tasks can add infrastructure and code without mixing concerns.
+The current goal is to keep a clean base so later tasks can add behavior without mixing concerns.
 
 ## Decided
 
@@ -21,8 +21,7 @@ The current goal is to prepare a clean base so later tasks can add infrastructur
 - Serena business logic.
 - WhatsApp integration.
 - Contact allowlist behavior.
-- PostgreSQL connection.
-- Docker Compose.
+- PostgreSQL connection usage in application code.
 - Panel UI.
 - Deployment.
 
@@ -34,11 +33,16 @@ The current goal is to prepare a clean base so later tasks can add infrastructur
 - Add modules only when a task needs them.
 - Use `npm run check` as the current bootstrap sanity check.
 
+## Implemented In T02
+
+- Root `docker-compose.yml` with:
+  - `postgres` service (`postgres:16-alpine`) and named volume `serena-postgres-data`.
+  - `serena-core` service built from `apps/core/Dockerfile`.
+- Minimal Node.js/TypeScript HTTP service under `apps/core/src/server.ts`.
+- `GET /health` endpoint returning HTTP 200 + simple JSON payload.
+- Local environment variables expanded in `.env.example` for compose + future DB wiring.
+- Documentation added in `README.md` and `apps/core/README.md` for start/verify/stop flow.
+
 ## Expected Next Task
 
-T02 should add local infrastructure for development:
-
-- Docker Compose.
-- PostgreSQL local service.
-- a minimal service healthcheck.
-- clear start/stop/verification instructions.
+T03 is not decided yet. It should stay narrow and should not add WhatsApp, production deployment or business logic unless the task explicitly scopes that work.

@@ -9,8 +9,13 @@
     "packages/*"
   ],
   "scripts": {
-    "check": "npm run check:structure",
-    "check:structure": "node scripts/check-structure.mjs"
+    "check": "npm run check:structure && npm run typecheck",
+    "check:structure": "node scripts/check-structure.mjs",
+    "typecheck": "npm run -w @serena/core typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=20"

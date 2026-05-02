@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-Serena is in early bootstrap with local development infrastructure baseline (T02), a prepared VPS deployment path (T03), a real VPS preflight report (T03.1), and the T04 base VPS stack deployed.
+Serena completed bootstrap (T01–T04) with VPS deployment active. Two core modules are implemented (T06–T09): `inbound-gate` classifies and routes incoming messages, and `mediation-bridge` manages session lifecycle between two participants. T10 defined the full MVP architecture, module contracts, and task roadmap (T11–T17).
 
-The current goal is to keep a clean base so later tasks can add behavior without mixing concerns.
+The current goal is to implement the remaining MVP modules following the T10 roadmap, starting with WhatsApp Gateway (T11).
 
 ## Decided
 
@@ -18,14 +18,42 @@ The current goal is to keep a clean base so later tasks can add behavior without
 - The active VPS path is `serena-core` behind the existing Caddy edge on external Docker network `proxy`, without host port publication from the app container.
 - The VPS stack includes private PostgreSQL on `serena-internal`; `serena-postgres` is not exposed on host ports or the public proxy network.
 
+## Implemented (T05–T10)
+
+- T05: Complete TypeScript migration. `npm run check` validates structure + typechecks.
+- T06: `inbound-gate` module — message classification (allowed/blocked/needs_mediation), sender validation, signal-based policy evaluation.
+- T07: `inbound-gate` traceability — auditable decisions, policy versioning, metadata.
+- T08: `inbound-gate` processing router — routes to LLM profiles (conversation, mediation_understanding, risk_review, clarification).
+- T09: `mediation-bridge` module — session lifecycle (start, record reply, close), turns, outbound drafts with Serena introduction.
+- T10: MVP architecture design (`docs/t10-mvp-architecture.md`) + 6 new module contracts — contact-directory, session-manager, mediation-understanding, prudent-rewording, whatsapp-gateway, orchestrator.
+
+## Business Logic Use Cases (T06–T09)
+
+- `inbound-gate`:
+  - `EvaluateInboundMessage` — clasifica mensajes entrantes (allowed/blocked/needs_mediation) evaluando politicas, validacion de sender y deteccion de senales
+  - `ProcessInboundMessage` — rutea decisiones a perfiles LLM (conversation, mediation_understanding, risk_review) o descarte
+  - stores en memoria: `InMemoryContactDirectory`, `InMemoryDecisionAudit`
+- `mediation-bridge`:
+  - `StartMediationBridgeSession` — inicia sesion entre requester y recipient, genera borrador saliente con introduccion de Serena
+  - `RecordMediationBridgeReply` — registra turno de respuesta del participante esperado
+  - `CloseMediationBridgeSession` — cierra sesion con motivo
+  - store en memoria: `InMemoryMediationBridgeSessionStore`
+- tests: 36 tests de caso de uso pasando (evaluacion, ruteo y mediacion, sin mock de infraestructura externa)
+
 ## Not Implemented Yet
 
-- Serena business logic.
-- WhatsApp integration.
-- Contact allowlist behavior.
-- PostgreSQL connection usage in application code.
+- HTTP API interna — los modulos core no estan expuestos por HTTP (solo `/health`).
+- WhatsApp Gateway adapter con Evolution API real (T11) — hoy solo existe el contrato de puerto.
+- Contact Directory implementation (T12).
+- Session Manager + Orchestrator pipeline (T13).
+- Mediation Understanding (rule-based Spanish extraction) (T14).
+- Prudent Rewording implementation (T15).
+- End-to-end integration tests (T16).
+- Evolution API VPS deployment (T17).
+- Uso real de PostgreSQL desde la aplicacion — las stores actuales son en memoria.
 - Panel UI.
-- Production behavior beyond the base healthcheck route.
+- Politica final de allowlist/contactos.
+- Proveedor externo de mensajes (WhatsApp) integrado en produccion.
 
 ## Repository Conventions
 
@@ -77,4 +105,15 @@ The current goal is to keep a clean base so later tasks can add behavior without
 
 ## Expected Next Task
 
-The next task should add product behavior or application-level PostgreSQL usage only when explicitly scoped. Infrastructure T04 blockers are resolved.
+Per the T10 roadmap (`docs/t10-mvp-architecture.md` §11), the current phase is **business logic implementation with in-memory adapters**:
+
+- **T11**: Contact Directory (in-memory adapter + JSON seed)
+- **T12**: Mediation Understanding (rule-based Spanish extraction)
+- **T13**: Prudent Rewording (template-based indirect rewording)
+- **T14**: Session Manager (resolve active session per pair)
+- **T15**: Orchestrator (wire end-to-end pipeline)
+- **T16**: End-to-end integration tests
+
+T11, T12 and T13 are independent and can be implemented in parallel.
+
+After T16, integrations follow (T17–T20): WhatsApp Gateway as a **separate repo**, Serena WhatsApp adapter, PostgreSQL adapters, VPS deployment update.

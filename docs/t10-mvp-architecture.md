@@ -28,12 +28,12 @@ These decisions were confirmed with Marco and define the MVP scope:
 |--------|--------|-------------|
 | `inbound-gate` | ✅ exists | Classifies inbound messages as conversational, mediation request, or blocked |
 | `mediation-bridge` | ✅ exists | Manages session lifecycle, turns, outbound drafts, and closure between two participants |
-| `contact-directory` | ❌ new — contracts only | Stores and resolves contacts (allowed senders + name-to-ID resolution) |
-| `session-manager` | ❌ new — contracts only | Resolves active session for a participant pair or signals a new one is possible |
-| `mediation-understanding` | ❌ new — contracts only | Extracts recipient name + message from natural language (rules first, LLM fallback) |
-| `prudent-rewording` | ❌ new — contracts only | Rewords extracted message in indirect style with clear attribution |
-| `whatsapp-gateway` | ❌ new — contracts only | Sends/receives WhatsApp messages via Evolution API REST + webhooks |
-| `orchestrator` | ❌ new — contracts only | Wires the end-to-end pipeline: inbound → classify → understand → resolve → reword → send |
+| `contact-directory` | ✅ exists | Stores and resolves contacts (allowed senders + name-to-ID resolution) |
+| `session-manager` | ✅ exists | Resolves active session for a participant pair or signals a new one is possible |
+| `mediation-understanding` | ✅ exists | Extracts recipient name + message from natural language (rules first, LLM fallback) |
+| `prudent-rewording` | ✅ exists | Rewords extracted message in indirect style with clear attribution |
+| `orchestrator` | ✅ exists | Wires the end-to-end pipeline: inbound → classify → understand → resolve → reword → result. In-memory, no external sends. |
+| `whatsapp-gateway` | ❌ contracts only | Sends/receives WhatsApp messages via Evolution API REST + webhooks |
 
 ---
 
@@ -79,9 +79,11 @@ sequenceDiagram
     Note over C,M: Reverse direction follows same pipeline
 ```
 
+> **T15 update (2026-05-02):** El diagrama original muestra Inbound Gate como coordinador principal. A partir de T15, **Orchestrator** es quien coordina el pipeline: recibe el mensaje, delega clasificación a Inbound Gate, y orquesta el resto del flujo (mediation-understanding → contact-directory → session-manager → mediation-bridge → prudent-rewording). El comportamiento de cada módulo no cambia — solo se extrae la coordinación a `ProcessIncomingWhatsAppMessage`.
+
 ---
 
-## 4. Data Flow Diagram
+## 4. Data Flow Diagram (T10 original — see T15 note below)
 
 ```mermaid
 flowchart LR
@@ -119,7 +121,9 @@ flowchart LR
     ORCH -.->|PipelineResult| IG
 ```
 
-### Data Contracts Between Modules
+> **T15 update (2026-05-02):** El diagrama de flujo de datos original muestra Inbound Gate como hub de todos los contratos. En T15, **Orchestrator** es el coordinador real: `ProcessIncomingWhatsAppMessage` recibe el mensaje, usa Inbound Gate solo para clasificación, y coordina directamente mediation-understanding, contact-directory, session-manager, mediation-bridge y prudent-rewording. La tabla de contratos debajo refleja la arquitectura original de T10 — el contrato efectivo en T15 es `PipelineInput → PipelineResult` via Orchestrator.
+
+### Data Contracts Between Modules (T10 original)
 
 | From | To | Contract |
 |------|----|----------|
@@ -364,24 +368,24 @@ The WhatsApp Gateway adapter:
 
 ### Current Tasks (Serena business logic — in-memory)
 
-| Task | Description | Dependencies |
-|------|-------------|--------------|
-| **T11** | Contact Directory — expanded in-memory adapter + JSON seed + use case | T10 contracts |
-| **T12** | Mediation Understanding — rule-based extraction (Spanish patterns) | T10 contracts |
-| **T13** | Prudent Rewording — template-based indirect rewording | T10 contracts |
-| **T14** | Session Manager — resolve active session per participant pair | T10 contracts, T11 |
-| **T15** | Orchestrator — wire the end-to-end pipeline with in-memory adapters | T06–T14 |
-| **T16** | End-to-end integration tests — full pipeline verification | T11–T15 |
+| Task | Description | Status |
+|------|-------------|--------|
+| **T11** | Contact Directory — expanded in-memory adapter + JSON seed + use case | ✅ done |
+| **T12** | Mediation Understanding — rule-based extraction (Spanish patterns) | ✅ done |
+| **T13** | Prudent Rewording — template-based indirect rewording | ✅ done |
+| **T14** | Session Manager — resolve active session per participant pair | ✅ done |
+| **T15** | Orchestrator — wire the end-to-end pipeline with in-memory adapters | ✅ done |
+| **T16** | End-to-end integration tests — full pipeline verification | ✅ done (covered by T15 orchestrator tests) |
 
 ### Future Tasks (after Serena pipeline works)
 
 | Task | Description | Dependencies |
 |------|-------------|--------------|
-| **T17** | WhatsApp Gateway repo — standalone service, multi-project, multi-number | T16 |
+| **T17** | WhatsApp Gateway repo — standalone service, multi-project, multi-number | T15 |
 | **T18** | Serena WhatsApp adapter — connect serena-core to WhatsApp Gateway | T17 |
-| **T19** | PostgreSQL adapters — replace in-memory with real DB | T16 |
+| **T19** | PostgreSQL adapters — replace in-memory with real DB | T15 |
 | **T20** | VPS deployment update — WhatsApp Gateway + Serena behind Caddy | T17, T18 |
 
 ---
 
-*Document created during T10. Last updated: 2026-05-02.*
+*Document created during T10. Last updated: 2026-05-02 (T15 orchestrator pipeline implemented).*

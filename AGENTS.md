@@ -27,14 +27,31 @@ La Fase 1 apunta a mediacion prudente por WhatsApp: Serena puede recibir un pedi
 - Documentar preguntas abiertas en `docs/open-questions.md`.
 - Mantener modulos separados y limites claros.
 
-## Protocolo PR-only
+## Protocolo de Ramas y PRs
 
-- Toda tarea con cambios mergeables debe terminar en Pull Request.
+- **Una rama por tarea.** Cada tarea (TXX) usa su propia rama con el formato `feat/tXX-descripcion-breve`. No se mezclan tareas en una misma rama.
+- **Una tarea = un PR.** Toda tarea con cambios mergeables debe terminar en Pull Request. No hay excepciones para codigo, documentacion, configuracion, ni scripts.
 - No se mergea directo a `main`.
-- Aplica a codigo, documentacion, configuracion, contratos operativos y scripts de build/test.
 - El PR debe ser revisado y aprobado por Marco antes del merge.
 - Recien despues de esa aprobacion se puede mergear.
-- Despues del merge, borrar la rama de trabajo si corresponde.
+- Despues del merge, borrar la rama de trabajo.
+
+## Flujo SDD Obligatorio por Tarea
+
+Toda tarea clasificada como M, L o XL debe ejecutarse con el flujo Spec-Driven Development completo:
+
+```
+/sdd-explore  → entender el problema y el contexto
+/sdd-propose  → propuesta de cambio con alcance
+/sdd-spec     → especificaciones con escenarios
+/sdd-design   → diseno tecnico con decisiones
+/sdd-tasks    → checklist de implementacion
+/sdd-apply    → implementar (delegado a sub-agentes)
+/sdd-verify   → validar contra specs (delegado a sub-agentes)
+/sdd-archive  → sincronizar specs y archivar
+```
+
+El orquestador (MainAI) coordina y delega a los sub-agentes especializados. No implementa directamente salvo tareas XS/S.
 
 ## Stack Base
 

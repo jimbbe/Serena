@@ -229,9 +229,10 @@ describe("HTTP server — routing and pipeline", () => {
     assert.equal(obj.senderId, MARIA_WHATSAPP);
   });
 
-  // 7. Valid mediation request → mediation_started
-  it("POST /internal/pipeline/process with mediation request returns mediation_started", async () => {
-    const { status, body } = await request(
+  // 7. Full mediation round-trip: María starts → Carlos replies
+  it("full mediation round-trip: María starts, Carlos replies → session continuity", async () => {
+    // Step 1: María sends a mediation request
+    const startResp = await request(
       "POST",
       "/internal/pipeline/process",
       port,
@@ -242,22 +243,20 @@ describe("HTTP server — routing and pipeline", () => {
       },
     );
 
-    assert.equal(status, 200);
-    const obj = body as Record<string, unknown>;
-    assert.equal(obj.type, "mediation_started");
-    assert.equal(obj.requesterId, MARIA_WHATSAPP);
-    assert.equal(obj.requesterDisplayName, "María");
-    assert.equal(obj.recipientId, CARLOS_WHATSAPP);
-    assert.equal(obj.recipientDisplayName, "Carlos");
-    assert.ok(typeof obj.rewordedText === "string");
-    assert.ok((obj.rewordedText as string).includes("Serena"));
-    assert.ok(typeof obj.sessionId === "string");
-  });
+    assert.equal(startResp.status, 200);
+    const start = startResp.body as Record<string, unknown>;
+    assert.equal(start.type, "mediation_started");
+    assert.equal(start.requesterId, MARIA_WHATSAPP);
+    assert.equal(start.requesterDisplayName, "María");
+    assert.equal(start.recipientId, CARLOS_WHATSAPP);
+    assert.equal(start.recipientDisplayName, "Carlos");
+    assert.ok(typeof start.rewordedText === "string");
+    assert.ok((start.rewordedText as string).includes("Serena"));
+    assert.ok(typeof start.sessionId === "string");
+    const sessionId = start.sessionId as string;
 
-  // 8. Second request — recipient reply finds active session
-  it("second request from recipient finds active session → mediation_reply_recorded", async () => {
-    // Carlos replies — the previous test started a session awaiting Carlos
-    const { status, body } = await request(
+    // Step 2: Carlos replies — should find the active session created above
+    const replyResp = await request(
       "POST",
       "/internal/pipeline/process",
       port,
@@ -268,18 +267,18 @@ describe("HTTP server — routing and pipeline", () => {
       },
     );
 
-    assert.equal(status, 200);
-    const obj = body as Record<string, unknown>;
-    assert.equal(obj.type, "mediation_reply_recorded");
-    assert.equal(obj.fromParticipantId, CARLOS_WHATSAPP);
-    assert.equal(obj.fromDisplayName, "Carlos");
-    assert.equal(obj.toParticipantId, MARIA_WHATSAPP);
-    assert.equal(obj.toDisplayName, "María");
-    assert.ok(typeof obj.rewordedText === "string");
-    assert.ok(typeof obj.sessionId === "string");
+    assert.equal(replyResp.status, 200);
+    const reply = replyResp.body as Record<string, unknown>;
+    assert.equal(reply.type, "mediation_reply_recorded");
+    assert.equal(reply.fromParticipantId, CARLOS_WHATSAPP);
+    assert.equal(reply.fromDisplayName, "Carlos");
+    assert.equal(reply.toParticipantId, MARIA_WHATSAPP);
+    assert.equal(reply.toDisplayName, "María");
+    assert.equal(reply.sessionId, sessionId);
+    assert.ok(typeof reply.rewordedText === "string");
   });
 
-  // 9. Non-existent route → 404
+  // 8. Non-existent route → 404
   it("GET /nonexistent returns 404", async () => {
     const { status, body } = await request("GET", "/nonexistent", port);
 
@@ -288,7 +287,7 @@ describe("HTTP server — routing and pipeline", () => {
     assert.equal(obj.error, "not_found");
   });
 
-  // 10. Wrong method on pipeline endpoint → 405
+  // 9. Wrong method on pipeline endpoint → 405
   it("GET /internal/pipeline/process returns 405", async () => {
     const { status, body } = await request(
       "GET",
@@ -301,7 +300,7 @@ describe("HTTP server — routing and pipeline", () => {
     assert.equal(obj.error, "method_not_allowed");
   });
 
-  // 11. POST to unknown route → 404
+  // 10. POST to unknown route → 404
   it("POST /unknown-route returns 404", async () => {
     const { status, body } = await request("POST", "/unknown-route", port, {
       foo: "bar",
@@ -312,7 +311,7 @@ describe("HTTP server — routing and pipeline", () => {
     assert.equal(obj.error, "not_found");
   });
 
-  // 12. Empty body object → 400 (missing required fields)
+  // 11. Empty body object → 400 (missing required fields)
   it("POST /internal/pipeline/process with empty JSON object returns 400", async () => {
     const { status, body } = await request(
       "POST",
@@ -326,7 +325,7 @@ describe("HTTP server — routing and pipeline", () => {
     assert.equal(obj.error, "invalid_payload");
   });
 
-  // 13. "text" alias field works
+  // 12. "text" alias field works
   it("POST /internal/pipeline/process accepts 'text' as alias for 'messageText'", async () => {
     // Use Juan — no active session, so conversational message stays conversation_pending
     const { status, body } = await request(
@@ -346,7 +345,7 @@ describe("HTTP server — routing and pipeline", () => {
     assert.equal(obj.senderId, "5493333333333");
   });
 
-  // 14. Body that is not an object → 400
+  // 13. Body that is not an object → 400
   it("POST /internal/pipeline/process with array body returns 400", async () => {
     const { status, body } = await request(
       "POST",
@@ -360,7 +359,7 @@ describe("HTTP server — routing and pipeline", () => {
     assert.equal(obj.error, "invalid_payload");
   });
 
-  // 15. Risk/urgent message → risk_review_required
+  // 14. Risk/urgent message → risk_review_required
   it("POST /internal/pipeline/process with risk message returns risk_review_required", async () => {
     const { status, body } = await request(
       "POST",

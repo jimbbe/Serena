@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), and business logic modules implemented with testing (T06-T09, T11-T15). T15 Orchestrator pipeline wires all modules end-to-end in-memory, with 126 tests passing.
+Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), and the orchestrator pipeline exposed via HTTP (T16). 140 tests passing.
 
 ## Decided
 
@@ -20,8 +20,9 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), an
 
 - WhatsApp / Evolution API real integration (`whatsapp-gateway` has only domain types and port contract).
 - PostgreSQL connection usage in application code (current modules use in-memory stores).
-- HTTP API beyond `/health` (no business endpoints exist).
+- HTTP API beyond `/health` and `/internal/pipeline/process` (no external business endpoints exist).
 - Panel UI.
+- WhatsApp / Evolution API real integration (internal HTTP pipeline produces results but does not send messages).
 
 ## Repository Conventions
 
@@ -144,8 +145,17 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), an
 - Adapter `MediationBridgeActiveSessionQuery` que lee sesiones directamente de `MediationBridgeSessionStore`, eliminando la necesidad de sincronizacion manual entre stores.
 - El orchestrator coordina: no reimplementa validacion, extraccion, resolucion, turnos ni reescritura.
 - Ninguna conexion a infraestructura externa, HTTP endpoints, WhatsApp, Evolution API ni PostgreSQL.
-- 126 tests pasando (115 previos + 11 de orchestrator).
+- Tests: 11 orchestrator + 14 HTTP pipeline = 25 nuevos tests en T15-T16. Total: 140 tests (115 previos + 25).
+
+## Implemented In T16: Internal Pipeline HTTP
+
+- Endpoint `POST /internal/pipeline/process` valida JSON entrante, ejecuta `ProcessIncomingWhatsAppMessage` y devuelve `PipelineResult` serializado.
+- Factory `createInMemoryPipeline()` en `apps/core/src/bootstrap/create-in-memory-pipeline.ts` crea el orchestrator con dependencias compartidas. `MediationBridgeActiveSessionQuery` lee sesiones directamente de `MediationBridgeSessionStore` — sin registro manual. Las sesiones sobreviven entre requests HTTP.
+- Handler `internal-pipeline-handler.ts` valida campos requeridos (`senderWhatsAppId`, `messageText` o alias `text`), `receivedAt` opcional, rechaza con 400/405/404 segun corresponda.
+- Server `bootstrap/server.ts` rutea `POST /internal/pipeline/process` y `GET /health`; cualquier otro metodo o ruta devuelve 404 o 405.
+- Tests: 14 tests HTTP integrados cubriendo validacion JSON, ruteo, sesion continua (Maria inicia → Carlos responde → sesion encontrada en un solo test autocontenido), edge cases (404, 405, body invalido, array, campo alias, mensaje de riesgo).
+- Ninguna conexion a infraestructura externa. Documento de contrato: `docs/t16-internal-pipeline-http.md`.
 
 ## Expected Next Task
 
-Conectar infraestructura real: WhatsApp/Evolution API adapter, PostgreSQL adapters, HTTP API endpoints productivos.
+Conectar infraestructura real: WhatsApp/Evolution API adapter, PostgreSQL adapters.

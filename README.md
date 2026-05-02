@@ -6,7 +6,7 @@ La Fase 1 apunta a mediacion prudente por WhatsApp: Serena recibe un pedido, ide
 
 ## Estado Actual
 
-El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura MVP definida (T10), y modulos de logica de negocio implementados con testing (T06-T09, T11-T14).
+El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), y endpoint HTTP interno expuesto (T16) que permite invocar el pipeline orchestrador via `POST /internal/pipeline/process`.
 
 ### Lo que existe hoy
 
@@ -32,17 +32,16 @@ El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura M
 
 - **whatsapp-gateway**: tiene tipo `IncomingWhatsAppMessage` y puerto `WhatsAppGateway`; falta integracion real.
 
-**Modulos con pipeline implementado:**
+ **Modulos con pipeline implementado:**
 
 - **orchestrator** (T15): caso de uso `ProcessIncomingWhatsAppMessage` que conecta inbound-gate → mediation-understanding → contact-directory → session-manager → mediation-bridge → prudent-rewording. Devuelve `PipelineResult` con variantes explicitas. 11 tests end-to-end in-memory.
+- **internal-pipeline-http** (T16): endpoint `POST /internal/pipeline/process` que valida JSON, ejecuta el pipeline orchestrator y devuelve `PipelineResult`. Factory in-memory con dependencias compartidas para continuidad de sesiones entre requests. 14 tests HTTP integrados. Ver `docs/t16-internal-pipeline-http.md`.
 
 ### Lo que no existe todavia
 
 - Conexion real a PostgreSQL desde la aplicacion (los modulos actuales usan stores in-memory)
 - Integracion con WhatsApp / Evolution API
-- HTTP API mas alla de `/health`
 - Panel web
-- Endpoints productivos que conecten los modulos en un pipeline real
 - Envio real de mensajes (el pipeline produce drafts/intenciones, no envia)
 
 ## Forma De Trabajo
@@ -194,7 +193,7 @@ Runbook operativo: `docs/deployment-t04.md`.
 
 ## Proximos Pasos
 
-Fase completada: **logica de negocio con adaptadores in-memory** (T06-T15). Pipeline end-to-end funciona con 126 tests.
+Fase completada: **logica de negocio con adaptadores in-memory** (T06-T16). Pipeline end-to-end funciona con 140 tests y endpoint HTTP interno expuesto.
 
 Proxima fase (T17+): **infraestructura real**:
 

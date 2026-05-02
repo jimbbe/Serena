@@ -6,7 +6,7 @@ La Fase 1 apunta a mediacion prudente por WhatsApp: Serena recibe un pedido, ide
 
 ## Estado Actual
 
-El repositorio tiene el stack base desplegado en la VPS (T04) y modulos de logica de negocio implementados con testing (T06-T09, T11-T13).
+El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura MVP definida (T10), y modulos de logica de negocio implementados con testing (T06-T09, T11-T14).
 
 ### Lo que existe hoy
 
@@ -25,15 +25,12 @@ El repositorio tiene el stack base desplegado en la VPS (T04) y modulos de logic
 - **contact-directory** (T11): dominio de contactos, puerto `ContactDirectory`, adapter in-memory con datos semilla, use case `ResolveContact`. 17 tests.
 - **mediation-understanding** (T12): dominio `MediationRequest`, puerto `MediationUnderstanding`, extraccion basada en reglas con patrones en espanol, use case `ExtractMediationRequest`. 18 tests.
 - **prudent-rewording** (T13): dominio `RewordingContext`, puerto `PrudentRewording`, adapter de templates `IndirectRewording`, use case `RewordMessage`. 15 tests.
-
-**Arquitectura definida:**
-
-- **T10 MVP Architecture**: documento `docs/architecture-mvp-t10.md` define la arquitectura Clean/Hexagonal de la Fase 1, flujo completo de mediacion prudente, y los modulos requeridos para MVP.
+- **session-manager** (T14): dominio `SessionResolution` con variantes explicitas, puerto `ActiveSessionQuery`, adapter in-memory, use case `ResolveSession`. Lookup order-independent, sesiones cerradas ignoradas, ambiguedad explicita. 16 tests.
+- **T10 MVP Architecture**: documento `docs/t10-mvp-architecture.md` define la arquitectura Clean/Hexagonal de la Fase 1, flujo completo de mediacion prudente, y los modulos requeridos para MVP.
 
 **Solo contratos (sin implementacion aun):**
 
-- **session-manager**: tiene tipo `SessionResolution` y puerto `SessionResolver`; falta use case, adapter y tests.
-- **orchestrator**: tiene tipo `PipelineResult` y `PipelineInput`; falta logica de orquestacion.
+- **orchestrator**: tiene tipo `PipelineResult` y `PipelineInput` con documentacion del pipeline planificado; falta logica de orquestacion.
 - **whatsapp-gateway**: tiene tipo `IncomingWhatsAppMessage` y puerto `WhatsAppGateway`; falta integracion real.
 
 ### Lo que no existe todavia
@@ -42,8 +39,7 @@ El repositorio tiene el stack base desplegado en la VPS (T04) y modulos de logic
 - Integracion con WhatsApp / Evolution API
 - HTTP API mas alla de `/health`
 - Panel web
-- Modulo de session-manager completo (solo contratos)
-- Modulo de orchestrator (solo contratos)
+- Modulo de orchestrator (pipeline end-to-end)
 - Endpoints productivos que conecten los modulos en un pipeline real
 
 ## Forma De Trabajo
@@ -79,13 +75,13 @@ Todavia no esta decidido que modulo va en Node.js/TypeScript y cual va en Go. Es
 
 ```text
 apps/
-  core/          # futuro nucleo de producto y casos de uso
-  gateway-wa/    # futuro gateway/adaptador WhatsApp
+  core/          # nucleo de producto: inbound-gate, mediation-bridge, contact-directory, mediation-understanding, prudent-rewording, session-manager, + contratos
+  gateway-wa/    # placeholder para futuro gateway/adaptador WhatsApp
   panel/         # placeholder para futuro panel, si corresponde
 packages/
   shared/        # tipos, contratos y utilidades compartidas no acopladas a infraestructura
-infra/           # infraestructura local y templates de despliegue
-docs/            # estado, decisiones y preguntas abiertas
+infra/           # infraestructura local (T02) y VPS (T03-T04)
+docs/            # estado, arquitectura, decisiones, preguntas abiertas y runbooks
 tests/           # pruebas transversales o de aceptacion cuando existan
 scripts/         # tooling local del repositorio
 ```
@@ -195,11 +191,16 @@ Runbook operativo: `docs/deployment-t04.md`.
 
 ## Proximos Pasos
 
-El siguiente paso inmediato es completar el modulo **session-manager** con use case, adapter in-memory y tests, cerrando el contrato `SessionResolver` ya definido. Despues, integrar los modulos existentes en un pipeline de orquestacion (`orchestrator`).
+Fase actual: **logica de negocio con adaptadores in-memory** (sin WhatsApp ni DB reales). Ver roadmap completo en `docs/t10-mvp-architecture.md` §11.
+
+- **T15**: Orchestrator — cableado completo del pipeline end-to-end
+- **T16**: Integration tests — verificacion del pipeline completo
+
+Despues (T17+): WhatsApp Gateway como **repo separado** (servicio agnostico, multi-proyecto, multi-numero), Serena WhatsApp adapter, PostgreSQL adapters, deploy en VPS.
 
 Ver tambien:
 
 - `docs/project-status.md`
 - `docs/open-questions.md`
-- `docs/architecture-mvp-t10.md`
-- `docs/deployment-t04.md`
+- `docs/t10-mvp-architecture.md`
+- `docs/deployment-t04.md` (runbook operativo actual)

@@ -24,11 +24,21 @@ These questions are intentionally left open until a task needs the decision.
 - **Evolution API hosting** — Where will the Evolution API instance run? On the same VPS? Separate service? The `whatsapp-gateway` adapter will need this URL.
 - **Persistence strategy** — Current modules use in-memory stores. When do we switch to PostgreSQL? Should we implement repositories alongside in-memory adapters, or defer the real DB until after the pipeline works end-to-end?
 
-## Resolved (Post-T10)
+## Resolved In T10
 
-- **Which module should be implemented first?** — Decided: inbound-gate (T06-T08) first, then mediation-bridge (T09), contact-directory (T11), mediation-understanding (T12), prudent-rewording (T13). This follows the pipeline order defined in T10 MVP architecture.
-- **Which WhatsApp provider or API?** — Decided: Evolution API (open-source WhatsApp API). The `WhatsAppGateway` port in `whatsapp-gateway` is the adapter contract.
-- **Contact model** — Decided: `Contact` type with `id`, `displayName`, `whatsappId`, `allowed`. In-memory with seed data for now. `ResolveContact` resolves by displayName (exact match, case-insensitive).
+- WhatsApp provider: **Evolution API** (self-hosted Docker on VPS at `/docker/evolution-api/`), REST + webhooks. Confirmed with Marco.
+- Module implementation order: **T11 → T16** for Serena business logic (in-memory), then **T17 → T20** for integrations. See `docs/t10-mvp-architecture.md` §11.
+- Contact model MVP scope: `{ id, displayName, whatsappId }` — no relationship field in MVP (confirmed with Marco).
+- Session rule: one active session per participant pair; closed sessions ignored; new request starts fresh session.
+- Rewording style: indirect style ("María me pidió decirte que…"), no invention, clear attribution.
+- Persistence strategy: in-memory until pipeline end-to-end works, then PostgreSQL adapters.
+- Understanding strategy: rules first (Spanish patterns), LLM as fallback.
+- WhatsApp number: Marco's number for testing (dedicated for Serena).
+- Evolution API hosting: self-hosted via Docker Compose on VPS at `/docker/evolution-api/`.
+
+## Resolved In T06-T09
+
+- Which module should be implemented first: se empezo por `core` — `inbound-gate` (T06-T08) y `mediation-bridge` (T09) fueron los primeros modulos de producto implementados y testeados.
 
 ## Infrastructure
 

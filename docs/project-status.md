@@ -2,9 +2,7 @@
 
 ## Current Phase
 
-Serena has the base VPS stack deployed (T04) and multiple business-logic modules implemented with testing (T06-T09, T11-T13). The architecture for the MVP Phase 1 is defined in T10.
-
-The current goal is to complete the session-manager module (only contracts exist today), integrate the existing modules into an orchestration pipeline, and connect real infrastructure (WhatsApp, PostgreSQL).
+Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), and business logic modules implemented with testing (T06-T09, T11-T14). The next milestone is the Orchestrator pipeline that wires all modules end-to-end.
 
 ## Decided
 
@@ -20,9 +18,9 @@ The current goal is to complete the session-manager module (only contracts exist
 
 ## Not Implemented Yet
 
-- PostgreSQL connection usage in application code (current modules use in-memory stores).
-- WhatsApp / Evolution API real integration (`whatsapp-gateway` has only domain types and port contract).
 - Orchestrator module (only `PipelineResult` and `PipelineInput` types with documentation of the planned pipeline exist; no pipeline logic or use case yet).
+- WhatsApp / Evolution API real integration (`whatsapp-gateway` has only domain types and port contract).
+- PostgreSQL connection usage in application code (current modules use in-memory stores).
 - HTTP API beyond `/health` (no business endpoints exist).
 - Panel UI.
 
@@ -96,7 +94,7 @@ The current goal is to complete the session-manager module (only contracts exist
 
 ## Defined In T10: MVP Architecture
 
-- Documento `docs/architecture-mvp-t10.md` define la arquitectura Clean/Hexagonal de la Fase 1.
+- Documento `docs/t10-mvp-architecture.md` define la arquitectura Clean/Hexagonal de la Fase 1.
 - Flujo completo de mediacion prudente: inbound-gate → session-manager → contact-directory → mediation-understanding → prudent-rewording → mediation-bridge → whatsapp-gateway.
 - Separacion de capas: domain (tipos puros), application (puertos, use cases), infrastructure (adapters concretos).
 - Modulos definidos como necesarios para MVP: inbound-gate, session-manager, contact-directory, mediation-understanding, prudent-rewording, mediation-bridge, orchestrator, whatsapp-gateway.
@@ -115,7 +113,7 @@ The current goal is to complete the session-manager module (only contracts exist
 
 - Domain: `MediationRequest` (recipientName, messageToDeliver).
 - Port: `MediationUnderstanding` con metodo `extractMediationRequest(text)` que devuelve `MediationRequest | null`.
-- Adapter: `RuleBasedMediationUnderstanding` con patrones en espanol: verbos de mediacion (`avisale`, `decile`, `escribile`, `llamá`, `llama`, `contactá`, `pedile`) seguidos de "a [nombre]" y "que [mensaje]".
+- Adapter: `RuleBasedMediationUnderstanding` con patrones en espanol: verbos de mediacion (`avisale`, `decile`, `escribile`, `llama`, `llamá`, `contactá`, `pedile`) seguidos de "a [nombre]" y "que [mensaje]".
 - Use case: `ExtractMediationRequest` delega al puerto y retorna null si no se detecta pedido de mediacion.
 - Soporta: acentos, case-insensitivity, nombres compuestos (ej. "Maria Jose"), mensajes con caracteres especiales y emojis, forma no acentuada de verbos.
 - Tests: 18 tests cubriendo patrones de extraccion, casos negativos, edge cases de nombres, mensajes largos, case-insensitivity.

@@ -88,10 +88,11 @@ flowchart LR
     subgraph External
         WA[WhatsApp]
         EVO[Evolution API]
+        WG[WhatsApp Gateway<br/>separate repo]
     end
 
     subgraph serena-core
-        WG[WhatsApp Gateway]
+        WGC[WhatsApp Gateway Client<br/>adapter to external service]
         IG[Inbound Gate]
         subgraph "Processing Pipeline"
             MU[Mediation Understanding]
@@ -105,13 +106,14 @@ flowchart LR
 
     WA <-->|messages| EVO
     EVO <-->|REST + webhook| WG
-    WG -->|IncomingWhatsAppMessage| IG
+    WG <-->|REST API| WGC
+    WGC -->|IncomingWhatsAppMessage| IG
     IG -->|extract| MU
     IG -->|resolve| CD
     IG -->|check session| SM
     IG <-->|session operations| MB
     IG -->|reword| PR
-    IG -->|send| WG
+    IG -->|send| WGC
 
     IG -.->|InboundDecision| ORCH
     ORCH -.->|PipelineResult| IG
@@ -178,8 +180,11 @@ graph TB
 ```text
 /docker/caddy-edge/        ← Caddy edge proxy (existing)
 /docker/serena/            ← serena-core + serena-postgres (existing, T04)
-/docker/evolution-api/     ← Evolution API + evo-postgres (new, T17)
+/docker/evolution-api/     ← Evolution API (future, managed by whatsapp-gateway repo)
+/docker/whatsapp-gateway/  ← WhatsApp Gateway service (future, separate repo)
 ```
+
+> ⚠️ Evolution API y WhatsApp Gateway serán desplegados por el repo separado `whatsapp-gateway`, no por Serena. El diagrama inferior muestra la arquitectura objetivo cuando todo esté desplegado.
 
 ### Port Exposure
 
@@ -302,9 +307,20 @@ The `isRecipientIntroduction` flag in `RewordingContext` controls which template
 
 ## 10. WhatsApp Gateway Contract
 
-### Evolution API Integration
+> ⚠️ WhatsApp Gateway será un **servicio independiente** en un repo separado (`whatsapp-gateway`). Serena interactúa con él a través de un client adapter, no directamente con Evolution API.
 
-Evolution API is self-hosted via Docker Compose at `/docker/evolution-api/`. It runs inside the VPS on the `evolution-internal` network and is exposed to Caddy via the `proxy` network.
+### WhatsApp Gateway Service (external repo)
+
+The WhatsApp Gateway is a standalone Docker service that:
+- Manages multiple Evolution API instances (one per WhatsApp number)
+- Exposes a REST API for sending messages
+- Routes incoming webhooks to subscriber projects
+- Supports both dedicated and shared numbers per project
+- Is agnostic to project-specific business logic
+
+### Serena Client Adapter
+
+Serena's `WhatsAppGateway` port contract remains unchanged. The adapter implementation will call the WhatsApp Gateway REST API instead of Evolution API directly.
 
 ### API Methods Used
 
@@ -339,17 +355,32 @@ The WhatsApp Gateway adapter:
 
 ---
 
-## 11. Task Roadmap (T11+)
+## 11. Task Roadmap
+
+### Decisions
+
+- **WhatsApp Gateway será un repo separado** (`whatsapp-gateway`) — servicio agnóstico que administra múltiples números de WhatsApp via Evolution API. Cualquier proyecto (Serena, Hermes, futuro) puede enviar/recibir mensajes sin depender de Serena. Se implementará después de completar la lógica de negocio de Serena.
+- **Serena MVP sin integraciones reales** — se implementa el pipeline completo con adaptadores in-memory, tests end-to-end, y recién después se conectan WhatsApp Gateway y PostgreSQL.
+
+### Current Tasks (Serena business logic — in-memory)
 
 | Task | Description | Dependencies |
 |------|-------------|--------------|
-| **T11** | WhatsApp Gateway adapter — Evolution API Docker setup on VPS + serena-core adapter | T10 contracts |
-| **T12** | Contact Directory — expanded port + in-memory adapter + editable JSON seed file | T10 contracts |
-| **T13** | Session Manager + Orchestrator pipeline — wiring the end-to-end flow | T10 contracts, T09 |
-| **T14** | Mediation Understanding — rule-based extraction (Spanish patterns) | T10 contracts |
-| **T15** | Prudent Rewording — template-based rewording implementation | T10 contracts |
-| **T16** | End-to-end wiring — integration tests, full pipeline verification | T11–T15 |
-| **T17** | VPS Deployment — Evolution API Docker + Caddy route + DNS | T11, T10 contracts |
+| **T11** | Contact Directory — expanded in-memory adapter + JSON seed + use case | T10 contracts |
+| **T12** | Mediation Understanding — rule-based extraction (Spanish patterns) | T10 contracts |
+| **T13** | Prudent Rewording — template-based indirect rewording | T10 contracts |
+| **T14** | Session Manager — resolve active session per participant pair | T10 contracts, T11 |
+| **T15** | Orchestrator — wire the end-to-end pipeline with in-memory adapters | T06–T14 |
+| **T16** | End-to-end integration tests — full pipeline verification | T11–T15 |
+
+### Future Tasks (after Serena pipeline works)
+
+| Task | Description | Dependencies |
+|------|-------------|--------------|
+| **T17** | WhatsApp Gateway repo — standalone service, multi-project, multi-number | T16 |
+| **T18** | Serena WhatsApp adapter — connect serena-core to WhatsApp Gateway | T17 |
+| **T19** | PostgreSQL adapters — replace in-memory with real DB | T16 |
+| **T20** | VPS deployment update — WhatsApp Gateway + Serena behind Caddy | T17, T18 |
 
 ---
 

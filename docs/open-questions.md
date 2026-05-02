@@ -12,11 +12,17 @@ These questions are intentionally left open until a task needs the decision.
 
 ## Technical
 
-- Which WhatsApp provider or API will be used?
 - Where should Go be introduced first, if at all?
 - Should each Go service use its own `go.mod`, or should the repo use a Go workspace later?
 - Which Node package manager should be standardized if npm stops being enough?
 - What migration tool should be used for PostgreSQL?
+
+## Architecture (T10 Open Questions)
+
+- **Which WhatsApp number will Serena use?** — Needs a real WhatsApp Business API number. Currently only contracts exist for `whatsapp-gateway`.
+- **One-session-per-pair rule details** — The `SessionResolver` port expects to resolve one active session per participant pair. Edge cases: what if the pair has a historical closed session and starts a new one? Should closed sessions be archived or deleted?
+- **Evolution API hosting** — Where will the Evolution API instance run? On the same VPS? Separate service? The `whatsapp-gateway` adapter will need this URL.
+- **Persistence strategy** — Current modules use in-memory stores. When do we switch to PostgreSQL? Should we implement repositories alongside in-memory adapters, or defer the real DB until after the pipeline works end-to-end?
 
 ## Resolved In T10
 
@@ -30,9 +36,9 @@ These questions are intentionally left open until a task needs the decision.
 - WhatsApp number: Marco's number for testing (dedicated for Serena).
 - Evolution API hosting: self-hosted via Docker Compose on VPS at `/docker/evolution-api/`.
 
-## Resolved In T06–T09
+## Resolved In T06-T09
 
-- Which module should be implemented first: se empezo por `core` — `inbound-gate` (T06–T08) y `mediation-bridge` (T09) fueron los primeros modulos de producto implementados y testeados.
+- Which module should be implemented first: se empezo por `core` — `inbound-gate` (T06-T08) y `mediation-bridge` (T09) fueron los primeros modulos de producto implementados y testeados.
 
 ## Infrastructure
 

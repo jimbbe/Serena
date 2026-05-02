@@ -30,8 +30,11 @@ El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura M
 
 **Solo contratos (sin implementacion aun):**
 
-- **orchestrator**: tiene tipo `PipelineResult` y `PipelineInput` con documentacion del pipeline planificado; falta logica de orquestacion.
 - **whatsapp-gateway**: tiene tipo `IncomingWhatsAppMessage` y puerto `WhatsAppGateway`; falta integracion real.
+
+**Modulos con pipeline implementado:**
+
+- **orchestrator** (T15): caso de uso `ProcessIncomingWhatsAppMessage` que conecta inbound-gate → mediation-understanding → contact-directory → session-manager → mediation-bridge → prudent-rewording. Devuelve `PipelineResult` con variantes explicitas. 10 tests end-to-end in-memory.
 
 ### Lo que no existe todavia
 
@@ -39,8 +42,8 @@ El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura M
 - Integracion con WhatsApp / Evolution API
 - HTTP API mas alla de `/health`
 - Panel web
-- Modulo de orchestrator (pipeline end-to-end)
 - Endpoints productivos que conecten los modulos en un pipeline real
+- Envio real de mensajes (el pipeline produce drafts/intenciones, no envia)
 
 ## Forma De Trabajo
 
@@ -193,7 +196,7 @@ Runbook operativo: `docs/deployment-t04.md`.
 
 Fase actual: **logica de negocio con adaptadores in-memory** (sin WhatsApp ni DB reales). Ver roadmap completo en `docs/t10-mvp-architecture.md` §11.
 
-- **T15**: Orchestrator — cableado completo del pipeline end-to-end
+- **T15**: Orchestrator — pipeline in-memory end-to-end OK
 - **T16**: Integration tests — verificacion del pipeline completo
 
 Despues (T17+): WhatsApp Gateway como **repo separado** (servicio agnostico, multi-proyecto, multi-numero), Serena WhatsApp adapter, PostgreSQL adapters, deploy en VPS.

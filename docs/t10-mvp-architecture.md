@@ -28,12 +28,12 @@ These decisions were confirmed with Marco and define the MVP scope:
 |--------|--------|-------------|
 | `inbound-gate` | ✅ exists | Classifies inbound messages as conversational, mediation request, or blocked |
 | `mediation-bridge` | ✅ exists | Manages session lifecycle, turns, outbound drafts, and closure between two participants |
-| `contact-directory` | ❌ new — contracts only | Stores and resolves contacts (allowed senders + name-to-ID resolution) |
-| `session-manager` | ❌ new — contracts only | Resolves active session for a participant pair or signals a new one is possible |
-| `mediation-understanding` | ❌ new — contracts only | Extracts recipient name + message from natural language (rules first, LLM fallback) |
-| `prudent-rewording` | ❌ new — contracts only | Rewords extracted message in indirect style with clear attribution |
-| `whatsapp-gateway` | ❌ new — contracts only | Sends/receives WhatsApp messages via Evolution API REST + webhooks |
-| `orchestrator` | ❌ new — contracts only | Wires the end-to-end pipeline: inbound → classify → understand → resolve → reword → send |
+| `contact-directory` | ✅ exists | Stores and resolves contacts (allowed senders + name-to-ID resolution) |
+| `session-manager` | ✅ exists | Resolves active session for a participant pair or signals a new one is possible |
+| `mediation-understanding` | ✅ exists | Extracts recipient name + message from natural language (rules first, LLM fallback) |
+| `prudent-rewording` | ✅ exists | Rewords extracted message in indirect style with clear attribution |
+| `orchestrator` | ✅ exists | Wires the end-to-end pipeline: inbound → classify → understand → resolve → reword → result. In-memory, no external sends. |
+| `whatsapp-gateway` | ❌ contracts only | Sends/receives WhatsApp messages via Evolution API REST + webhooks |
 
 ---
 
@@ -364,14 +364,14 @@ The WhatsApp Gateway adapter:
 
 ### Current Tasks (Serena business logic — in-memory)
 
-| Task | Description | Dependencies |
-|------|-------------|--------------|
-| **T11** | Contact Directory — expanded in-memory adapter + JSON seed + use case | T10 contracts |
-| **T12** | Mediation Understanding — rule-based extraction (Spanish patterns) | T10 contracts |
-| **T13** | Prudent Rewording — template-based indirect rewording | T10 contracts |
-| **T14** | Session Manager — resolve active session per participant pair | T10 contracts, T11 |
-| **T15** | Orchestrator — wire the end-to-end pipeline with in-memory adapters | T06–T14 |
-| **T16** | End-to-end integration tests — full pipeline verification | T11–T15 |
+| Task | Description | Status |
+|------|-------------|--------|
+| **T11** | Contact Directory — expanded in-memory adapter + JSON seed + use case | ✅ done |
+| **T12** | Mediation Understanding — rule-based extraction (Spanish patterns) | ✅ done |
+| **T13** | Prudent Rewording — template-based indirect rewording | ✅ done |
+| **T14** | Session Manager — resolve active session per participant pair | ✅ done |
+| **T15** | Orchestrator — wire the end-to-end pipeline with in-memory adapters | ✅ done |
+| **T16** | End-to-end integration tests — full pipeline verification | ✅ done (covered by T15 orchestrator tests) |
 
 ### Future Tasks (after Serena pipeline works)
 
@@ -384,4 +384,4 @@ The WhatsApp Gateway adapter:
 
 ---
 
-*Document created during T10. Last updated: 2026-05-02.*
+*Document created during T10. Last updated: 2026-05-02 (T15 orchestrator pipeline implemented).*

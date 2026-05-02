@@ -6,36 +6,41 @@ La Fase 1 apunta a mediacion prudente por WhatsApp: Serena recibe un pedido, ide
 
 ## Estado Actual
 
-Este repositorio esta en bootstrap inicial con el stack base ya desplegado en la VPS (T04) y los primeros modulos de producto implementados (T06–T09). T10 definio la arquitectura completa del MVP y el roadmap de tareas restantes (T11–T17).
+El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura MVP definida (T10), y modulos de logica de negocio implementados con testing (T06-T09, T11-T14).
 
-Lo que existe hoy:
+### Lo que existe hoy
 
-- estructura base para aplicaciones, paquetes compartidos, infraestructura, tests y scripts
-- documentacion inicial del stack, forma de trabajo, preguntas abiertas y arquitectura MVP
-- modulos core Node.js/TypeScript implementados (TypeScript 5.9+, Node 22.6+, type stripping nativo): `inbound-gate` (clasificacion + ruteo de mensajes entrantes) y `mediation-bridge` (sesiones de mediacion entre dos participantes), con 36 tests de caso de uso pasando
-- espacio reservado para modulos Go, sin fijar todavia una ruta de modulo Go
-- Docker Compose local T02 con `postgres` y `serena-core`
-- templates T03 para desplegar `serena-core` detras del Caddy edge del VPS
-- preflight T03.1 de VPS documentado
-- despliegue T04 aplicado en `/docker/serena` con `serena-core` y `serena-postgres` healthy
-- ruta publica activa `https://serena.goingmerry01.tech/health` via Caddy
-- **T06–T08**: modulo `inbound-gate` implementado y testeado (36 tests pasan) — clasifica mensajes entrantes (allowed/blocked/needs_mediation), evalua politicas, audita decisiones, rutea a perfiles LLM
-- **T09**: modulo `mediation-bridge` implementado y testeado — maneja sesiones entre dos participantes (inicio, turnos, borradores salientes con introduccion de Serena, cierre)
-- **T10**: diseno de arquitectura MVP completo (`docs/t10-mvp-architecture.md`) con 11 secciones, diagramas Mermaid, 6 modulos con contratos TypeScript y roadmap T11–T17
+**Infraestructura (T02-T04):**
 
-Lo que no existe todavia:
+- Docker Compose local con `postgres` y `serena-core`
+- Stack VPS en `/docker/serena` con `serena-core` y `serena-postgres` healthy
+- Ruta publica activa `https://serena.goingmerry01.tech/health` via Caddy
+- Workspace Node.js/TypeScript con estructura modular (apps/, packages/, docs/, scripts/)
+- `npm run check` valida estructura y typecheck sin levantar servicios
 
-- integracion con WhatsApp via Evolution API (T11)
-- implementacion de contactos permitidos (T12)
-- pipeline orquestador end-to-end (T13)
-- extraccion de pedidos por reglas en espanol (T14)
-- reescritura prudente (T15)
-- tests de integracion completa (T16)
-- despliegue de Evolution API en VPS (T17)
-- panel web
-- los modulos core NO estan expuestos por HTTP (el servidor solo sirve `/health`)
-- NO hay conexion real a WhatsApp (el adaptador `WhatsAppGateway` es solo contrato de puerto, sin implementacion)
-- NO hay persistencia PostgreSQL usada por la aplicacion (las stores actuales son en memoria)
+**Logica de negocio implementada con tests (modulos bajo `apps/core/src/modules/`):**
+
+- **inbound-gate** (T06-T08): evalua mensajes entrantes, aplica politicas de acceso con trazabilidad, audita decisiones y rutea a perfiles de procesamiento segun el contenido (conversational, mediation_understanding, risk_review, discard). 34 tests.
+- **mediation-bridge** (T09): gestiona el ciclo de vida de sesiones de mediacion (inicio, turnos remitente-destinatario, cierre), con store in-memory. Introduce formato de primer borrador con presentacion de Serena. 8 tests.
+- **contact-directory** (T11): dominio de contactos, puerto `ContactDirectory`, adapter in-memory con datos semilla, use case `ResolveContact`. 17 tests.
+- **mediation-understanding** (T12): dominio `MediationRequest`, puerto `MediationUnderstanding`, extraccion basada en reglas con patrones en espanol, use case `ExtractMediationRequest`. 18 tests.
+- **prudent-rewording** (T13): dominio `RewordingContext`, puerto `PrudentRewording`, adapter de templates `IndirectRewording`, use case `RewordMessage`. 15 tests.
+- **session-manager** (T14): dominio `SessionResolution` con variantes explicitas, puerto `ActiveSessionQuery`, adapter in-memory, use case `ResolveSession`. Lookup order-independent, sesiones cerradas ignoradas, ambiguedad explicita. 16 tests.
+- **T10 MVP Architecture**: documento `docs/t10-mvp-architecture.md` define la arquitectura Clean/Hexagonal de la Fase 1, flujo completo de mediacion prudente, y los modulos requeridos para MVP.
+
+**Solo contratos (sin implementacion aun):**
+
+- **orchestrator**: tiene tipo `PipelineResult` y `PipelineInput` con documentacion del pipeline planificado; falta logica de orquestacion.
+- **whatsapp-gateway**: tiene tipo `IncomingWhatsAppMessage` y puerto `WhatsAppGateway`; falta integracion real.
+
+### Lo que no existe todavia
+
+- Conexion real a PostgreSQL desde la aplicacion (los modulos actuales usan stores in-memory)
+- Integracion con WhatsApp / Evolution API
+- HTTP API mas alla de `/health`
+- Panel web
+- Modulo de orchestrator (pipeline end-to-end)
+- Endpoints productivos que conecten los modulos en un pipeline real
 
 ## Forma De Trabajo
 
@@ -70,12 +75,12 @@ Todavia no esta decidido que modulo va en Node.js/TypeScript y cual va en Go. Es
 
 ```text
 apps/
-  core/          # nucleo de producto: inbound-gate, mediation-bridge, + contratos T10
+  core/          # nucleo de producto: inbound-gate, mediation-bridge, contact-directory, mediation-understanding, prudent-rewording, session-manager, + contratos
   gateway-wa/    # placeholder para futuro gateway/adaptador WhatsApp
   panel/         # placeholder para futuro panel, si corresponde
 packages/
   shared/        # tipos, contratos y utilidades compartidas no acopladas a infraestructura
-infra/           # infraestructura local (T02) y VPS (T03–T04)
+infra/           # infraestructura local (T02) y VPS (T03-T04)
 docs/            # estado, arquitectura, decisiones, preguntas abiertas y runbooks
 tests/           # pruebas transversales o de aceptacion cuando existan
 scripts/         # tooling local del repositorio
@@ -188,14 +193,10 @@ Runbook operativo: `docs/deployment-t04.md`.
 
 Fase actual: **logica de negocio con adaptadores in-memory** (sin WhatsApp ni DB reales). Ver roadmap completo en `docs/t10-mvp-architecture.md` §11.
 
-- **T11**: Contact Directory — adapter in-memory + JSON seed de contactos
-- **T12**: Mediation Understanding — extraccion por reglas en espanol
-- **T13**: Prudent Rewording — reescritura indirecta con atribucion
-- **T14**: Session Manager — resolucion de sesiones por par
 - **T15**: Orchestrator — cableado completo del pipeline end-to-end
 - **T16**: Integration tests — verificacion del pipeline completo
 
-Despues (T17–T20): WhatsApp Gateway como **repo separado** (servicio agnostico, multi-proyecto, multi-numero), Serena WhatsApp adapter, PostgreSQL adapters, deploy en VPS.
+Despues (T17+): WhatsApp Gateway como **repo separado** (servicio agnostico, multi-proyecto, multi-numero), Serena WhatsApp adapter, PostgreSQL adapters, deploy en VPS.
 
 Ver tambien:
 

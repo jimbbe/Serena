@@ -2,9 +2,9 @@
 
 ## Current Phase
 
-Serena is in early bootstrap with local development infrastructure baseline (T02), a prepared VPS deployment path (T03), a real VPS preflight report (T03.1), and the T04 base VPS stack deployed.
+Serena has the base VPS stack deployed (T04) and multiple business-logic modules implemented with testing (T06-T09, T11-T13). The architecture for the MVP Phase 1 is defined in T10.
 
-The current goal is to keep a clean base so later tasks can add behavior without mixing concerns.
+The current goal is to complete the session-manager module (only contracts exist today), integrate the existing modules into an orchestration pipeline, and connect real infrastructure (WhatsApp, PostgreSQL).
 
 ## Decided
 
@@ -20,12 +20,11 @@ The current goal is to keep a clean base so later tasks can add behavior without
 
 ## Not Implemented Yet
 
-- Serena business logic.
-- WhatsApp integration.
-- Contact allowlist behavior.
-- PostgreSQL connection usage in application code.
+- PostgreSQL connection usage in application code (current modules use in-memory stores).
+- WhatsApp / Evolution API real integration (`whatsapp-gateway` has only domain types and port contract).
+- Orchestrator module (only `PipelineResult` and `PipelineInput` types with documentation of the planned pipeline exist; no pipeline logic or use case yet).
+- HTTP API beyond `/health` (no business endpoints exist).
 - Panel UI.
-- Production behavior beyond the base healthcheck route.
 
 ## Repository Conventions
 
@@ -75,6 +74,75 @@ The current goal is to keep a clean base so later tasks can add behavior without
 - Internal and public `/health` verification returned HTTP 200 with production health JSON.
 - Restart verification for the Serena stack passed.
 
+## Implemented In T06-T08: Inbound Gate
+
+- `EvaluateInboundMessage` use case: valida sender, normaliza texto, decide si un mensaje entrante esta permitido, bloqueado o requiere mediacion, con metadatos de trazabilidad (policy version, matched signals, precedence).
+- `ProcessInboundMessage` use case: consolida decision + ruteo a un perfil de procesamiento (`conversation`, `mediation_understanding`, `risk_review`, `discard`), preservando toda la trazabilidad en el contexto de ruta.
+- Domain types: `InboundDecision`, `InboundDecisionStatus`, `InboundDecisionReason`, `InboundPolicy` (con reglas explicitas de prioridad: invalid sender > invalid text > unknown sender > urgent/risk over mediation > mediation over conversation > conversation default), `InboundProcessingRoute`, `LLMProfile`.
+- Ports: `DecisionAudit` (con adapter `InMemoryDecisionAudit`), `ContactDirectory` (version inbound-gate, luego reemplazada por el modulo T11).
+- Adapters: `InMemoryDecisionAudit`, `InMemoryContactDirectory` (inbound-gate local).
+- Tests: 34 tests covering evaluate-inbound-message (9) y process-inbound-message (25 scenarios: routing, traceability, precedence, edge cases con mediacion + riesgo simultaneo).
+
+## Implemented In T09: Mediation Bridge
+
+- Domain: `MediationBridgeSession` (status, participant IDs, awaitingParticipantId, turns, recipientIntroduced flag), `MediationBridgeTurn` (from, draft, plainReply), `OutboundDraft`, `SessionLifecycle` type (status transitions: `awaiting_recipient_reply`, `awaiting_requester_reply`, `closed`).
+- Port: `MediationBridgeSessionStore` con adapter `InMemoryMediationBridgeSessionStore`.
+- Use cases:
+  - `StartMediationBridgeSession`: inicia sesion entre remitente y destinatario, genera primer borrador con presentacion de Serena ("Hola, soy Serena. [nombre] te manda este recado: [texto]"), registra primer turno remitente -> destinatario.
+  - `RecordMediationBridgeReply`: registra respuesta del participante esperado, alterna espera entre remitente y destinatario, rechaza respuestas de participante no esperado.
+  - `CloseMediationBridgeSession`: cierra sesion con motivo explicito, rechaza sesiones ya cerradas o inexistentes.
+- El primer turno siempre incluye presentacion de Serena; turnos posteriores no la repiten.
+- Tests: 8 tests cubriendo ciclo completo (start, reply recipiente, reply remitente, close, rechazos, store in-memory).
+
+## Defined In T10: MVP Architecture
+
+- Documento `docs/architecture-mvp-t10.md` define la arquitectura Clean/Hexagonal de la Fase 1.
+- Flujo completo de mediacion prudente: inbound-gate → session-manager → contact-directory → mediation-understanding → prudent-rewording → mediation-bridge → whatsapp-gateway.
+- Separacion de capas: domain (tipos puros), application (puertos, use cases), infrastructure (adapters concretos).
+- Modulos definidos como necesarios para MVP: inbound-gate, session-manager, contact-directory, mediation-understanding, prudent-rewording, mediation-bridge, orchestrator, whatsapp-gateway.
+- Preguntas abiertas de arquitectura registradas en `docs/open-questions.md`.
+
+## Implemented In T11: Contact Directory
+
+- Domain: `Contact` (id, displayName, whatsappId, allowed).
+- Port: `ContactDirectory` con metodos `findByWhatsAppId`, `findById`, `findByDisplayName` (exact match, case-insensitive), `findAll`, `hasAllowedSender`.
+- Adapter: `InMemoryContactDirectory` con seed data de contactos de ejemplo (Carlos, Maria, Juan, Pedro, etc.) y multiples metodos de busqueda.
+- Use case: `ResolveContact` busca contacto por displayName (case-insensitive, exact match).
+- Reemplaza el `ContactDirectory` local de inbound-gate con un modulo propio y completo.
+- Tests: 17 tests cubriendo busquedas, case-insensitivity, accent handling, duplicates, edge cases con `hasAllowedSender`, `findByWhatsAppId`, y `ResolveContact`.
+
+## Implemented In T12: Mediation Understanding
+
+- Domain: `MediationRequest` (recipientName, messageToDeliver).
+- Port: `MediationUnderstanding` con metodo `extractMediationRequest(text)` que devuelve `MediationRequest | null`.
+- Adapter: `RuleBasedMediationUnderstanding` con patrones en espanol: verbos de mediacion (`avisale`, `decile`, `escribile`, `llamá`, `llama`, `contactá`, `pedile`) seguidos de "a [nombre]" y "que [mensaje]".
+- Use case: `ExtractMediationRequest` delega al puerto y retorna null si no se detecta pedido de mediacion.
+- Soporta: acentos, case-insensitivity, nombres compuestos (ej. "Maria Jose"), mensajes con caracteres especiales y emojis, forma no acentuada de verbos.
+- Tests: 18 tests cubriendo patrones de extraccion, casos negativos, edge cases de nombres, mensajes largos, case-insensitivity.
+
+## Implemented In T13: Prudent Rewording
+
+- Domain: `RewordingContext` (senderDisplayName, recipientDisplayName, originalText, isIntroduction).
+- Port: `PrudentRewording` con metodo `reword(context)` que devuelve texto reescrito en tercera persona.
+- Adapter: `IndirectRewording` basado en templates: para introducciones usa "Hola, soy Serena. [sender] te manda este recado: [texto]" y para no-introducciones usa "[sender] dice: [texto]" o "[texto] (de parte de [sender])".
+- Use case: `RewordMessage` pasa el contexto al puerto y retorna el texto reescrito.
+- Propiedades preservadas: puntuacion, acentos, emojis, saltos de linea, caracteres especiales del texto original.
+- Tests: 15 tests cubriendo ambos templates, preservacion de texto literal, manejo de nombres con acentos y dos palabras, edge cases con caracteres especiales.
+
+## Implemented In T14: Session Manager
+
+- Domain: `SessionResolution` discriminated union with variants: `existing_session`, `new_session_possible`, `no_active_session`, `ambiguous_active_sessions`.
+- Port: `SessionResolver` (resolve active session for a participant pair), `ActiveSessionQuery` (find active sessions by participant).
+- Adapter: `InMemorySessionQuery` with add/remove/find operations for testing.
+- Use case: `ResolveSession` resolves whether an incoming message belongs to an active mediation session or can start a new one. Lookup is order-independent (A→B and B→A find the same session). Closed sessions are ignored. Multiple active sessions for the same pair produce `ambiguous_active_sessions` instead of silently resolving.
+- Port `ActiveSessionQuery` decouples session-manager from mediation-bridge internals — the production adapter will bridge to `MediationBridgeSessionStore`.
+- Tests: 16 tests covering new session, existing session (both orders), closed session ignored, ambiguous sessions, adapter operations.
+
 ## Expected Next Task
 
-The next task should add product behavior or application-level PostgreSQL usage only when explicitly scoped. Infrastructure T04 blockers are resolved.
+Integrar los modulos implementados en el pipeline del **orchestrator**:
+1. `OrchestratorPort` — define la interfaz del caso de uso
+2. `MediationPipeline` use case — conecta inbound-gate → mediation-understanding → contact-directory → session-manager → mediation-bridge → prudent-rewording → whatsapp-gateway port
+3. Integration tests cubriendo el happy path y casos de error
+
+Despues de orchestrar, conectar infraestructura real: WhatsApp/Evolution API, PostgreSQL adapters, HTTP API endpoints.

@@ -6,27 +6,45 @@ La Fase 1 apunta a mediacion prudente por WhatsApp: Serena recibe un pedido, ide
 
 ## Estado Actual
 
-Este repositorio esta en bootstrap inicial con el stack base ya desplegado en la VPS para T04.
+El repositorio tiene el stack base desplegado en la VPS (T04) y modulos de logica de negocio implementados con testing (T06-T09, T11-T13).
 
-Lo que existe hoy:
+### Lo que existe hoy
 
-- estructura base para aplicaciones, paquetes compartidos, infraestructura, tests y scripts
-- documentacion inicial del stack, forma de trabajo y preguntas abiertas
-- workspace Node.js/TypeScript preparado sin logica de negocio
-- espacio reservado para modulos Go, sin fijar todavia una ruta de modulo Go
-- Docker Compose local T02 con `postgres` y `serena-core`
-- templates T03 para desplegar `serena-core` detras del Caddy edge del VPS
-- preflight T03.1 de VPS documentado
-- despliegue T04 aplicado en `/docker/serena` con `serena-core` y `serena-postgres` healthy
-- ruta publica activa `https://serena.goingmerry01.tech/health` via Caddy
+**Infraestructura (T02-T04):**
 
-Lo que no existe todavia:
+- Docker Compose local con `postgres` y `serena-core`
+- Stack VPS en `/docker/serena` con `serena-core` y `serena-postgres` healthy
+- Ruta publica activa `https://serena.goingmerry01.tech/health` via Caddy
+- Workspace Node.js/TypeScript con estructura modular (apps/, packages/, docs/, scripts/)
+- `npm run check` valida estructura y typecheck sin levantar servicios
 
-- logica conversacional de Serena
-- integracion con WhatsApp
-- panel web
-- features productivas mas alla del healthcheck
-- conexion real a PostgreSQL desde la aplicacion
+**Logica de negocio implementada con tests (modulos bajo `apps/core/src/modules/`):**
+
+- **inbound-gate** (T06-T08): evalua mensajes entrantes, aplica politicas de acceso con trazabilidad, audita decisiones y rutea a perfiles de procesamiento segun el contenido (conversational, mediation_understanding, risk_review, discard). 34 tests.
+- **mediation-bridge** (T09): gestiona el ciclo de vida de sesiones de mediacion (inicio, turnos remitente-destinatario, cierre), con store in-memory. Introduce formato de primer borrador con presentacion de Serena. 8 tests.
+- **contact-directory** (T11): dominio de contactos, puerto `ContactDirectory`, adapter in-memory con datos semilla, use case `ResolveContact`. 17 tests.
+- **mediation-understanding** (T12): dominio `MediationRequest`, puerto `MediationUnderstanding`, extraccion basada en reglas con patrones en espanol, use case `ExtractMediationRequest`. 18 tests.
+- **prudent-rewording** (T13): dominio `RewordingContext`, puerto `PrudentRewording`, adapter de templates `IndirectRewording`, use case `RewordMessage`. 15 tests.
+
+**Arquitectura definida:**
+
+- **T10 MVP Architecture**: documento `docs/architecture-mvp-t10.md` define la arquitectura Clean/Hexagonal de la Fase 1, flujo completo de mediacion prudente, y los modulos requeridos para MVP.
+
+**Solo contratos (sin implementacion aun):**
+
+- **session-manager**: tiene tipo `SessionResolution` y puerto `SessionResolver`; falta use case, adapter y tests.
+- **orchestrator**: tiene tipo `PipelineResult` y `PipelineInput`; falta logica de orquestacion.
+- **whatsapp-gateway**: tiene tipo `IncomingWhatsAppMessage` y puerto `WhatsAppGateway`; falta integracion real.
+
+### Lo que no existe todavia
+
+- Conexion real a PostgreSQL desde la aplicacion (los modulos actuales usan stores in-memory)
+- Integracion con WhatsApp / Evolution API
+- HTTP API mas alla de `/health`
+- Panel web
+- Modulo de session-manager completo (solo contratos)
+- Modulo de orchestrator (solo contratos)
+- Endpoints productivos que conecten los modulos en un pipeline real
 
 ## Forma De Trabajo
 
@@ -177,12 +195,11 @@ Runbook operativo: `docs/deployment-t04.md`.
 
 ## Proximos Pasos
 
-El siguiente paso deberia ser definir la primera funcionalidad de producto o la conexion real de la aplicacion a PostgreSQL, sin mezclarlo con cambios de infraestructura.
+El siguiente paso inmediato es completar el modulo **session-manager** con use case, adapter in-memory y tests, cerrando el contrato `SessionResolver` ya definido. Despues, integrar los modulos existentes en un pipeline de orquestacion (`orchestrator`).
 
 Ver tambien:
 
 - `docs/project-status.md`
 - `docs/open-questions.md`
-- `docs/deployment-t03.md`
-- `docs/deployment-t03-1-preflight.md`
+- `docs/architecture-mvp-t10.md`
 - `docs/deployment-t04.md`

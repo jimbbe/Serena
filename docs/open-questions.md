@@ -12,12 +12,23 @@ These questions are intentionally left open until a task needs the decision.
 
 ## Technical
 
-- Which module should be implemented first: `core`, `gateway-wa` or local infrastructure?
-- Which WhatsApp provider or API will be used?
 - Where should Go be introduced first, if at all?
 - Should each Go service use its own `go.mod`, or should the repo use a Go workspace later?
 - Which Node package manager should be standardized if npm stops being enough?
 - What migration tool should be used for PostgreSQL?
+
+## Architecture (T10 Open Questions)
+
+- **Which WhatsApp number will Serena use?** — Needs a real WhatsApp Business API number. Currently only contracts exist for `whatsapp-gateway`.
+- **One-session-per-pair rule details** — The `SessionResolver` port expects to resolve one active session per participant pair. Edge cases: what if the pair has a historical closed session and starts a new one? Should closed sessions be archived or deleted?
+- **Evolution API hosting** — Where will the Evolution API instance run? On the same VPS? Separate service? The `whatsapp-gateway` adapter will need this URL.
+- **Persistence strategy** — Current modules use in-memory stores. When do we switch to PostgreSQL? Should we implement repositories alongside in-memory adapters, or defer the real DB until after the pipeline works end-to-end?
+
+## Resolved (Post-T10)
+
+- **Which module should be implemented first?** — Decided: inbound-gate (T06-T08) first, then mediation-bridge (T09), contact-directory (T11), mediation-understanding (T12), prudent-rewording (T13). This follows the pipeline order defined in T10 MVP architecture.
+- **Which WhatsApp provider or API?** — Decided: Evolution API (open-source WhatsApp API). The `WhatsAppGateway` port in `whatsapp-gateway` is the adapter contract.
+- **Contact model** — Decided: `Contact` type with `id`, `displayName`, `whatsappId`, `allowed`. In-memory with seed data for now. `ResolveContact` resolves by displayName (exact match, case-insensitive).
 
 ## Infrastructure
 

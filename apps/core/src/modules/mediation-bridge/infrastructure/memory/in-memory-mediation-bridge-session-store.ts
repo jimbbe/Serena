@@ -11,4 +11,9 @@ export class InMemoryMediationBridgeSessionStore implements MediationBridgeSessi
   async findById(sessionId: string): Promise<MediationBridgeSession | undefined> {
     return this.sessions.get(sessionId);
   }
+
+  /** Not part of the port — used by cross-module adapters. */
+  findAll(): MediationBridgeSession[] {
+    return [...this.sessions.values()];
+  }
 }

@@ -377,9 +377,9 @@ The WhatsApp Gateway adapter:
 
 | Task | Description | Dependencies |
 |------|-------------|--------------|
-| **T17** | WhatsApp Gateway repo — standalone service, multi-project, multi-number | T16 |
+| **T17** | WhatsApp Gateway repo — standalone service, multi-project, multi-number | T15 |
 | **T18** | Serena WhatsApp adapter — connect serena-core to WhatsApp Gateway | T17 |
-| **T19** | PostgreSQL adapters — replace in-memory with real DB | T16 |
+| **T19** | PostgreSQL adapters — replace in-memory with real DB | T15 |
 | **T20** | VPS deployment update — WhatsApp Gateway + Serena behind Caddy | T17, T18 |
 
 ---

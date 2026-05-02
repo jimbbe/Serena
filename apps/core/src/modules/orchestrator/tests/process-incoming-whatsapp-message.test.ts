@@ -28,6 +28,7 @@ import type { Contact } from "../../contact-directory/domain/contact.ts";
 
 import { createResolveSession } from "../../session-manager/application/use-cases/resolve-session.ts";
 import { InMemorySessionQuery } from "../../session-manager/infrastructure/memory/in-memory-session-query.ts";
+import { MediationBridgeActiveSessionQuery } from "../../session-manager/infrastructure/memory/mediation-bridge-active-session-query.ts";
 import type { ActiveSessionInfo } from "../../session-manager/application/ports/active-session-query.ts";
 
 import { StartMediationBridgeSession } from "../../mediation-bridge/application/use-cases/start-mediation-bridge-session.ts";
@@ -105,6 +106,62 @@ function createTestDeps() {
     startMediationBridgeSession,
     recordMediationBridgeReply,
   };
+}
+
+/**
+ * Bridge-backed dependencies: ActiveSessionQuery reads directly from
+ * MediationBridgeSessionStore.  No manual sessionQuery.add() needed —
+ * a session started by the orchestrator is immediately visible to
+ * session-manager on the next message.
+ */
+function createBridgeBackedDeps() {
+  const contactDirectory = new InMemoryContactDirectory(KNOWN_CONTACTS);
+  const resolveContact = new ResolveContact({ contactDirectory });
+
+  const inboundGateContactDir = new InboundGateContactDirectory(KNOWN_CONTACTS.map((c) => c.whatsappId));
+  const decisionAudit = new InMemoryDecisionAudit();
+  const evaluator = new EvaluateInboundMessage({
+    contactDirectory: inboundGateContactDir,
+    decisionAudit,
+  });
+  const processInboundMessage = new ProcessInboundMessage({ evaluator });
+
+  const mediationUnderstanding = new RuleBasedMediationUnderstanding();
+  const extractMediationRequest = new ExtractMediationRequest({ mediationUnderstanding });
+
+  // Bridge store — the single source of truth for sessions
+  const bridgeStore = new InMemoryMediationBridgeSessionStore();
+
+  // Adapter that reads sessions from the bridge store (no manual .add())
+  const bridgeQuery = new MediationBridgeActiveSessionQuery(bridgeStore);
+  const resolveSession = createResolveSession({ activeSessionQuery: bridgeQuery });
+
+  const startMediationBridgeSession = new StartMediationBridgeSession({
+    sessionStore: bridgeStore,
+    generateId: () => "s-1",
+  });
+  const recordMediationBridgeReply = new RecordMediationBridgeReply({
+    sessionStore: bridgeStore,
+    generateId: () => "t-2",
+  });
+
+  const prudentRewording = new IndirectRewording();
+  const rewordMessage = new RewordMessage({ prudentRewording });
+
+  const deps: ProcessIncomingWhatsAppMessageDependencies = {
+    processInboundMessage,
+    extractMediationRequest,
+    contactDirectory,
+    resolveContact,
+    activeSessionQuery: bridgeQuery,
+    resolveSession,
+    startMediationBridgeSession,
+    recordMediationBridgeReply,
+    mediationBridgeSessionStore: bridgeStore,
+    rewordMessage,
+  };
+
+  return { deps, bridgeStore };
 }
 
 // ---------------------------------------------------------------------------
@@ -377,5 +434,52 @@ describe("Orchestrator — ProcessIncomingWhatsAppMessage pipeline", () => {
       assert.equal(result.senderId, MARIA.whatsappId);
       assert.equal(result.activeSessionIds.length, 2);
     }
+  });
+
+  // 11. End-to-end: bridge-backed adapter — no manual session registration
+  it("bridge-backed adapter: María starts, Carlos replies → no manual add()", async () => {
+    const { deps, bridgeStore } = createBridgeBackedDeps();
+    const pipeline = new ProcessIncomingWhatsAppMessage(deps);
+
+    // Step 1: María sends a mediation request
+    const startResult = await pipeline.execute({
+      senderWhatsAppId: MARIA.whatsappId,
+      messageText: "avisale a Carlos que llego tarde",
+      receivedAt: new Date().toISOString(),
+    });
+
+    assert.equal(startResult.type, "mediation_started");
+    if (startResult.type !== "mediation_started") return;
+    const sessionId = startResult.sessionId;
+    assert.equal(startResult.requesterDisplayName, "María");
+    assert.equal(startResult.recipientDisplayName, "Carlos");
+
+    // The session should be in the bridge store (awaiting Carlos's reply)
+    const sessionAfterStart = bridgeStore.findAll().find((s) => s.sessionId === sessionId);
+    assert.ok(sessionAfterStart);
+    assert.equal(sessionAfterStart!.status, "awaiting_recipient_reply");
+    assert.equal(sessionAfterStart!.awaitingParticipantId, CARLOS.whatsappId);
+
+    // Step 2: Carlos replies with a plain conversational message
+    // No manual sessionQuery.add() — the adapter reads from the bridge store
+    const replyResult = await pipeline.execute({
+      senderWhatsAppId: CARLOS.whatsappId,
+      messageText: "nos vemos mañana",
+      receivedAt: new Date().toISOString(),
+    });
+
+    assert.equal(replyResult.type, "mediation_reply_recorded");
+    if (replyResult.type === "mediation_reply_recorded") {
+      assert.equal(replyResult.fromParticipantId, CARLOS.whatsappId);
+      assert.equal(replyResult.fromDisplayName, CARLOS.displayName);
+      assert.equal(replyResult.toParticipantId, MARIA.whatsappId);
+      assert.equal(replyResult.toDisplayName, MARIA.displayName);
+      assert.ok(replyResult.sessionId);
+    }
+
+    // Session should now await María
+    const sessionAfterReply = bridgeStore.findAll().find((s) => s.sessionId === sessionId)!;
+    assert.equal(sessionAfterReply.status, "awaiting_requester_reply");
+    assert.equal(sessionAfterReply.awaitingParticipantId, MARIA.whatsappId);
   });
 });

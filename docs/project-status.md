@@ -140,10 +140,11 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), an
 - Pipeline use case `ProcessIncomingWhatsAppMessage` conecta los seis modulos existentes sin duplicar logica.
 - Dominio `PipelineResult` con variantes explicitas y testeables: `discard`, `conversation_pending`, `risk_review_required`, `mediation_not_understood`, `recipient_not_found`, `mediation_started`, `mediation_reply_recorded`, `ambiguous_active_session`.
 - Dominio `PipelineInput` normalizado (sin `instanceId` de WhatsApp, que es del gateway).
-- Tests end-to-end in-memory (10 escenarios): sender invalid/desconocido → discard, mensaje conversacional → conversation_pending, riesgo → risk_review_required, mediacion no entendible → mediation_not_understood, destinatario inexistente → recipient_not_found, mediacion nueva → mediation_started, respuesta en sesion activa → mediation_reply_recorded, sesion cerrada permite nueva, sesiones ambiguas → ambiguous_active_session.
+- Tests end-to-end in-memory (11 escenarios): sender invalid/desconocido → discard, mensaje conversacional → conversation_pending, riesgo → risk_review_required, mediacion no entendible → mediation_not_understood, destinatario inexistente → recipient_not_found, mediacion nueva → mediation_started, respuesta en sesion activa → mediation_reply_recorded, sesion cerrada permite nueva, sesiones ambiguas → ambiguous_active_session, flujo bridge-backed real sin registro manual de sesion.
+- Adapter `MediationBridgeActiveSessionQuery` que lee sesiones directamente de `MediationBridgeSessionStore`, eliminando la necesidad de sincronizacion manual entre stores.
 - El orchestrator coordina: no reimplementa validacion, extraccion, resolucion, turnos ni reescritura.
 - Ninguna conexion a infraestructura externa, HTTP endpoints, WhatsApp, Evolution API ni PostgreSQL.
-- 125 tests pasando (115 previos + 10 nuevos de orchestrator).
+- 126 tests pasando (115 previos + 11 de orchestrator).
 
 ## Expected Next Task
 

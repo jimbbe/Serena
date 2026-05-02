@@ -194,12 +194,14 @@ Runbook operativo: `docs/deployment-t04.md`.
 
 ## Proximos Pasos
 
-Fase actual: **logica de negocio con adaptadores in-memory** (sin WhatsApp ni DB reales). Ver roadmap completo en `docs/t10-mvp-architecture.md` §11.
+Fase completada: **logica de negocio con adaptadores in-memory** (T06-T15). Pipeline end-to-end funciona con 126 tests.
 
-- **T15**: Orchestrator — pipeline in-memory end-to-end OK
-- **T16**: Integration tests — verificacion del pipeline completo
+Proxima fase (T17+): **infraestructura real**:
 
-Despues (T17+): WhatsApp Gateway como **repo separado** (servicio agnostico, multi-proyecto, multi-numero), Serena WhatsApp adapter, PostgreSQL adapters, deploy en VPS.
+- **T17**: WhatsApp Gateway — repo separado, servicio agnostico multi-proyecto, multi-numero
+- **T18**: Serena WhatsApp adapter — conectar serena-core a WhatsApp Gateway
+- **T19**: PostgreSQL adapters — reemplazar stores in-memory
+- **T20**: VPS deployment update — WhatsApp Gateway + Serena detras de Caddy
 
 Ver tambien:
 

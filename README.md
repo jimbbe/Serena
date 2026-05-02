@@ -34,7 +34,7 @@ El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura M
 
 **Modulos con pipeline implementado:**
 
-- **orchestrator** (T15): caso de uso `ProcessIncomingWhatsAppMessage` que conecta inbound-gate → mediation-understanding → contact-directory → session-manager → mediation-bridge → prudent-rewording. Devuelve `PipelineResult` con variantes explicitas. 10 tests end-to-end in-memory.
+- **orchestrator** (T15): caso de uso `ProcessIncomingWhatsAppMessage` que conecta inbound-gate → mediation-understanding → contact-directory → session-manager → mediation-bridge → prudent-rewording. Devuelve `PipelineResult` con variantes explicitas. 11 tests end-to-end in-memory.
 
 ### Lo que no existe todavia
 

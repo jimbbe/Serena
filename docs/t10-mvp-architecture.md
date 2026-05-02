@@ -79,9 +79,11 @@ sequenceDiagram
     Note over C,M: Reverse direction follows same pipeline
 ```
 
+> **T15 update (2026-05-02):** El diagrama original muestra Inbound Gate como coordinador principal. A partir de T15, **Orchestrator** es quien coordina el pipeline: recibe el mensaje, delega clasificación a Inbound Gate, y orquesta el resto del flujo (mediation-understanding → contact-directory → session-manager → mediation-bridge → prudent-rewording). El comportamiento de cada módulo no cambia — solo se extrae la coordinación a `ProcessIncomingWhatsAppMessage`.
+
 ---
 
-## 4. Data Flow Diagram
+## 4. Data Flow Diagram (T10 original — see T15 note below)
 
 ```mermaid
 flowchart LR
@@ -119,7 +121,9 @@ flowchart LR
     ORCH -.->|PipelineResult| IG
 ```
 
-### Data Contracts Between Modules
+> **T15 update (2026-05-02):** El diagrama de flujo de datos original muestra Inbound Gate como hub de todos los contratos. En T15, **Orchestrator** es el coordinador real: `ProcessIncomingWhatsAppMessage` recibe el mensaje, usa Inbound Gate solo para clasificación, y coordina directamente mediation-understanding, contact-directory, session-manager, mediation-bridge y prudent-rewording. La tabla de contratos debajo refleja la arquitectura original de T10 — el contrato efectivo en T15 es `PipelineInput → PipelineResult` via Orchestrator.
+
+### Data Contracts Between Modules (T10 original)
 
 | From | To | Contract |
 |------|----|----------|

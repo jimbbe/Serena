@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), and business logic modules implemented with testing (T06-T09, T11-T14). The next milestone is the Orchestrator pipeline that wires all modules end-to-end.
+Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), and business logic modules implemented with testing (T06-T09, T11-T15). T15 Orchestrator pipeline wires all modules end-to-end in-memory, with 126 tests passing.
 
 ## Decided
 

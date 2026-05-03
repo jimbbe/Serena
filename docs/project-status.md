@@ -196,9 +196,22 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - Documentation: `apps/gateway-wa/README.md`, `docs/architecture/t18-mock-whatsapp-gateway.md`.
 - `npm run check` and `npm test` include gateway-wa workspace.
 
+## Implemented In T19: AI Guide Module
+
+- New module `apps/core/src/modules/ai-guide/` with Clean/Hexagonal architecture, completely agnostic of any LLM provider.
+- Domain types: `GuideUseCaseId` (4-value string union: `serena.conversation.reply`, `serena.risk.review`, `serena.mediation.understand_request`, `serena.mediation.clarify`), `ExecutionPolicy` (5 required fields), `UseCaseContract` (5 fields), `GuideResult<T>` (generic with inline metadata, audited flag).
+- Ports: `LlmProvider` (type alias with `invoke(input)`), `AiInvocationAudit` (type alias with `record(input, result)`).
+- Application logic: `UseCaseRegistry` (register/get/getAll with duplicate protection, get returns `undefined` for unregistered), `ExecutionPipeline` (template interpolation, retry loop, audit recording, empty-result validation), `AiGuideService` (public facade `execute(useCaseId, input)`).
+- Pre-built contracts: 3 use cases (conversation.reply, risk.review, mediation.understand_request) with placeholder prompts. `serena.mediation.clarify` throws `NotImplementedError`.
+- Infrastructure: `MockLlmProvider` (deterministic canned responses), `InMemoryAiInvocationAudit` (in-memory array with `getRecords()`).
+- Tests: 28 unit tests with `node:test` + `node:assert/strict` covering registry, pipeline, service, provider mock, audit mock.
+- Module independence: zero imports from other Serena modules (inbound-gate, mediation-bridge, orchestrator).
+- TypeScript: zero type errors, clean `tsc --noEmit` across all projects.
+- All 231 tests pass (193 core + 38 gateway-wa).
+
 ## Expected Next Task
 
-Next: T19 — Evolution API adapter in controlled mode; later PostgreSQL adapters. La especificación de contrato T17A, el hardening T17B, el mock gateway T18, y la documentación ordenada (T18.1) sirven como base para la integración segura con el WhatsApp Gateway real.
+Next: T20 — Evolution API adapter in controlled mode; later PostgreSQL adapters. La especificación de contrato T17A, el hardening T17B, el mock gateway T18, el módulo ai-guide T19, y la documentación ordenada (T18.1) sirven como base para la integración segura con el WhatsApp Gateway real.
 
 ### Repository note
 Este repositorio es el centro operativo del proyecto. Contiene documentación técnica (`docs/architecture/`) y operativa (`docs/ops/`) con datos reales de VPS, deploy, rutas de Caddy y backups. Debe hacerse privado antes de uso productivo o exposición pública prolongada.

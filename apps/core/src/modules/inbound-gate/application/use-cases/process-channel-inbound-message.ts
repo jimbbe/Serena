@@ -13,7 +13,7 @@
 import { randomUUID } from "node:crypto";
 
 import type { InboundMessageCommand } from "../../domain/inbound-message-command.ts";
-import type { ChannelInboundResult } from "../../domain/channel-inbound-result.ts";
+import type { ChannelInboundResult } from "../results/channel-inbound-result.ts";
 import type { GuideUseCaseId } from "../../../ai-guide/domain/guide-use-case-id.ts";
 import type { GuideResult } from "../../../ai-guide/domain/guide-result.ts";
 

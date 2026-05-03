@@ -1,12 +1,17 @@
 /**
  * T20 — Response types for the channel-agnostic inbound pipeline.
+ *
+ * Lives in the APPLICATION layer because the result type couples
+ * inbound-gate concepts (InboundDecision, LlmProfileId) with ai-guide
+ * concepts (GuideUseCaseId, GuideResult).  Domain must not import
+ * from other modules — this integration type belongs in application.
  */
 
-import type { InboundChannel } from "./inbound-message-command.ts";
-import type { InboundDecision } from "./inbound-decision.ts";
-import type { LlmProfileId } from "./llm-profile.ts";
-import type { GuideUseCaseId } from "../../ai-guide/domain/guide-use-case-id.ts";
-import type { GuideResult } from "../../ai-guide/domain/guide-result.ts";
+import type { InboundChannel } from "../../domain/inbound-message-command.ts";
+import type { InboundDecision } from "../../domain/inbound-decision.ts";
+import type { LlmProfileId } from "../../domain/llm-profile.ts";
+import type { GuideUseCaseId } from "../../../ai-guide/domain/guide-use-case-id.ts";
+import type { GuideResult } from "../../../ai-guide/domain/guide-result.ts";
 
 /**
  * Simulated outbound draft included in the simulation result when

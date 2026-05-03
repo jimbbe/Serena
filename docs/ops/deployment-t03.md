@@ -1,6 +1,6 @@
 # Deployment Path T03 [HISTÓRICO — pre-T04]
 
-> ⚠️ Este documento describe el plan de despliegue ANTES de T04. Para el estado operativo actual, ver `docs/deployment-t04.md`.
+> ⚠️ Este documento describe el plan de despliegue ANTES de T04. Para el estado operativo actual, ver `docs/ops/deployment-t04.md`.
 
 T03 only prepared the deployment path for `serena-core`. It did not deploy to production, modify the VPS, change DNS, or connect a real database.
 

@@ -43,21 +43,24 @@ Idempotencia in-memory implementada en T17B. Preguntas abiertas para T18/T19:
 - **¿Politica de retencion/TTL?** — ¿Cuanto tiempo se retienen los mensajes procesados? ¿24h, 7d, indefinido? Depende del volumen esperado y del caso de uso.
 - **¿Comportamiento ante replay legitimo o reintentos tardios?** — Si un mensaje se reintenta dias despues, ¿debe considerarse duplicado o nuevo? La key compuesta + TTL ayuda a definir esta politica.
 
-## Resolved In T10
+## Operaciones y Seguridad del Repositorio (T18.1+)
 
-- WhatsApp provider: **Evolution API** (self-hosted Docker on VPS at `/docker/evolution-api/`), REST + webhooks. Confirmed with Marco.
-- Module implementation order: **T11 → T16** for Serena business logic (in-memory), then **T17 → T20** for integrations. See `docs/t10-mvp-architecture.md` §11.
-- Contact model MVP scope: `{ id, displayName, whatsappId }` — no relationship field in MVP (confirmed with Marco).
-- Session rule: one active session per participant pair; closed sessions ignored; new request starts fresh session.
-- Rewording style: indirect style ("María me pidió decirte que…"), no invention, clear attribution.
-- Persistence strategy: in-memory until pipeline end-to-end works, then PostgreSQL adapters.
-- Understanding strategy: rules first (Spanish patterns), LLM as fallback.
-- WhatsApp number: Marco's number for testing (dedicated for Serena).
-- Evolution API hosting: self-hosted via Docker Compose on VPS at `/docker/evolution-api/`.
+- **¿Cuando pasar el repositorio a privado?** — Por ahora contiene IPs reales, hostnames, rutas de Caddy, backups y datos de VPS que OpenCode usa para operar. Debe hacerse privado antes de uso productivo o exposicion publica prolongada. ¿Cual es el disparador concreto (primer mensaje real, primer deploy productivo del gateway, etc.)?
+- **¿Persistencia durable para sesiones?** — Las sesiones de mediacion (`MediationBridgeSessionStore`) y la idempotencia (`ProcessedMessageStore`) son in-memory. Se pierden al reiniciar. ¿Cuando migrar a PostgreSQL/Redis? ¿Conviene hacerlo junto con los adapters PostgreSQL de T19?
 
-## Resolved In T06-T09
+## Estrategia de Integracion Futura
 
-- Which module should be implemented first: se empezo por `core` — `inbound-gate` (T06-T08) y `mediation-bridge` (T09) fueron los primeros modulos de producto implementados y testeados.
+- **¿Estrategia PostgreSQL concreta?** — T19 preve PostgreSQL adapters. Preguntas abiertas: ¿schema por modulo o unico? ¿migraciones con que herramienta? ¿repo pattern con interfaces separadas de los puertos de dominio?
+- **¿Estrategia Evolution API?** — T19/T20 preve integracion con Evolution API. Preguntas: ¿instancia dedicada o compartida? ¿como manejar webhooks entrantes (autenticacion, rate limiting)? ¿el mock gateway T18 se mantiene como herramienta de testing?
+- **¿Futuro repo separado para WhatsApp Gateway real?** — La arquitectura T17A preve un repo `whatsapp-gateway` independiente. ¿Cuando crear ese repo? ¿que codigo se mueve/duplica? ¿el mock gateway T18 migra a ese repo o queda en Serena como herramienta de desarrollo?
+- **¿Integracion futura de IA/LLM?** — El strategy actual es rules-first para mediation-understanding, LLM como fallback. ¿Cuando integrar LLM? ¿que proveedor? ¿que politicas de privacidad/costo aplican para el caso de uso de una persona mayor?
+
+## Politicas de Revision Humana
+
+- **¿Politica de revision humana para `risk_review_required`?** — El pipeline produce `risk_review_required` cuando detecta senales de riesgo/urgencia. ¿Quien revisa estos casos? ¿Con que frecuencia? ¿Hay un SLA?
+- **¿Politica de revision humana para `ambiguous_active_session`?** — Cuando hay multiples sesiones activas para el mismo par, el pipeline produce `ambiguous_active_session`. ¿Como se resuelve? ¿Manual por un operador? ¿La persona mayor decide?
+- **¿Manejo de mensajes ambiguos?** — `mediation_not_understood` y `recipient_not_found` requieren aclaracion. ¿Serena debe responder automaticamente pidiendo clarificacion? ¿O se escala a revision humana?
+- **¿Manejo de contactos ambiguos?** — Si hay dos contactos con nombres similares (ej. "Maria" y "Maria Jose"), ¿como se resuelve la ambiguedad en `ResolveContact`?
 
 ## Infrastructure
 

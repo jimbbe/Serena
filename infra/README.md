@@ -14,4 +14,4 @@ Infrastructure definitions live here.
 - `vps/docker-compose.yml` — active template for `serena-core` + `serena-postgres` behind the existing VPS Caddy edge. Deployed to `/docker/serena` on VPS (T04).
 - `vps/Caddyfile.serena.example` — templates the active Serena Caddy route `serena.goingmerry01.tech → serena-core:3000`.
 
-The VPS stack is deployed and healthy since T04. See `docs/deployment-t04.md` for the operational runbook.
+The VPS stack is deployed and healthy since T04. See `docs/ops/deployment-t04.md` for the operational runbook.

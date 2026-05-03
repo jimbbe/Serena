@@ -68,6 +68,27 @@ The system SHALL register `POST /dev/simulate/inbound-message` in `server.ts` vi
 - WHEN a POST request with valid JSON is sent to `/dev/simulate/inbound-message`
 - THEN the request is processed and a result is returned
 
+### Requirement: Scenario Handler Route
+
+The system SHALL register `POST /dev/simulate/scenario` alongside the existing `/dev/simulate/inbound-message` route. The route SHALL:
+
+1. Use the same `ENABLE_SIMULATION_ENDPOINTS` guard as the inbound-message endpoint
+2. Accept only POST method (return 405 for other methods)
+3. Delegate to `ScenarioRunner.execute()` for processing
+4. Return `ScenarioResult` as JSON with status 200 on success
+
+#### Scenario: Scenario endpoint shares same guard
+
+- GIVEN `ENABLE_SIMULATION_ENDPOINTS` is not set
+- WHEN POST to `/dev/simulate/scenario`
+- THEN response is 404 with `error: "simulation_not_enabled"`
+
+#### Scenario: Scenario POST returns 200
+
+- GIVEN simulation is enabled and valid scenario payload
+- WHEN POST to `/dev/simulate/scenario`
+- THEN response is 200 with `ScenarioResult` JSON
+
 ### Requirement: Request Body Validation
 
 The endpoint SHALL validate the request body with the following rules (matching the `InboundMessageCommand` validation spec):
@@ -146,28 +167,43 @@ The endpoint SHALL return appropriate error responses:
 
 ### Requirement: Server Integration — Backward Compatible
 
-The `createHttpServer` function SHALL accept an optional `simulationHandler` parameter (4th positional argument) without breaking existing callers. The parameter SHALL be typed as `PipelineRequestHandler | undefined`.
+The `createHttpServer` function SHALL accept optional `simulationHandler` (4th) and `scenarioHandler` (5th) positional arguments without breaking existing callers.
 
 ```typescript
 export function createHttpServer(
   environment: string,
   pipelineHandler?: PipelineRequestHandler,
   internalToken?: string,
-  simulationHandler?: PipelineRequestHandler,  // NEW optional param
+  simulationHandler?: PipelineRequestHandler,
+  scenarioHandler?: PipelineRequestHandler,  // NEW 5th param
 )
 ```
 
+(Previously: 3 positional parameters — environment, pipelineHandler, internalToken)
+
 #### Scenario: Existing callers work without changes
 
-- GIVEN code that calls `createHttpServer(env, handler, token)`
+- GIVEN code that calls `createHttpServer(env, pipeline, token, simulation)`
 - WHEN the call is made
-- THEN it works exactly as before (4th param is undefined)
+- THEN it works exactly as before (5th param is undefined)
 
 #### Scenario: Simulation handler is only invoked for matching path
 
 - GIVEN a simulation handler is provided
 - WHEN a request is sent to `/internal/pipeline/process`
 - THEN the simulation handler is NOT invoked
+
+#### Scenario: Scenario handler only invoked for matching path
+
+- GIVEN a scenario handler is provided
+- WHEN a request is sent to `/dev/simulate/inbound-message`
+- THEN the scenario handler is NOT invoked
+
+#### Scenario: Scenario handler invoked for correct path
+
+- GIVEN a scenario handler is provided
+- WHEN a POST request is sent to `/dev/simulate/scenario`
+- THEN the scenario handler processes the request
 
 ### Requirement: Handler Factory
 
@@ -190,6 +226,28 @@ The system SHALL define `createSimulationHandler(processChannelInbound: ProcessC
 - GIVEN a successfully processed command
 - WHEN the handler completes
 - THEN it calls `sendJson(res, 200, result)`
+
+### Requirement: Scenario Handler Factory
+
+The system SHALL define `createScenarioHandler(runner: ScenarioRunner): PipelineRequestHandler` in `bootstrap/scenario-runner-handler.ts`. The handler SHALL:
+
+1. Read and parse the request body as JSON
+2. Validate against `ScenarioInput` schema (scenarioId, tenantId, steps, channel, externalSenderId, stopOnError, metadata)
+3. Call `runner.execute(input)`
+4. Return the `ScenarioResult` as JSON
+5. Handle errors gracefully (no uncaught exceptions)
+
+#### Scenario: Handler validates and delegates
+
+- GIVEN a POST request with valid scenario JSON body
+- WHEN the handler is invoked
+- THEN it validates the body and calls `runner.execute()`
+
+#### Scenario: Handler returns JSON response
+
+- GIVEN a successfully processed scenario
+- WHEN the handler completes
+- THEN it calls `sendJson(res, 200, scenarioResult)`
 
 ### Requirement: Pipeline Factory Wiring
 

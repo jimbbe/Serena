@@ -3,6 +3,8 @@ import { loadAppEnv } from "./config/env.ts";
 import { createInMemoryPipeline } from "./bootstrap/create-in-memory-pipeline.ts";
 import { createPipelineHandler } from "./bootstrap/internal-pipeline-handler.ts";
 import { createSimulationHandler } from "./bootstrap/simulation-handler.ts";
+import { createScenarioHandler } from "./bootstrap/scenario-handler.ts";
+import { SimulationScenarioRunner } from "./bootstrap/scenario-runner.ts";
 import { ProcessChannelInboundMessage } from "./modules/inbound-gate/application/use-cases/process-channel-inbound-message.ts";
 
 const env = loadAppEnv();
@@ -12,8 +14,9 @@ const env = loadAppEnv();
 const { orchestrator, processedMessageStore, aiGuideService, processInboundMessage, identityResolver } = await createInMemoryPipeline();
 const pipelineHandler = createPipelineHandler(orchestrator, processedMessageStore);
 
-// Conditionally wire simulation handler (dev-only, disabled by default)
+// Conditionally wire simulation and scenario handlers (dev-only, disabled by default)
 let simulationHandler: ReturnType<typeof createSimulationHandler> | undefined;
+let scenarioHandler: ReturnType<typeof createScenarioHandler> | undefined;
 if (env.enableSimulationEndpoints) {
   const processChannelInboundMessage = new ProcessChannelInboundMessage({
     processInboundMessage,
@@ -21,9 +24,14 @@ if (env.enableSimulationEndpoints) {
     identityResolver,
   });
   simulationHandler = createSimulationHandler(processChannelInboundMessage);
+
+  const scenarioRunner = new SimulationScenarioRunner({
+    processChannelInboundMessage,
+  });
+  scenarioHandler = createScenarioHandler(scenarioRunner);
 }
 
-const server = createHttpServer(env.environment, pipelineHandler, env.internalToken, simulationHandler);
+const server = createHttpServer(env.environment, pipelineHandler, env.internalToken, simulationHandler, scenarioHandler);
 
 server.listen(env.port, env.host, () => {
   console.log(`serena-core listening on http://${env.host}:${env.port}`);
@@ -31,5 +39,6 @@ server.listen(env.port, env.host, () => {
   console.log(`  POST /internal/pipeline/process${env.internalToken ? "" : " (token NOT configured)"}`);
   if (env.enableSimulationEndpoints) {
     console.log(`  POST /dev/simulate/inbound-message (simulation enabled)`);
+    console.log(`  POST /dev/simulate/scenario (scenario runner enabled)`);
   }
 });

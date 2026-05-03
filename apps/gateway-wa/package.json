@@ -7,6 +7,10 @@
     "test": "node --experimental-strip-types --test src/tests/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
+  "exports": {
+    "./application/run-dry-gateway-event": "./src/application/run-dry-gateway-event.ts",
+    "./domain/mock-whatsapp-event": "./src/domain/mock-whatsapp-event.ts"
+  },
   "engines": {
     "node": ">=22.6.0"
   }

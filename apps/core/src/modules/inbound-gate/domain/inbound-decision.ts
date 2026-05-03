@@ -4,6 +4,7 @@ export type InboundDecisionReason =
   | "invalid_sender"
   | "invalid_text"
   | "unknown_sender"
+  | "blocked_sender"
   | "known_sender_conversational"
   | "third_party_mediation_request"
   | "urgent_or_risk_content";
@@ -22,6 +23,7 @@ export type InboundDecision = {
       | "invalid_sender"
       | "invalid_text"
       | "unknown_sender"
+      | "identity_blocked"
       | "urgent_or_risk_over_mediation"
       | "mediation_over_conversation"
       | "conversation_default";

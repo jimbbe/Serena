@@ -98,15 +98,15 @@ export class ProcessChannelInboundMessage {
         identity,
         inboundDecision: {
           status: "blocked",
-          reason: "unknown_sender",
+          reason: "blocked_sender",
           metadata: {
             normalizedSenderId: cmd.externalSenderId,
             senderKnown: false,
             receivedAt: new Date().toISOString(),
             audited: false,
             policyVersion: "identity-v1",
-            matchedSignals: [],
-            precedence: "unknown_sender",
+            matchedSignals: ["identity_blocked"],
+            precedence: "identity_blocked",
           },
         },
         profileId: undefined,

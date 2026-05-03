@@ -820,7 +820,12 @@ test("blocked identity short-circuits without calling ProcessInboundMessage", as
   assert.equal(aiCalled, false, "AiGuideService should NOT be called for blocked identity");
   assert.equal(result.identity!.status, "blocked");
   assert.equal(result.inboundDecision.status, "blocked");
-  assert.equal(result.inboundDecision.reason, "unknown_sender");
+  assert.equal(result.inboundDecision.reason, "blocked_sender");
+  assert.equal(result.inboundDecision.metadata.precedence, "identity_blocked");
+  assert.ok(
+    result.inboundDecision.metadata.matchedSignals.includes("identity_blocked"),
+    "matchedSignals should include identity_blocked",
+  );
   assert.equal(result.profileId, undefined);
   assert.equal(result.useCaseId, undefined);
   assert.equal(result.guideResult, undefined);

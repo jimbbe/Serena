@@ -37,6 +37,13 @@ import { RewordMessage } from "../modules/prudent-rewording/application/use-case
 import { InMemoryProcessedMessageStore } from "../modules/internal-pipeline/infrastructure/memory/in-memory-processed-message-store.ts";
 import type { ProcessedMessageStore } from "../modules/internal-pipeline/domain/processed-message-store.ts";
 
+import { AiGuideService } from "../modules/ai-guide/application/use-cases/ai-guide-service.ts";
+import { UseCaseRegistry } from "../modules/ai-guide/application/use-cases/use-case-registry.ts";
+import { ExecutionPipeline } from "../modules/ai-guide/application/use-cases/execution-pipeline.ts";
+import { defaultContracts } from "../modules/ai-guide/application/use-cases/contracts.ts";
+import { MockLlmProvider } from "../modules/ai-guide/infrastructure/memory/mock-llm-provider.ts";
+import { InMemoryAiInvocationAudit } from "../modules/ai-guide/infrastructure/memory/in-memory-ai-invocation-audit.ts";
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -45,6 +52,8 @@ export async function createInMemoryPipeline(): Promise<{
   orchestrator: ProcessIncomingWhatsAppMessage;
   bridgeStore: InMemoryMediationBridgeSessionStore;
   processedMessageStore: ProcessedMessageStore;
+  aiGuideService: AiGuideService;
+  processInboundMessage: ProcessInboundMessage;
 }> {
   const contacts = await loadContactsFromSeed();
 
@@ -105,5 +114,15 @@ export async function createInMemoryPipeline(): Promise<{
   // Idempotency store — shared across requests within the same process
   const processedMessageStore = new InMemoryProcessedMessageStore();
 
-  return { orchestrator, bridgeStore, processedMessageStore };
+  // AI Guide — in-memory wiring with deterministic mock provider
+  const aiRegistry = new UseCaseRegistry();
+  for (const contract of defaultContracts) {
+    aiRegistry.register(contract);
+  }
+  const llmProvider = new MockLlmProvider();
+  const aiAudit = new InMemoryAiInvocationAudit();
+  const executionPipeline = new ExecutionPipeline({ provider: llmProvider, audit: aiAudit });
+  const aiGuideService = new AiGuideService({ registry: aiRegistry, pipeline: executionPipeline });
+
+  return { orchestrator, bridgeStore, processedMessageStore, aiGuideService, processInboundMessage };
 }

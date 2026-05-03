@@ -364,7 +364,7 @@ guarded by the environment variable.
   "scenarioId":       "greeting-001",    // unique scenario identifier
   "tenantId":         "demo",            // multi-tenant identifier
   "channel":          "whatsapp",        // default channel for all steps
-  "externalSenderId": "+5492600000000",  // default sender for all steps
+  "externalSenderId": "+5492600000000",  // default sender for all steps (or provide per-step)
   "steps": [                             // ordered list of steps
     {
       "text": "hola Serena, cómo estás?" // required per step — message text
@@ -386,7 +386,7 @@ guarded by the environment variable.
 | `scenarioId` | `string` | **Yes** | Unique scenario identifier, non-empty |
 | `tenantId` | `string` | **Yes** | Multi-tenant identifier, non-empty |
 | `channel` | `string` | **Yes** | One of: `whatsapp`, `voice`, `web_chat`, `telegram`, `system`, `simulation` |
-| `externalSenderId` | `string` | **Yes** | Default sender identifier, non-empty |
+| `externalSenderId` | `string` | **Conditional** | Default sender identifier, non-empty. Required unless every step provides its own `externalSenderId`. |
 | `steps` | `array` | **Yes** | Non-empty array of step objects |
 | `steps[].text` | `string` | **Yes** | Message text per step, non-empty |
 | `steps[].channel` | `string` | No | Override channel for this step |
@@ -397,7 +397,7 @@ guarded by the environment variable.
 | `steps[].metadata` | `object` | No | Step-level extras |
 | `conversationId` | `string` | No | Default conversation identifier |
 | `stopOnError` | `boolean` | No | Break on first step failure (default `false`) |
-| `metadata` | `object` | No | Scenario-level extras |
+| `metadata` | `object` | No | Scenario-level extras merged into every step (step-level keys override scenario-level) |
 
 ### Response (200 OK)
 
@@ -517,9 +517,58 @@ curl -X POST http://localhost:3000/dev/simulate/scenario \
   }'
 ```
 
-Each step uses its own `externalSenderId` override, allowing different actors
+Each step uses its own `externalSenderId`, allowing different actors
 in the same scenario. Marta connects via WhatsApp (+5492600000000), María uses
-a different phone (5491111111111).
+a different phone (5491111111111). A global `externalSenderId` is optional when
+every step provides its own.
+
+### Multi-actor without global sender (per-step senders only)
+
+```bash
+curl -X POST http://localhost:3000/dev/simulate/scenario \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scenarioId": "per-step-senders",
+    "tenantId": "demo",
+    "channel": "whatsapp",
+    "steps": [
+      { "text": "hola Serena, soy Marta",
+        "externalSenderId": "+5492600000000" },
+      { "text": "Hola Marta, soy María",
+        "externalSenderId": "5491111111111" },
+      { "text": "avisale a Juan",
+        "externalSenderId": "5491111111111" }
+    ]
+  }'
+```
+
+The `externalSenderId` at scenario level is omitted entirely — each step must
+provide its own. Validation rejects the request with a clear per-step error
+message if any step is missing its sender.
+
+### Scenario-level metadata merge
+
+```bash
+curl -X POST http://localhost:3000/dev/simulate/scenario \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scenarioId": "metadata-merge",
+    "tenantId": "demo",
+    "channel": "whatsapp",
+    "externalSenderId": "5491111111111",
+    "metadata": { "env": "staging", "source": "scenario" },
+    "steps": [
+      { "text": "uses scenario metadata only" },
+      { "text": "overrides source key",
+        "metadata": { "source": "step-override" } }
+    ]
+  }'
+```
+
+Scenario-level `metadata` is merged into every step. Step-level keys override
+scenario-level keys. In the example above, step 0 receives
+`{ env: "staging", source: "scenario" }` and step 1 receives
+`{ env: "staging", source: "step-override" }`.
 
 ### stopOnError=true (breaks on first failure)
 

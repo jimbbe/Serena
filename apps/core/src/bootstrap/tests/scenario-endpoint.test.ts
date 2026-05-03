@@ -23,6 +23,7 @@ import type {
   ScenarioSummary,
 } from "../scenario-runner.ts";
 import { calculateSummary } from "../scenario-runner.ts";
+import { isScenarioStepFailure } from "../scenario-runner.ts";
 import type { ScenarioStepResult } from "../scenario-runner.ts";
 import { ProcessChannelInboundMessage } from "../../modules/inbound-gate/application/use-cases/process-channel-inbound-message.ts";
 import type { ChannelInboundResult } from "../../modules/inbound-gate/application/results/channel-inbound-result.ts";
@@ -364,7 +365,7 @@ describe("POST /dev/simulate/scenario", () => {
     assert.ok(fields.some((f) => f.field === "steps[0].channel"));
   });
 
-  it("missing externalSenderId returns 400", async () => {
+  it("missing externalSenderId returns 400 with per-step errors", async () => {
     const payload = scenarioPayload();
     delete (payload as Record<string, unknown>).externalSenderId;
 
@@ -372,8 +373,12 @@ describe("POST /dev/simulate/scenario", () => {
 
     assert.equal(status, 400);
     const obj = body as Record<string, unknown>;
-    const fields = obj.fields as Array<{ field: string }>;
-    assert.ok(fields.some((f) => f.field === "externalSenderId"));
+    const fields = obj.fields as Array<{ field: string; message: string }>;
+    const senderErrors = fields.filter((f) => f.field.startsWith("steps[") && f.field.endsWith(".externalSenderId"));
+    assert.ok(senderErrors.length > 0);
+    for (const err of senderErrors) {
+      assert.ok(err.message.includes("Required when scenario.externalSenderId is not provided"));
+    }
   });
 
   it("blank externalSenderId returns 400", async () => {
@@ -405,6 +410,60 @@ describe("POST /dev/simulate/scenario", () => {
     const obj = body as Record<string, unknown>;
     const fields = obj.fields as Array<{ field: string }>;
     assert.ok(fields.some((f) => f.field === "steps[0].externalSenderId"));
+  });
+
+  it("scenario without global externalSenderId succeeds when each step provides one", async () => {
+    const payload = {
+      scenarioId: "per-step-senders",
+      tenantId: "demo",
+      channel: "whatsapp",
+      steps: [
+        { text: "hola desde Marta", externalSenderId: MARTA_WHATSAPP },
+        { text: "hola desde María", externalSenderId: MARIA_WHATSAPP },
+      ],
+    };
+
+    const { status, body } = await request("POST", "/dev/simulate/scenario", port, payload);
+
+    assert.equal(status, 200);
+    const result = body as ScenarioResult;
+    assert.equal(result.steps.length, 2);
+
+    const step0 = result.steps[0]!;
+    assert.ok(step0.result !== null);
+    assert.equal(step0.input.externalSenderId, MARTA_WHATSAPP);
+    const id0 = step0.result.identity;
+    assert.ok(id0 !== undefined);
+    assert.equal(id0.displayName, "Marta");
+
+    const step1 = result.steps[1]!;
+    assert.ok(step1.result !== null);
+    assert.equal(step1.input.externalSenderId, MARIA_WHATSAPP);
+    const id1 = step1.result.identity;
+    assert.ok(id1 !== undefined);
+    assert.equal(id1.displayName, "María");
+  });
+
+  it("scenario without global sender and step without sender returns 400 with clear message", async () => {
+    const payload = {
+      scenarioId: "missing-sender",
+      tenantId: "demo",
+      channel: "whatsapp",
+      steps: [
+        { text: "has sender", externalSenderId: MARIA_WHATSAPP },
+        { text: "missing sender" },
+      ],
+    };
+
+    const { status, body } = await request("POST", "/dev/simulate/scenario", port, payload);
+
+    assert.equal(status, 400);
+    const obj = body as Record<string, unknown>;
+    assert.equal(obj.error, "invalid_payload");
+    const fields = obj.fields as Array<{ field: string; message: string }>;
+    const step1SenderError = fields.find((f) => f.field === "steps[1].externalSenderId");
+    assert.ok(step1SenderError !== undefined);
+    assert.equal(step1SenderError.message, "Required when scenario.externalSenderId is not provided");
   });
 
   // =========================================================================
@@ -841,6 +900,328 @@ describe("POST /dev/simulate/scenario", () => {
   });
 
   // =========================================================================
+  // stopOnError=true — controlled failures (not exceptions)
+  // =========================================================================
+
+  it("stopOnError=true cuts on guideResult.status 'failed' (no exception)", async () => {
+    let callCount = 0;
+    const mockChannelInbound = {
+      execute: async (_cmd: InboundMessageCommand): Promise<ChannelInboundResult> => {
+        callCount++;
+        if (callCount === 2) {
+          // Controlled failure — AI guide returned failed, no exception thrown
+          return {
+            traceId: "mock-trace",
+            channel: "whatsapp",
+            inboundDecision: {
+              status: "allowed" as const,
+              reason: "known_sender_conversational" as const,
+              metadata: {
+                normalizedSenderId: "test",
+                senderKnown: true,
+                receivedAt: new Date().toISOString(),
+                audited: false,
+                policyVersion: "test-v1",
+                matchedSignals: [] as readonly string[],
+                precedence: "conversation_default" as const,
+              },
+            },
+            profileId: "conversation" as const,
+            useCaseId: "serena.conversation.reply" as const,
+            guideResult: {
+              status: "failed" as const,
+              useCaseId: "serena.conversation.reply" as const,
+              error: { message: "AI timeout", code: "TIMEOUT" },
+              metadata: {
+                provider: "mock",
+                model: "mock",
+                attempts: 1,
+                auditRecorded: false,
+              },
+            },
+            warnings: [],
+            errors: [],
+          };
+        }
+        return {
+          traceId: "mock-trace",
+          channel: "whatsapp",
+          inboundDecision: {
+            status: "allowed" as const,
+            reason: "known_sender_conversational" as const,
+            metadata: {
+              normalizedSenderId: "test",
+              senderKnown: true,
+              receivedAt: new Date().toISOString(),
+              audited: false,
+              policyVersion: "test-v1",
+              matchedSignals: [] as readonly string[],
+              precedence: "conversation_default" as const,
+            },
+          },
+          profileId: undefined,
+          useCaseId: undefined,
+          guideResult: undefined,
+          warnings: [],
+          errors: [],
+        };
+      },
+    };
+
+    const runner = new SimulationScenarioRunner({
+      processChannelInboundMessage: mockChannelInbound as unknown as ProcessChannelInboundMessage,
+    });
+    const handler = createScenarioHandler(runner);
+    const testServer = createHttpServer("test", undefined, undefined, undefined, handler);
+
+    let testPort = 0;
+    await new Promise<void>((resolve) => {
+      testServer.listen(0, "127.0.0.1", () => {
+        const addr = testServer.address();
+        if (addr && typeof addr === "object") testPort = addr.port;
+        resolve();
+      });
+    });
+
+    try {
+      const { status, body } = await request("POST", "/dev/simulate/scenario", testPort, {
+        scenarioId: "stop-on-guide-failure",
+        tenantId: "demo",
+        channel: "whatsapp",
+        externalSenderId: MARIA_WHATSAPP,
+        stopOnError: true,
+        steps: [
+          { text: "first step" },
+          { text: "guide fails here" },
+          { text: "never executed" },
+        ],
+      });
+
+      assert.equal(status, 200);
+      const result = body as ScenarioResult;
+
+      // stopOnError should have cut after step 1 (guide failed)
+      assert.equal(result.steps.length, 2);
+      assert.equal(result.steps[0]!.error, null);
+      assert.equal(result.steps[1]!.error, null);
+      assert.ok(result.steps[1]!.result !== null);
+      assert.equal(result.steps[1]!.result.guideResult?.status, "failed");
+
+      assert.equal(result.summary.totalSteps, 2);
+      assert.equal(result.summary.successfulSteps, 1);
+      assert.equal(result.summary.failedSteps, 1);
+
+      // Step 3 never called
+      assert.equal(callCount, 2);
+    } finally {
+      testServer.close();
+    }
+  });
+
+  it("stopOnError=true cuts on result.errors non-empty (no exception)", async () => {
+    let callCount = 0;
+    const mockChannelInbound = {
+      execute: async (_cmd: InboundMessageCommand): Promise<ChannelInboundResult> => {
+        callCount++;
+        if (callCount === 2) {
+          return {
+            traceId: "mock-trace",
+            channel: "whatsapp",
+            inboundDecision: {
+              status: "allowed" as const,
+              reason: "known_sender_conversational" as const,
+              metadata: {
+                normalizedSenderId: "test",
+                senderKnown: true,
+                receivedAt: new Date().toISOString(),
+                audited: false,
+                policyVersion: "test-v1",
+                matchedSignals: [] as readonly string[],
+                precedence: "conversation_default" as const,
+              },
+            },
+            profileId: undefined,
+            useCaseId: undefined,
+            guideResult: undefined,
+            warnings: [],
+            errors: ["pipeline internal error"],
+          };
+        }
+        return {
+          traceId: "mock-trace",
+          channel: "whatsapp",
+          inboundDecision: {
+            status: "allowed" as const,
+            reason: "known_sender_conversational" as const,
+            metadata: {
+              normalizedSenderId: "test",
+              senderKnown: true,
+              receivedAt: new Date().toISOString(),
+              audited: false,
+              policyVersion: "test-v1",
+              matchedSignals: [] as readonly string[],
+              precedence: "conversation_default" as const,
+            },
+          },
+          profileId: undefined,
+          useCaseId: undefined,
+          guideResult: undefined,
+          warnings: [],
+          errors: [],
+        };
+      },
+    };
+
+    const runner = new SimulationScenarioRunner({
+      processChannelInboundMessage: mockChannelInbound as unknown as ProcessChannelInboundMessage,
+    });
+    const handler = createScenarioHandler(runner);
+    const testServer = createHttpServer("test", undefined, undefined, undefined, handler);
+
+    let testPort = 0;
+    await new Promise<void>((resolve) => {
+      testServer.listen(0, "127.0.0.1", () => {
+        const addr = testServer.address();
+        if (addr && typeof addr === "object") testPort = addr.port;
+        resolve();
+      });
+    });
+
+    try {
+      const { status, body } = await request("POST", "/dev/simulate/scenario", testPort, {
+        scenarioId: "stop-on-errors",
+        tenantId: "demo",
+        channel: "whatsapp",
+        externalSenderId: MARIA_WHATSAPP,
+        stopOnError: true,
+        steps: [
+          { text: "first step" },
+          { text: "errors step" },
+          { text: "never executed" },
+        ],
+      });
+
+      assert.equal(status, 200);
+      const result = body as ScenarioResult;
+
+      assert.equal(result.steps.length, 2);
+      assert.equal(result.summary.failedSteps, 1);
+      assert.equal(result.summary.successfulSteps, 1);
+
+      assert.equal(callCount, 2);
+    } finally {
+      testServer.close();
+    }
+  });
+
+  it("stopOnError=false continues when guideResult.status is 'failed'", async () => {
+    let callCount = 0;
+    const mockChannelInbound = {
+      execute: async (_cmd: InboundMessageCommand): Promise<ChannelInboundResult> => {
+        callCount++;
+        if (callCount === 2) {
+          return {
+            traceId: "mock-trace",
+            channel: "whatsapp",
+            inboundDecision: {
+              status: "allowed" as const,
+              reason: "known_sender_conversational" as const,
+              metadata: {
+                normalizedSenderId: "test",
+                senderKnown: true,
+                receivedAt: new Date().toISOString(),
+                audited: false,
+                policyVersion: "test-v1",
+                matchedSignals: [] as readonly string[],
+                precedence: "conversation_default" as const,
+              },
+            },
+            profileId: "conversation" as const,
+            useCaseId: "serena.conversation.reply" as const,
+            guideResult: {
+              status: "failed" as const,
+              useCaseId: "serena.conversation.reply" as const,
+              error: { message: "AI error", code: "ERR" },
+              metadata: {
+                provider: "mock",
+                model: "mock",
+                attempts: 1,
+                auditRecorded: false,
+              },
+            },
+            warnings: [],
+            errors: [],
+          };
+        }
+        return {
+          traceId: "mock-trace",
+          channel: "whatsapp",
+          inboundDecision: {
+            status: "allowed" as const,
+            reason: "known_sender_conversational" as const,
+            metadata: {
+              normalizedSenderId: "test",
+              senderKnown: true,
+              receivedAt: new Date().toISOString(),
+              audited: false,
+              policyVersion: "test-v1",
+              matchedSignals: [] as readonly string[],
+              precedence: "conversation_default" as const,
+            },
+          },
+          profileId: undefined,
+          useCaseId: undefined,
+          guideResult: undefined,
+          warnings: [],
+          errors: [],
+        };
+      },
+    };
+
+    const runner = new SimulationScenarioRunner({
+      processChannelInboundMessage: mockChannelInbound as unknown as ProcessChannelInboundMessage,
+    });
+    const handler = createScenarioHandler(runner);
+    const testServer = createHttpServer("test", undefined, undefined, undefined, handler);
+
+    let testPort = 0;
+    await new Promise<void>((resolve) => {
+      testServer.listen(0, "127.0.0.1", () => {
+        const addr = testServer.address();
+        if (addr && typeof addr === "object") testPort = addr.port;
+        resolve();
+      });
+    });
+
+    try {
+      const { status, body } = await request("POST", "/dev/simulate/scenario", testPort, {
+        scenarioId: "continue-on-guide-fail",
+        tenantId: "demo",
+        channel: "whatsapp",
+        externalSenderId: MARIA_WHATSAPP,
+        stopOnError: false,
+        steps: [
+          { text: "first step" },
+          { text: "guide fails" },
+          { text: "still executed" },
+        ],
+      });
+
+      assert.equal(status, 200);
+      const result = body as ScenarioResult;
+
+      assert.equal(result.steps.length, 3);
+      assert.equal(result.summary.totalSteps, 3);
+      assert.equal(result.summary.successfulSteps, 2);
+      assert.equal(result.summary.failedSteps, 1);
+
+      assert.equal(callCount, 3);
+    } finally {
+      testServer.close();
+    }
+  });
+
+  // =========================================================================
   // AI guide failure — step marked as failed
   // =========================================================================
 
@@ -1043,6 +1424,71 @@ describe("POST /dev/simulate/scenario", () => {
   });
 
   // =========================================================================
+  // isScenarioStepFailure — unit tests for the shared predicate
+  // =========================================================================
+
+  describe("isScenarioStepFailure() — shared predicate", () => {
+    it("returns false for a clean successful step", () => {
+      const step = makeStepResult({ errors: [], guideStatus: "success" });
+      assert.equal(isScenarioStepFailure(step), false);
+    });
+
+    it("returns true when step.error is set", () => {
+      const step: ScenarioStepResult = {
+        index: 0,
+        input: defaultInput(),
+        result: null,
+        error: "pipeline threw",
+      };
+      assert.equal(isScenarioStepFailure(step), true);
+    });
+
+    it("returns true when result is null", () => {
+      const step: ScenarioStepResult = {
+        index: 0,
+        input: defaultInput(),
+        result: null,
+        error: null,
+      };
+      assert.equal(isScenarioStepFailure(step), true);
+    });
+
+    it("returns true when result.errors has elements", () => {
+      const step = makeStepResult({ errors: ["internal error"] });
+      assert.equal(isScenarioStepFailure(step), true);
+    });
+
+    it("returns true when guideResult.status is 'failed'", () => {
+      const step = makeStepResult({ errors: [], guideStatus: "failed" });
+      assert.equal(isScenarioStepFailure(step), true);
+    });
+
+    it("returns true when guideError is present", () => {
+      const step = makeStepResult({ errors: [], guideError: { message: "timeout", code: "TMO" } });
+      assert.equal(isScenarioStepFailure(step), true);
+    });
+
+    it("returns false for blocked sender (valid pipeline outcome)", () => {
+      const step = makeStepResult({
+        errors: [],
+        reason: "unknown_sender",
+        status: "blocked",
+        identityStatus: "unknown",
+      });
+      assert.equal(isScenarioStepFailure(step), false);
+    });
+
+    it("returns false for discard (valid pipeline outcome)", () => {
+      const step = makeStepResult({
+        errors: [],
+        reason: "invalid_sender",
+        status: "blocked",
+      });
+      assert.equal(isScenarioStepFailure(step), false);
+    });
+  });
+
+  // =========================================================================
   // Pipeline fidelity — runner uses ProcessChannelInboundMessage
   // =========================================================================
 
@@ -1094,6 +1540,78 @@ describe("POST /dev/simulate/scenario", () => {
     assert.ok(result.steps[0]!.result !== null);
     assert.equal(result.steps[1]!.error, null);
     assert.ok(result.steps[1]!.result !== null);
+  });
+
+  // =========================================================================
+  // Scenario-level metadata merge
+  // =========================================================================
+
+  it("scenario.metadata is merged with step.metadata (step takes priority)", async () => {
+    // Create a spy that captures the InboundMessageCommand per step
+    const { processInboundMessage, aiGuideService, identityResolver } = await createInMemoryPipeline();
+
+    const realChannelInbound = new ProcessChannelInboundMessage({
+      processInboundMessage,
+      aiGuideService,
+      identityResolver,
+    });
+
+    const capturedCommands: InboundMessageCommand[] = [];
+    const spy = {
+      execute: async (cmd: InboundMessageCommand): Promise<ChannelInboundResult> => {
+        capturedCommands.push({ ...cmd, ...(cmd.metadata ? { metadata: { ...cmd.metadata } } : {}) });
+        return realChannelInbound.execute(cmd);
+      },
+    };
+
+    const runner = new SimulationScenarioRunner({
+      processChannelInboundMessage: spy as unknown as ProcessChannelInboundMessage,
+    });
+    const handler = createScenarioHandler(runner);
+    const testServer = createHttpServer("test", undefined, undefined, undefined, handler);
+
+    let testPort = 0;
+    await new Promise<void>((resolve) => {
+      testServer.listen(0, "127.0.0.1", () => {
+        const addr = testServer.address();
+        if (addr && typeof addr === "object") testPort = addr.port;
+        resolve();
+      });
+    });
+
+    try {
+      const { status, body } = await request("POST", "/dev/simulate/scenario", testPort, {
+        scenarioId: "metadata-merge",
+        tenantId: "demo",
+        channel: "whatsapp",
+        externalSenderId: MARIA_WHATSAPP,
+        metadata: { source: "scenario", shared: "from-scenario", env: "test" },
+        steps: [
+          { text: "step without metadata" },
+          { text: "step with metadata", metadata: { source: "step", shared: "from-step" } },
+        ],
+      });
+
+      assert.equal(status, 200);
+      const result = body as ScenarioResult;
+      assert.equal(result.steps.length, 2);
+
+      // Step 0: only scenario metadata
+      const step0meta = capturedCommands[0]!.metadata;
+      assert.ok(step0meta !== undefined);
+      assert.equal(step0meta.source, "scenario");
+      assert.equal(step0meta.shared, "from-scenario");
+      assert.equal(step0meta.env, "test");
+
+      // Step 1: scenario + step merged, step wins on shared key
+      const step1meta = capturedCommands[1]!.metadata;
+      assert.ok(step1meta !== undefined);
+      assert.equal(step1meta.source, "step");        // step override
+      assert.equal(step1meta.shared, "from-step");   // step override
+      assert.equal(step1meta.env, "test");           // kept from scenario
+    } finally {
+      testServer.close();
+    }
   });
 });
 

@@ -45,12 +45,24 @@ export type ScenarioRequest = {
   tenantId: string;
   /** Default channel for all steps (step-level overrides allowed). */
   channel: InboundChannel;
-  /** Default external sender for all steps (step-level overrides allowed). */
-  externalSenderId: string;
+  /**
+   * Default external sender for all steps (step-level overrides allowed).
+   *
+   * Optional at scenario level — when absent, every step MUST provide its
+   * own `externalSenderId`.  Validation guarantees at least one source
+   * (scenario default or per-step override) is present before the runner
+   * receives the request.
+   */
+  externalSenderId?: string;
   /** Default conversation identifier (step-level overrides allowed). */
   conversationId?: string;
   /** Stop iteration on first step failure. Default false. */
   stopOnError?: boolean;
+  /**
+   * Default metadata merged into every step (step-level overrides allowed).
+   * Step-level keys take priority over scenario-level keys.
+   */
+  metadata?: Record<string, unknown>;
   /** Ordered list of steps. */
   steps: ScenarioStepInput[];
 };
@@ -106,23 +118,46 @@ export type ScenarioResult = {
 };
 
 // ---------------------------------------------------------------------------
+// isScenarioStepFailure — shared predicate (used by runner + calculateSummary)
+// ---------------------------------------------------------------------------
+
+/**
+ * Central definition of "step failure" used consistently by both
+ * {@link SimulationScenarioRunner} (for `stopOnError`) and
+ * {@link calculateSummary} (for the `failedSteps` count).
+ *
+ * A step is **failed** when:
+ *   - An exception was caught (`error !== null`)
+ *   - The pipeline returned `null` (impossible in normal flow, defensive)
+ *   - The result contains top-level errors (`errors.length > 0`)
+ *   - The AI guide returned `status: "failed"`
+ *   - A structured `guideError` is present
+ *
+ * All other outcomes (allowed, blocked, needs_mediation, discard) are
+ * considered successful pipeline executions.
+ */
+export function isScenarioStepFailure(step: ScenarioStepResult): boolean {
+  const result = step.result;
+  return (
+    step.error !== null ||
+    result === null ||
+    result.errors.length > 0 ||
+    result.guideResult?.status === "failed" ||
+    result.guideError !== undefined
+  );
+}
+
+// ---------------------------------------------------------------------------
 // calculateSummary — pure function (no side effects, testable in isolation)
 // ---------------------------------------------------------------------------
 
 /**
  * Computes ScenarioSummary from an array of step results.
  *
- * A step is **successful** when:
- *   - No throw was captured (error === null)
- *   - The result exists (not null)
- *   - The result has zero top-level errors
- *   - The AI guide result is not a failure (undefined or success)
- *   - There is no structured guideError
- *
- * A step is **failed** when any of the above conditions is violated.
- *
- * Event counts are extracted from {@link ChannelInboundResult.inboundDecision}
- * and {@link ChannelInboundResult.identity}.
+ * Delegates the success/failure classification to {@link isScenarioStepFailure}
+ * so the definition stays in one place.  Event counts are extracted from
+ * {@link ChannelInboundResult.inboundDecision} and
+ * {@link ChannelInboundResult.identity}.
  */
 export function calculateSummary(steps: ScenarioStepResult[]): ScenarioSummary {
   let successfulSteps = 0;
@@ -134,12 +169,7 @@ export function calculateSummary(steps: ScenarioStepResult[]): ScenarioSummary {
 
   for (const step of steps) {
     const res = step.result;
-    const stepFailed =
-      step.error !== null ||
-      res === null ||
-      res.errors.length > 0 ||
-      res.guideResult?.status === "failed" ||
-      res.guideError !== undefined;
+    const stepFailed = isScenarioStepFailure(step);
 
     if (stepFailed) {
       failedSteps++;
@@ -221,9 +251,10 @@ export class SimulationScenarioRunner {
       const stepInput = request.steps[i]!;
 
       // Build InboundMessageCommand with scenario defaults + step overrides
+      // externalSenderId: validation guarantees at least one source exists
       const command: InboundMessageCommand = {
         channel: stepInput.channel ?? request.channel,
-        externalSenderId: stepInput.externalSenderId ?? request.externalSenderId,
+        externalSenderId: (stepInput.externalSenderId ?? request.externalSenderId)!,
         text: stepInput.text,
         tenantId: request.tenantId,
       };
@@ -241,8 +272,14 @@ export class SimulationScenarioRunner {
         command.occurredAt = stepInput.occurredAt;
       }
 
-      if (stepInput.metadata !== undefined) {
-        command.metadata = stepInput.metadata;
+      // Merge scenario-level metadata with step-level (step wins on key conflict)
+      const scenariosMeta = request.metadata;
+      const stepsMeta = stepInput.metadata;
+      if (scenariosMeta !== undefined || stepsMeta !== undefined) {
+        command.metadata = {
+          ...(scenariosMeta ?? {}),
+          ...(stepsMeta ?? {}),
+        };
       }
 
       // Capture exact input as sent to the pipeline
@@ -273,8 +310,11 @@ export class SimulationScenarioRunner {
         error,
       });
 
-      // stopOnError: break out of loop on the first failure
-      if (stopOnError && error !== null) {
+      // stopOnError: use the shared failure predicate so controlled
+      // failures (guideResult.status === "failed", guideError, etc.)
+      // also stop execution — not just thrown exceptions.
+      const lastStep = steps[steps.length - 1]!;
+      if (stopOnError && isScenarioStepFailure(lastStep)) {
         break;
       }
     }

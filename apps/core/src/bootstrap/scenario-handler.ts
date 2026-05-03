@@ -68,7 +68,8 @@ function isValidChannel(value: unknown): value is InboundChannel {
  *   - scenarioId: required, non-empty string
  *   - tenantId: required, non-empty string
  *   - channel: required, must be one of the valid InboundChannel values
- *   - externalSenderId: required at scenario level, non-empty string
+ *   - externalSenderId: optional at scenario level — when absent, every step
+ *     MUST provide its own non-empty externalSenderId
  *   - steps: required, non-empty array
  *   - steps[].text: required per step, non-empty string
  *   - Steps with overrides: channel must be valid, externalSenderId non-empty
@@ -110,10 +111,15 @@ function validateScenarioRequest(body: unknown):
     });
   }
 
-  // externalSenderId — required at scenario level, non-empty string
+  // externalSenderId — optional at scenario level, non-empty if provided
   const externalSenderId = obj.externalSenderId;
-  if (typeof externalSenderId !== "string" || externalSenderId.trim().length === 0) {
-    errors.push({ field: "externalSenderId", message: "Required non-empty string" });
+  let hasGlobalSender = false;
+  if (externalSenderId !== undefined) {
+    if (typeof externalSenderId !== "string" || externalSenderId.trim().length === 0) {
+      errors.push({ field: "externalSenderId", message: "Must be a non-empty string" });
+    } else {
+      hasGlobalSender = true;
+    }
   }
 
   // conversationId — optional, non-empty string if present
@@ -207,6 +213,26 @@ function validateScenarioRequest(body: unknown):
     }
   }
 
+  // Cross-validation: if scenario has no global externalSenderId, every
+  // step MUST provide its own non-empty externalSenderId.
+  if (!hasGlobalSender && Array.isArray(steps)) {
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+      // Skip steps that already failed basic object validation
+      if (step === null || step === undefined || typeof step !== "object" || Array.isArray(step)) {
+        continue;
+      }
+      const s = step as Record<string, unknown>;
+      const stepSender = s.externalSenderId;
+      if (!(typeof stepSender === "string" && stepSender.trim().length > 0)) {
+        errors.push({
+          field: `steps[${i}].externalSenderId`,
+          message: "Required when scenario.externalSenderId is not provided",
+        });
+      }
+    }
+  }
+
   if (errors.length > 0) {
     return { valid: false, errors };
   }
@@ -216,15 +242,21 @@ function validateScenarioRequest(body: unknown):
     scenarioId: (scenarioId as string).trim(),
     tenantId: (tenantId as string).trim(),
     channel: channel as InboundChannel,
-    externalSenderId: (externalSenderId as string).trim(),
     steps: (steps as ScenarioStepInput[]),
   };
+
+  if (hasGlobalSender) {
+    request.externalSenderId = (externalSenderId as string).trim();
+  }
 
   if (typeof conversationId === "string" && conversationId.trim().length > 0) {
     request.conversationId = conversationId.trim();
   }
   if (typeof stopOnError === "boolean") {
     request.stopOnError = stopOnError;
+  }
+  if (typeof metadata === "object" && metadata !== null && !Array.isArray(metadata)) {
+    request.metadata = metadata as Record<string, unknown>;
   }
 
   return { valid: true, request };

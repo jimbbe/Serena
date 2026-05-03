@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), and the WhatsApp Gateway contract specified (T17A). 155 tests passing.
+Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), and internal hardening completed (T17B). 165 tests passing.
 
 ## Decided
 
@@ -171,6 +171,16 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - No se conecto Evolution API, WhatsApp, ni PostgreSQL.
 - `npm run check` y `npm test` pasan (155 tests, 0 fallas).
 
+## Implemented In T17B: Internal Hardening
+
+- Internal token authentication: `X-Serena-Internal-Token` header required on `POST /internal/pipeline/process`. Token from `SERENA_INTERNAL_TOKEN` env var. 401 missing, 403 invalid, 500 misconfigured. Checks BEFORE body parsing (fail fast). Health endpoint stays public (no token).
+- Idempotency: `messageId` required non-empty string in payload body. `ProcessedMessageStore` port (domain) + `InMemoryProcessedMessageStore` adapter (infrastructure) tracks processed messageIds. Duplicate request returns cached `PipelineResult` with `duplicate: true` flag — zero changes to `PipelineResult` type. First request executes normally.
+- CI: `.github/workflows/ci.yml` with triggers `pull_request: [main]` + `push: [main]`. Single job on `ubuntu-latest`, Node 22. Steps: checkout → setup-node → npm ci → npm run check → npm test.
+- All in-memory — no PostgreSQL, no external deps. Idempotency data lost on restart (documented limitation).
+- Tests: 24 HTTP pipeline tests (was 14) covering auth (5), idempotency (5), and all original scenarios updated with token injection. 165 total tests passing.
+- Documentation: `docs/t17b-internal-hardening.md`.
+- `npm run check` y `npm test` pasan (165 tests, 0 fallas).
+
 ## Expected Next Task
 
-Conectar infraestructura real: WhatsApp/Evolution API adapter (T18), PostgreSQL adapters (T19). La especificacion de contrato T17A sirve como base para el desarrollo del WhatsApp Gateway (repo separado) y el adapter de Serena Core.
+Conectar infraestructura real: WhatsApp/Evolution API adapter (T18), PostgreSQL adapters (T19). La especificacion de contrato T17A y el hardening T17B sirven como base para la integracion segura con el WhatsApp Gateway.

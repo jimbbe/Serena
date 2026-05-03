@@ -12,6 +12,7 @@ import type { InboundDecision } from "../../domain/inbound-decision.ts";
 import type { LlmProfileId } from "../../domain/llm-profile.ts";
 import type { GuideUseCaseId } from "../../../ai-guide/domain/guide-use-case-id.ts";
 import type { GuideResult } from "../../../ai-guide/domain/guide-result.ts";
+import type { ResolvedInboundActor } from "./resolved-inbound-actor.ts";
 
 /**
  * Simulated outbound draft included in the simulation result when
@@ -57,6 +58,8 @@ export type ChannelInboundResult = {
   guideError?: { message: string; code?: string };
   /** Simulated outbound draft when mediation is involved. */
   simulatedOutbound?: SimulatedOutbound;
+  /** Resolved identity from external identity resolution (optional for backward compatibility). */
+  identity?: ResolvedInboundActor;
   /** Non-fatal issues encountered during execution. */
   warnings: string[];
   /** Fatal errors encountered during execution. */

@@ -86,11 +86,12 @@ let server: http.Server;
 let port: number;
 
 before(async () => {
-  const { processInboundMessage, aiGuideService } = await createInMemoryPipeline();
+  const { processInboundMessage, aiGuideService, identityResolver } = await createInMemoryPipeline();
 
   const processChannelInboundMessage = new ProcessChannelInboundMessage({
     processInboundMessage,
     aiGuideService,
+    identityResolver,
   });
 
   const simulationHandler = createSimulationHandler(processChannelInboundMessage);
@@ -314,6 +315,13 @@ describe("POST /dev/simulate/inbound-message", () => {
     assert.equal(obj.profileId, undefined);
     assert.equal(obj.useCaseId, undefined);
     assert.equal(obj.guideResult, undefined);
+
+    // Identity resolution: unknown sender in resolver, but gate still blocks it
+    const identity = obj.identity as Record<string, unknown> | undefined;
+    assert.ok(identity !== undefined, "identity field must be present");
+    assert.equal(identity.status, "unknown");
+    assert.equal(identity.authorized, false);
+    assert.equal(identity.externalSenderId, UNKNOWN_WHATSAPP);
   });
 
   // =========================================================================
@@ -343,6 +351,15 @@ describe("POST /dev/simulate/inbound-message", () => {
     assert.ok(guideResult !== undefined);
     assert.equal(guideResult.status, "success");
     assert.equal(guideResult.useCaseId, "serena.conversation.reply");
+
+    // Identity resolution: Maria is seeded from contacts
+    const identity = obj.identity as Record<string, unknown> | undefined;
+    assert.ok(identity !== undefined, "identity field must be present");
+    assert.equal(identity.status, "resolved");
+    assert.equal(identity.personId, "c1");
+    assert.equal(identity.displayName, "María");
+    assert.equal(identity.role, "contact");
+    assert.equal(identity.authorized, true);
   });
 
   // =========================================================================
@@ -369,6 +386,11 @@ describe("POST /dev/simulate/inbound-message", () => {
     const guideResult = obj.guideResult as Record<string, unknown> | undefined;
     assert.ok(guideResult !== undefined);
     assert.equal(guideResult.status, "success");
+
+    // Identity present in all result paths
+    const identity = obj.identity as Record<string, unknown> | undefined;
+    assert.ok(identity !== undefined, "identity field must be present");
+    assert.equal(identity.status, "resolved");
   });
 
   // =========================================================================
@@ -394,6 +416,11 @@ describe("POST /dev/simulate/inbound-message", () => {
     const guideResult = obj.guideResult as Record<string, unknown> | undefined;
     assert.ok(guideResult !== undefined);
     assert.equal(guideResult.status, "success");
+
+    // Identity present in all result paths
+    const identity = obj.identity as Record<string, unknown> | undefined;
+    assert.ok(identity !== undefined, "identity field must be present");
+    assert.equal(identity.status, "resolved");
   });
 
   // =========================================================================
@@ -501,10 +528,11 @@ describe("POST /dev/simulate/inbound-message", () => {
       }),
     };
 
-    const { aiGuideService } = await createInMemoryPipeline();
+    const { aiGuideService, identityResolver } = await createInMemoryPipeline();
     const useCase = new ProcessChannelInboundMessage({
       processInboundMessage: mockProcessInbound as unknown as ProcessInboundMessage,
       aiGuideService,
+      identityResolver,
     });
 
     const handler = createSimulationHandler(useCase);
@@ -546,6 +574,87 @@ describe("POST /dev/simulate/inbound-message", () => {
     } finally {
       clarificationServer.close();
     }
+  });
+
+  // =========================================================================
+  // Identity resolution
+  // =========================================================================
+
+  it("Marta (elder) on whatsapp resolves with identity.resolved", async () => {
+    const { status, body } = await request("POST", "/dev/simulate/inbound-message", port, {
+      channel: "whatsapp",
+      externalSenderId: "+5492600000000",
+      text: "hola Serena",
+    });
+
+    assert.equal(status, 200);
+    const obj = body as Record<string, unknown>;
+
+    const identity = obj.identity as Record<string, unknown> | undefined;
+    assert.ok(identity !== undefined, "identity field must be present");
+    assert.equal(identity.status, "resolved");
+    assert.equal(identity.personId, "elder_001");
+    assert.equal(identity.displayName, "Marta");
+    assert.equal(identity.role, "elder");
+    assert.equal(identity.authorized, true);
+  });
+
+  it("Marta (elder) on voice resolves with identity.resolved", async () => {
+    const { status, body } = await request("POST", "/dev/simulate/inbound-message", port, {
+      channel: "voice",
+      externalSenderId: "device_marta_livingroom",
+      text: "hola",
+    });
+
+    assert.equal(status, 200);
+    const obj = body as Record<string, unknown>;
+
+    const identity = obj.identity as Record<string, unknown> | undefined;
+    assert.ok(identity !== undefined, "identity field must be present");
+    assert.equal(identity.status, "resolved");
+    assert.equal(identity.personId, "elder_001");
+    assert.equal(identity.displayName, "Marta");
+    assert.equal(identity.channel, "voice");
+  });
+
+  it("Marta (elder) on web_chat resolves with identity.resolved", async () => {
+    const { status, body } = await request("POST", "/dev/simulate/inbound-message", port, {
+      channel: "web_chat",
+      externalSenderId: "session_abc",
+      text: "hola",
+    });
+
+    assert.equal(status, 200);
+    const obj = body as Record<string, unknown>;
+
+    const identity = obj.identity as Record<string, unknown> | undefined;
+    assert.ok(identity !== undefined, "identity field must be present");
+    assert.equal(identity.status, "resolved");
+    assert.equal(identity.personId, "elder_001");
+    assert.equal(identity.displayName, "Marta");
+    assert.equal(identity.channel, "web_chat");
+  });
+
+  it("completely unknown sender returns identity.unknown and is blocked by gate", async () => {
+    const { status, body } = await request("POST", "/dev/simulate/inbound-message", port, {
+      channel: "whatsapp",
+      externalSenderId: "+5400000000000",
+      text: "hola",
+    });
+
+    assert.equal(status, 200);
+    const obj = body as Record<string, unknown>;
+
+    const identity = obj.identity as Record<string, unknown> | undefined;
+    assert.ok(identity !== undefined, "identity field must be present");
+    assert.equal(identity.status, "unknown");
+    assert.equal(identity.authorized, false);
+    assert.equal(identity.reason, "unknown_sender");
+
+    // Gate also blocks it (unknown_sender not in contact directory)
+    const decision = obj.inboundDecision as Record<string, unknown>;
+    assert.equal(decision.status, "blocked");
+    assert.equal(decision.reason, "unknown_sender");
   });
 
   // =========================================================================

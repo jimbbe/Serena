@@ -71,6 +71,7 @@ guarded by the environment variable.
 {
   "traceId":          "a3f8b2c1-...", // UUID for correlating the full execution
   "channel":          "whatsapp",     // echo of input channel
+  "identity":         { /* resolved identity */ }, // external → internal identity resolution
   "inboundDecision": {                // decision from the inbound gate
     "status":  "needs_mediation",
     "reason":  "third_party_mediation_request",
@@ -201,6 +202,116 @@ curl -X POST http://localhost:3000/dev/simulate/inbound-message \
   }'
 ```
 
+## Identity Resolution
+
+The simulation endpoint runs identity resolution BEFORE gate evaluation. The `identity` field in the response maps the external channel sender to an internal domain identity.
+
+### `externalSenderId` vs `personId`
+
+| Field | Source | Purpose |
+|-------|--------|---------|
+| `externalSenderId` | Channel adapter (e.g., WhatsApp JID, phone number, device ID) | Uniquely identifies the sender on the external channel |
+| `personId` | Identity resolver | Internal domain identifier — the same person can have multiple `externalSenderId` values across channels |
+
+The future `WhatsAppAdapter` will convert WhatsApp JIDs/numbers to `externalSenderId`. Multiple channels (whatsapp, voice, web_chat) can map to the same `personId`.
+
+### `identity` Response Field
+
+```typescript
+type IdentityStatus = "resolved" | "unknown" | "blocked";
+type IdentityRole = "elder" | "contact" | "system";
+
+type ResolvedInboundActor = {
+  status: IdentityStatus;    // resolution outcome
+  tenantId: string;           // multi-tenant identifier
+  channel: string;            // channel the message arrived on
+  externalSenderId: string;   // sender identifier from the channel
+  personId?: string;          // internal domain ID (set when resolved)
+  actorId?: string;           // actor identifier within the system
+  role?: IdentityRole;        // role in Serena ecosystem
+  displayName?: string;       // human-readable name
+  authorized: boolean;        // whether sender is authorized
+  reason?: string;            // reason for status
+};
+```
+
+### Demo Identities
+
+The in-memory resolver is seeded with demo identities covering Marta (the elder) across three channels:
+
+| Channel | externalSenderId | personId | role | displayName | Status |
+|---------|-----------------|----------|------|-------------|--------|
+| `whatsapp` | `+5492600000000` | `elder_001` | `elder` | Marta | resolved |
+| `voice` | `device_marta_livingroom` | `elder_001` | `elder` | Marta | resolved |
+| `web_chat` | `session_abc` | `elder_001` | `elder` | Marta | resolved |
+| `whatsapp` | `+5499999999999` | — | — | — | blocked |
+
+Additionally, contacts from the seed data (María, Carlos, Juan, José, José María) are registered as `role: "contact"` on the `whatsapp` channel.
+
+### Response Examples
+
+**Resolved identity (known sender):**
+
+```bash
+curl -X POST http://localhost:3000/dev/simulate/inbound-message \
+  -H "Content-Type: application/json" \
+  -d '{
+    "channel": "whatsapp",
+    "externalSenderId": "+5492600000000",
+    "text": "hola Serena"
+  }'
+```
+
+```jsonc
+{
+  "traceId": "a3f8b2c1-...",
+  "channel": "whatsapp",
+  "identity": {
+    "status": "resolved",
+    "tenantId": "demo",
+    "channel": "whatsapp",
+    "externalSenderId": "+5492600000000",
+    "personId": "elder_001",
+    "actorId": "elder_001",
+    "role": "elder",
+    "displayName": "Marta",
+    "authorized": true
+  },
+  "inboundDecision": { /* ... */ }
+}
+```
+
+**Unknown identity (not in registry or seed):**
+
+```bash
+curl -X POST http://localhost:3000/dev/simulate/inbound-message \
+  -H "Content-Type: application/json" \
+  -d '{
+    "channel": "whatsapp",
+    "externalSenderId": "+5400000000000",
+    "text": "hola"
+  }'
+```
+
+```jsonc
+{
+  "traceId": "a3f8b2c1-...",
+  "channel": "whatsapp",
+  "identity": {
+    "status": "unknown",
+    "tenantId": "demo",
+    "channel": "whatsapp",
+    "externalSenderId": "+5400000000000",
+    "authorized": false,
+    "reason": "unknown_sender"
+  },
+  "inboundDecision": {
+    "status": "blocked",
+    "reason": "unknown_sender"
+  }
+}
+```
+
 ## Limitations (Phase 1)
 
 - **Mock LLM only** — responses are deterministic (hash-based). No real AI.
@@ -208,3 +319,4 @@ curl -X POST http://localhost:3000/dev/simulate/inbound-message \
 - **No auth guard** — the endpoint is disabled by default and has no token check when enabled. Only enable it in development.
 - **Clarification not implemented** — the `clarification` LLM profile is mapped but `AiGuideService` throws a controlled error that appears as a structured `guideError` in the response (200, not 500).
 - **Empty simulatedOutbound** — mediation drafts are not generated yet. The field is reserved for Phase 2.
+- **Identity resolution runs first** — the `ExternalIdentityResolver` translates external channel IDs to internal `personId` BEFORE gate evaluation. Blocked identities short-circuit the entire pipeline. Unknown identities continue to the gate (which will likely block them as unknown senders).

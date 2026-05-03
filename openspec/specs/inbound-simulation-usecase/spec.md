@@ -14,6 +14,7 @@ The system SHALL define `ProcessChannelInboundMessage` in `inbound-gate/applicat
 {
   processInboundMessage: ProcessInboundMessage;
   aiGuideService: AiGuideService;
+  identityResolver: ExternalIdentityResolver;  // NEW — resolves external identity before gate evaluation
   generateTraceId?: () => string;  // defaults to crypto.randomUUID
 }
 ```
@@ -46,6 +47,7 @@ The system SHALL define `ChannelInboundResult` in `inbound-gate/domain/channel-i
 | `guideResult` | `GuideResult \| undefined` | AI guide output (undefined if discarded or error) |
 | `guideError` | `{ message: string; code?: string } \| undefined` | Structured error if AI guide failed |
 | `simulatedOutbound` | `SimulatedOutbound \| undefined` | Simulated outbound draft when mediation is involved |
+| `identity` | `ResolvedInboundActor \| undefined` | Resolved identity from external identity resolution |
 | `warnings` | `string[]` | Non-fatal issues encountered |
 | `errors` | `string[]` | Fatal errors encountered |
 
@@ -60,6 +62,43 @@ The system SHALL define `ChannelInboundResult` in `inbound-gate/domain/channel-i
 - GIVEN a command with `channel: "simulation"`
 - WHEN the result is returned
 - THEN `result.channel === "simulation"`
+
+### Requirement: Identity Resolution Phase
+
+Identity resolution SHALL run as the FIRST step after trace ID generation, BEFORE `ProcessInboundMessage.execute`. The use case SHALL call `identityResolver.resolve(cmd)` and handle the result as follows:
+
+- **`status === "blocked"`**: Return immediately. No `ProcessInboundMessage.execute`, no AI guide. The result SHALL have `inboundDecision: { status: "blocked", reason: "unknown_sender" }` and `identity` with status `"blocked"`.
+- **`status === "unknown"`**: Continue to the gate. The `externalSenderId` passes through as `senderId` for `ProcessInboundMessage`. The gate has its own contact directory check.
+- **`status === "resolved"`**: Continue with `identity.personId` as the `senderId` (NOT `externalSenderId`). The `personId` is also set on the `ProcessInboundMessageInput`.
+
+The resolver call SHALL be wrapped in try/catch — if the resolver throws, treat as `status: "unknown"` with a warning.
+
+#### Scenario: Identity resolves before gate evaluation
+
+- GIVEN any command
+- WHEN `execute` is called
+- THEN `identityResolver.resolve` is called BEFORE `processInboundMessage.execute`
+
+#### Scenario: Blocked identity short-circuits
+
+- GIVEN the resolver returns `status: "blocked"`
+- WHEN `execute` is called
+- THEN `ProcessInboundMessage.execute` is NOT called
+- AND `AiGuideService.execute` is NOT called
+
+#### Scenario: Unknown identity continues to gate
+
+- GIVEN the resolver returns `status: "unknown"`
+- WHEN `execute` is called
+- THEN `ProcessInboundMessage.execute` IS called (gate evaluates)
+
+#### Scenario: Resolved identity uses personId
+
+- GIVEN the resolver returns `status: "resolved"` with `personId: "elder_001"`
+- WHEN `execute` is called
+- THEN `ProcessInboundMessage.execute` receives `senderId: "elder_001"` (NOT the `externalSenderId`)
+
+---
 
 ### Requirement: Execution Flow — Blocked Sender
 
@@ -161,9 +200,14 @@ When the AI guide throws `NotImplementedError` for `serena.mediation.clarify`, t
 
 The use case SHALL adapt `InboundMessageCommand` to `ProcessInboundMessageInput`:
 
-- `externalSenderId` → `senderId`
 - `text` → `text`
 - `occurredAt` (if present, parse as ISO string) → `receivedAt` (as Date); if absent, use current time
+
+The `senderId` SHALL be determined by identity resolution:
+- If the identity is `"resolved"`, use `identity.personId` as `senderId` (NOT `externalSenderId`)
+- If the identity is `"unknown"`, use `cmd.externalSenderId` as `senderId` (pass-through to gate)
+
+If `identity.personId` is defined, it SHALL also be set as `input.personId`. This is additive — `senderId` remains required for backward compatibility.
 
 #### Scenario: occurredAt is parsed correctly
 

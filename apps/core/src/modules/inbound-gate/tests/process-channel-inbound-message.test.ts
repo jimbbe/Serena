@@ -1,8 +1,9 @@
 /**
- * T20 — Unit tests for ProcessChannelInboundMessage use case.
+ * T30 — Unit tests for ProcessChannelInboundMessage use case
+ * (with external identity resolution).
  *
- * Uses mocked ProcessInboundMessage and AiGuideService to test
- * all execution paths in isolation.
+ * Uses mocked ProcessInboundMessage, AiGuideService, and
+ * ExternalIdentityResolver to test all execution paths in isolation.
  */
 
 import test from "node:test";
@@ -15,6 +16,9 @@ import type { InboundDecision } from "../domain/inbound-decision.ts";
 import type { InboundProcessingRoute } from "../domain/inbound-processing-route.ts";
 import type { GuideUseCaseId } from "../../ai-guide/domain/guide-use-case-id.ts";
 import type { GuideResult } from "../../ai-guide/domain/guide-result.ts";
+import type { ExternalIdentityResolver } from "../application/ports/external-identity-resolver.ts";
+import type { ResolvedInboundActor } from "../application/results/resolved-inbound-actor.ts";
+import type { InboundMessageCommand as InboundCmd } from "../domain/inbound-message-command.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers — mock factories
@@ -158,8 +162,60 @@ function successGuideResult(useCaseId: GuideUseCaseId): GuideResult {
   };
 }
 
+/**
+ * Default resolved identity used by existing tests.
+ * Maps externalSenderId "maria" → personId "maria" so the gate
+ * treats it as a known sender (matching existing behavior).
+ */
+function resolvedIdentity(overrides?: Partial<ResolvedInboundActor>): ResolvedInboundActor {
+  return {
+    status: "resolved",
+    tenantId: "demo",
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    personId: "maria",
+    actorId: "maria",
+    role: "contact",
+    displayName: "Maria",
+    authorized: true,
+    ...overrides,
+  };
+}
+
+/**
+ * Creates a mock ExternalIdentityResolver that returns the provided
+ * actor for ANY command (for simplicity in tests).
+ */
+function mockResolver(actor?: ResolvedInboundActor): ExternalIdentityResolver {
+  const defaultActor = actor ?? resolvedIdentity();
+  return {
+    resolve: async (_cmd: InboundCmd) => structuredClone ?
+      (structuredClone(defaultActor) as ResolvedInboundActor) :
+      ({ ...defaultActor }),
+  };
+}
+
+/**
+ * Creates a mock resolver that returns a specific actor per command.
+ * Accepts a Map keyed by externalSenderId for per-sender responses.
+ */
+function mockResolverBySender(
+  defaultActor: ResolvedInboundActor,
+  overrides?: Map<string, ResolvedInboundActor>,
+): ExternalIdentityResolver {
+  return {
+    resolve: async (cmd: InboundCmd) => {
+      const override = overrides?.get(cmd.externalSenderId);
+      const actor = override ?? defaultActor;
+      return structuredClone ?
+        (structuredClone(actor) as ResolvedInboundActor) :
+        ({ ...actor });
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
-// Tests
+// Tests — existing scenarios (updated with resolver mock)
 // ---------------------------------------------------------------------------
 
 test("blocked sender (unknown_sender) returns without AI execution", async () => {
@@ -181,6 +237,7 @@ test("blocked sender (unknown_sender) returns without AI execution", async () =>
   const useCase = new ProcessChannelInboundMessage({
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
   });
 
   const command: InboundMessageCommand = {
@@ -198,6 +255,9 @@ test("blocked sender (unknown_sender) returns without AI execution", async () =>
   assert.equal(result.inboundDecision.status, "blocked");
   assert.equal(result.inboundDecision.reason, "unknown_sender");
   assert.deepEqual(result.errors, []);
+  // Identity is present
+  assert.ok(result.identity !== undefined);
+  assert.equal(result.identity!.status, "resolved");
 });
 
 test("invalid sender (blank) is blocked", async () => {
@@ -211,6 +271,7 @@ test("invalid sender (blank) is blocked", async () => {
   const useCase = new ProcessChannelInboundMessage({
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: { execute: async () => successGuideResult("serena.conversation.reply") } as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
   });
 
   const result = await useCase.execute({
@@ -222,6 +283,7 @@ test("invalid sender (blank) is blocked", async () => {
   assert.equal(result.inboundDecision.status, "blocked");
   assert.equal(result.inboundDecision.reason, "invalid_sender");
   assert.equal(result.profileId, undefined);
+  assert.ok(result.identity !== undefined);
 });
 
 test("invalid text (blank) is blocked", async () => {
@@ -235,6 +297,7 @@ test("invalid text (blank) is blocked", async () => {
   const useCase = new ProcessChannelInboundMessage({
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: { execute: async () => successGuideResult("serena.conversation.reply") } as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
   });
 
   const result = await useCase.execute({
@@ -245,6 +308,7 @@ test("invalid text (blank) is blocked", async () => {
 
   assert.equal(result.inboundDecision.status, "blocked");
   assert.equal(result.inboundDecision.reason, "invalid_text");
+  assert.ok(result.identity !== undefined);
 });
 
 test("conversation flow calls AI guide with correct use case", async () => {
@@ -267,6 +331,7 @@ test("conversation flow calls AI guide with correct use case", async () => {
   const useCase = new ProcessChannelInboundMessage({
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
   });
 
   const result = await useCase.execute({
@@ -280,6 +345,8 @@ test("conversation flow calls AI guide with correct use case", async () => {
   assert.equal(result.useCaseId, "serena.conversation.reply");
   assert.ok(result.guideResult !== undefined);
   assert.equal(result.guideResult!.status, "success");
+  assert.ok(result.identity !== undefined);
+  assert.equal(result.identity!.status, "resolved");
 });
 
 test("risk review flow calls AI guide with correct use case", async () => {
@@ -302,6 +369,7 @@ test("risk review flow calls AI guide with correct use case", async () => {
   const useCase = new ProcessChannelInboundMessage({
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
   });
 
   const result = await useCase.execute({
@@ -314,6 +382,7 @@ test("risk review flow calls AI guide with correct use case", async () => {
   assert.equal(result.profileId, "risk_review");
   assert.equal(result.useCaseId, "serena.risk.review");
   assert.ok(result.guideResult !== undefined);
+  assert.ok(result.identity !== undefined);
 });
 
 test("mediation understanding flow calls AI guide with correct use case", async () => {
@@ -336,6 +405,7 @@ test("mediation understanding flow calls AI guide with correct use case", async 
   const useCase = new ProcessChannelInboundMessage({
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
   });
 
   const result = await useCase.execute({
@@ -348,6 +418,7 @@ test("mediation understanding flow calls AI guide with correct use case", async 
   assert.equal(result.profileId, "mediation_understanding");
   assert.equal(result.useCaseId, "serena.mediation.understand_request");
   assert.ok(result.guideResult !== undefined);
+  assert.ok(result.identity !== undefined);
 });
 
 test("clarification not implemented returns structured error", async () => {
@@ -367,6 +438,7 @@ test("clarification not implemented returns structured error", async () => {
   const useCase = new ProcessChannelInboundMessage({
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
   });
 
   const result = await useCase.execute({
@@ -385,6 +457,7 @@ test("clarification not implemented returns structured error", async () => {
   assert.ok(
     result.warnings.includes("clarification profile maps to a not-yet-implemented use case"),
   );
+  assert.ok(result.identity !== undefined);
 });
 
 test("unexpected AI guide failure returns guideError with code", async () => {
@@ -404,6 +477,7 @@ test("unexpected AI guide failure returns guideError with code", async () => {
   const useCase = new ProcessChannelInboundMessage({
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
   });
 
   const result = await useCase.execute({
@@ -416,6 +490,7 @@ test("unexpected AI guide failure returns guideError with code", async () => {
   assert.ok(result.guideError !== undefined);
   assert.equal(result.guideError!.code, "pipeline_execution_failed");
   assert.ok(result.errors.some((e) => e.includes("Something went terribly wrong")));
+  assert.ok(result.identity !== undefined);
 });
 
 test("trace ID is a non-empty string", async () => {
@@ -434,6 +509,7 @@ test("trace ID is a non-empty string", async () => {
   const useCase = new ProcessChannelInboundMessage({
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
   });
 
   const result = await useCase.execute({
@@ -462,6 +538,7 @@ test("custom trace ID generator is used when provided", async () => {
   const useCase = new ProcessChannelInboundMessage({
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
     generateTraceId: () => "custom-trace-123",
   });
 
@@ -490,6 +567,7 @@ test("trace IDs are unique across executions", async () => {
   const useCase = new ProcessChannelInboundMessage({
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
   });
 
   const result1 = await useCase.execute({ channel: "simulation", externalSenderId: "maria", text: "a" });
@@ -518,6 +596,7 @@ test("occurredAt is parsed correctly from ISO string", async () => {
   const useCase = new ProcessChannelInboundMessage({
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
   });
 
   await useCase.execute({
@@ -553,6 +632,7 @@ test("missing occurredAt defaults to current time", async () => {
   const useCase = new ProcessChannelInboundMessage({
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
   });
 
   await useCase.execute({
@@ -583,6 +663,7 @@ test("result echoes the input channel", async () => {
   const useCase = new ProcessChannelInboundMessage({
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
   });
 
   const channels: InboundChannel[] = ["whatsapp", "voice", "web_chat", "telegram", "system", "simulation"];
@@ -608,6 +689,7 @@ test("warnings for missing optional fields", async () => {
   const useCase = new ProcessChannelInboundMessage({
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
   });
 
   const result = await useCase.execute({
@@ -642,6 +724,7 @@ test("invalid occurredAt defaults to current time", async () => {
   const useCase = new ProcessChannelInboundMessage({
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
   });
 
   await useCase.execute({
@@ -674,6 +757,7 @@ test("non-Error thrown by AiGuideService is caught", async () => {
   const useCase = new ProcessChannelInboundMessage({
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
   });
 
   const result = await useCase.execute({
@@ -685,4 +769,230 @@ test("non-Error thrown by AiGuideService is caught", async () => {
   assert.equal(result.guideResult, undefined);
   assert.ok(result.guideError !== undefined);
   assert.equal(result.guideError!.code, "pipeline_execution_failed");
+  assert.ok(result.identity !== undefined);
+});
+
+// ---------------------------------------------------------------------------
+// NEW TESTS — identity resolution
+// ---------------------------------------------------------------------------
+
+test("blocked identity short-circuits without calling ProcessInboundMessage", async () => {
+  let processCalled = false;
+  let aiCalled = false;
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => {
+      processCalled = true;
+      return {
+        decision: allowedDecision("conversation"),
+        route: profileRoute("conversation"),
+      };
+    },
+  };
+
+  const mockAiService = {
+    execute: async (_useCaseId: GuideUseCaseId, _input: Record<string, string>): Promise<GuideResult> => {
+      aiCalled = true;
+      return successGuideResult(_useCaseId);
+    },
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver({
+      status: "blocked",
+      tenantId: "demo",
+      channel: "whatsapp",
+      externalSenderId: "spammer",
+      authorized: false,
+      reason: "sender_blocked",
+    }),
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "spammer",
+    text: "hello",
+  });
+
+  assert.equal(processCalled, false, "ProcessInboundMessage should NOT be called for blocked identity");
+  assert.equal(aiCalled, false, "AiGuideService should NOT be called for blocked identity");
+  assert.equal(result.identity!.status, "blocked");
+  assert.equal(result.inboundDecision.status, "blocked");
+  assert.equal(result.inboundDecision.reason, "unknown_sender");
+  assert.equal(result.profileId, undefined);
+  assert.equal(result.useCaseId, undefined);
+  assert.equal(result.guideResult, undefined);
+});
+
+test("unknown identity continues to gate evaluation", async () => {
+  let processCalled = false;
+  let receivedSenderId: string | undefined;
+
+  const mockProcessInbound = {
+    execute: async (input: ProcessInboundMessageInput) => {
+      processCalled = true;
+      receivedSenderId = input.senderId;
+      return {
+        decision: blockedDecision(),
+        route: discardRoute("unknown_sender"),
+      };
+    },
+  };
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, _input: Record<string, string>): Promise<GuideResult> =>
+      successGuideResult(useCaseId),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver({
+      status: "unknown",
+      tenantId: "demo",
+      channel: "whatsapp",
+      externalSenderId: "stranger",
+      authorized: false,
+      reason: "unknown_sender",
+    }),
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "stranger",
+    text: "hello",
+  });
+
+  // Gate IS called — unknown identity doesn't short-circuit
+  assert.equal(processCalled, true, "Gate should still be called for unknown identity");
+  // externalSenderId passes through since no personId is set
+  assert.equal(receivedSenderId, "stranger");
+  assert.equal(result.identity!.status, "unknown");
+  assert.equal(result.inboundDecision.status, "blocked");
+  assert.equal(result.inboundDecision.reason, "unknown_sender");
+  assert.equal(result.profileId, undefined);
+  assert.equal(result.useCaseId, undefined);
+  assert.equal(result.guideResult, undefined);
+});
+
+test("resolved identity passes personId (not externalSenderId) to ProcessInboundMessage", async () => {
+  let receivedSenderId: string | undefined;
+
+  const mockProcessInbound = {
+    execute: async (input: ProcessInboundMessageInput) => {
+      receivedSenderId = input.senderId;
+      return {
+        decision: allowedDecision("conversation"),
+        route: profileRoute("conversation"),
+      };
+    },
+  };
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, _input: Record<string, string>): Promise<GuideResult> =>
+      successGuideResult(useCaseId),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver({
+      status: "resolved",
+      tenantId: "demo",
+      channel: "whatsapp",
+      externalSenderId: "+5492600000000",
+      personId: "elder_001",
+      actorId: "elder_001",
+      role: "elder",
+      displayName: "Marta",
+      authorized: true,
+    }),
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "+5492600000000",
+    text: "hola",
+  });
+
+  // ProcessInboundMessage receives personId as senderId, NOT externalSenderId
+  assert.equal(receivedSenderId, "elder_001");
+  assert.notEqual(receivedSenderId, "+5492600000000");
+  assert.equal(result.identity!.status, "resolved");
+  assert.equal(result.identity!.personId, "elder_001");
+  assert.equal(result.identity!.displayName, "Marta");
+});
+
+test("identity field is present in discard result path", async () => {
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: blockedDecision(),
+      route: discardRoute("unknown_sender"),
+    }),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: { execute: async () => successGuideResult("serena.conversation.reply") } as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "unknown",
+    text: "hello",
+  });
+
+  assert.ok(result.identity !== undefined, "identity must be present in discard result");
+  assert.equal(result.identity!.status, "resolved");
+});
+
+test("resolver error caught, treated as unknown, no crash", async () => {
+  let processCalled = false;
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => {
+      processCalled = true;
+      return {
+        decision: blockedDecision(),
+        route: discardRoute("unknown_sender"),
+      };
+    },
+  };
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, _input: Record<string, string>): Promise<GuideResult> =>
+      successGuideResult(useCaseId),
+  };
+
+  // Resolver that always throws
+  const throwingResolver: ExternalIdentityResolver = {
+    resolve: async (_cmd: InboundCmd) => {
+      throw new Error("Network unreachable");
+    },
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: throwingResolver,
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "hola",
+  });
+
+  // Must NOT crash — identity treated as unknown
+  assert.equal(result.identity!.status, "unknown");
+  assert.equal(result.identity!.authorized, false);
+  assert.ok(
+    result.warnings.some((w) => w.includes("Identity resolution failed")),
+    "should have warning about resolution failure",
+  );
+  // Gate still called for unknown identity
+  assert.equal(processCalled, true);
 });

@@ -109,7 +109,7 @@ On successful execution, the endpoint SHALL return:
 - GIVEN a valid command from a known sender with ordinary text
 - WHEN the request is processed
 - THEN the response is 200
-- AND the body contains `traceId`, `inboundDecision`, `profileId`, `useCaseId`, `guideResult`
+- AND the body contains `traceId`, `identity`, `inboundDecision`, `profileId`, `useCaseId`, `guideResult`
 
 #### Scenario: Blocked sender returns 200 with discard result
 

@@ -5,7 +5,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { profileToUseCaseId } from "../domain/profile-to-usecase.ts";
+import { profileToUseCaseId } from "../application/mappers/profile-to-usecase.ts";
 import type { LlmProfileId } from "../domain/llm-profile.ts";
 
 test("conversation profile maps to serena.conversation.reply", () => {

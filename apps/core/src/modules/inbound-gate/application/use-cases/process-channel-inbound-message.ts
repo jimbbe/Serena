@@ -17,7 +17,7 @@ import type { ChannelInboundResult } from "../../domain/channel-inbound-result.t
 import type { GuideUseCaseId } from "../../../ai-guide/domain/guide-use-case-id.ts";
 import type { GuideResult } from "../../../ai-guide/domain/guide-result.ts";
 
-import { profileToUseCaseId } from "../../domain/profile-to-usecase.ts";
+import { profileToUseCaseId } from "../mappers/profile-to-usecase.ts";
 import type { ProcessInboundMessage } from "./process-inbound-message.ts";
 import type { ProcessInboundMessageInput } from "./process-inbound-message.ts";
 import type { AiGuideService } from "../../../ai-guide/application/use-cases/ai-guide-service.ts";

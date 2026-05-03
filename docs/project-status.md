@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), and the orchestrator pipeline exposed via HTTP (T16). 140 tests passing.
+Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), and the WhatsApp Gateway contract specified (T17A). 155 tests passing.
 
 ## Decided
 
@@ -156,6 +156,21 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - Tests: 14 tests HTTP integrados cubriendo validacion JSON, ruteo, sesion continua (Maria inicia → Carlos responde → sesion encontrada en un solo test autocontenido), edge cases (404, 405, body invalido, array, campo alias, mensaje de riesgo).
 - Ninguna conexion a infraestructura externa. Documento de contrato: `docs/t16-internal-pipeline-http.md`.
 
+## Defined In T17A: WhatsApp Gateway Contract
+
+- Documento `docs/t17a-whatsapp-gateway-contract.md` define el contrato completo entre Serena Core y el futuro WhatsApp Gateway (servicio independiente, repo `whatsapp-gateway`).
+- Principio: el Gateway no contiene logica de negocio de Serena. Solo normaliza payloads, llama a `POST /internal/pipeline/process`, interpreta `PipelineResult` via `mapPipelineResultToGatewayAction`, y eventualmente envia mensajes.
+- Tipos agregados: `NormalizedWhatsAppInboundMessage` (contrato de entrada normalizado desde el Gateway), `WhatsAppGatewayAction` (accion resultante del pipeline: `ignore`, `no_auto_send`, `draft_ready`, `manual_review_required`, `error`).
+- Funcion pura `mapPipelineResultToGatewayAction` en `apps/core/src/modules/whatsapp-gateway/application/` mapea cada variante de `PipelineResult` a una accion concreta. Sin side effects, sin HTTP, sin WhatsApp.
+- Tests: 15 tests cubriendo todas las variantes de `PipelineResult` → `GatewayAction`, incluyendo edge cases (texto largo, texto vacio, signals vacios, single session ambiguous).
+- Politica de envio futuro documentada: `mediation_started` y `mediation_reply_recorded` producen `draft_ready` (no se envia en fase actual), `risk_review_required` y `ambiguous_active_session` → `manual_review_required`, el resto → `no_auto_send` o `ignore`.
+- Idempotencia minima documentada (por `messageId`, header `X-Serena-Message-Id`, no implementada).
+- Seguridad interna futura documentada (header `X-Serena-Internal-Token`, no implementada).
+- Errores HTTP esperados documentados (200, 400, 401/403 futuro, 409 futuro, 500, timeouts).
+- Preguntas abiertas registradas en `docs/open-questions.md`.
+- No se conecto Evolution API, WhatsApp, ni PostgreSQL.
+- `npm run check` y `npm test` pasan (155 tests, 0 fallas).
+
 ## Expected Next Task
 
-Conectar infraestructura real: WhatsApp/Evolution API adapter, PostgreSQL adapters.
+Conectar infraestructura real: WhatsApp/Evolution API adapter (T18), PostgreSQL adapters (T19). La especificacion de contrato T17A sirve como base para el desarrollo del WhatsApp Gateway (repo separado) y el adapter de Serena Core.

@@ -79,6 +79,7 @@ Tests SHALL exist at `inbound-gate/tests/process-channel-inbound-message.test.ts
 6. Trace ID generated
 7. Command-to-input adaptation (occurredAt parsing)
 8. Result structure completeness
+9. Identity resolution with resolver mock (unknown, blocked, resolved, error scenarios)
 
 #### Scenario: Blocked sender does not call AI guide
 
@@ -87,6 +88,41 @@ Tests SHALL exist at `inbound-gate/tests/process-channel-inbound-message.test.ts
 - WHEN `execute` is called
 - THEN `AiGuideService.execute` is NOT called
 - AND the result has `guideResult: undefined`
+
+### Requirement: Identity Resolution Tests
+
+#### Unit Tests — InMemoryExternalIdentityResolver
+
+Tests SHALL exist at `inbound-gate/tests/in-memory-external-identity-resolver.test.ts` covering:
+
+1. Known sender on whatsapp resolves to elder_001
+2. Known sender on voice resolves to elder_001
+3. Known sender on web_chat resolves to elder_001
+4. Unknown sender returns `status: "unknown"`, `authorized: false`
+5. Blocked sender returns `status: "blocked"`, `authorized: false`
+6. Key normalization (tenantId defaults to `"demo"`)
+7. Custom tenantId is respected
+8. Resolver never throws — errors caught internally
+
+#### Unit Tests — ProcessChannelInboundMessage with Resolver Mock
+
+The existing tests SHALL be updated to include `identityResolver` mock (default: returns `status: "resolved"`). Additional test scenarios:
+
+1. Unknown identity continues to gate (`ProcessInboundMessage.execute` IS called)
+2. Blocked identity short-circuits (`ProcessInboundMessage.execute` NOT called, `AiGuideService` NOT called)
+3. Resolved identity passes `personId` (not `externalSenderId`) to `ProcessInboundMessage`
+4. `identity` field present in all results (resolved, unknown, blocked, discard)
+5. Resolver error caught, treated as unknown, warning added, no crash
+
+#### Integration Tests — Simulation Endpoint Identity
+
+The simulation endpoint tests SHALL include identity assertions:
+
+1. Known whatsapp sender (`+5492600000000`) resolves with `identity.status === "resolved"`
+2. Known voice sender (`device_marta_livingroom`) resolves with `identity.status === "resolved"`
+3. Known web_chat sender (`session_abc`) resolves with `identity.status === "resolved"`
+4. Unknown sender returns `identity.status === "unknown"`
+5. Blocked sender returns `identity.status === "blocked"`
 
 #### Scenario: Conversation flow calls AI guide
 
@@ -138,12 +174,12 @@ Tests SHALL exist at `bootstrap/tests/simulation-endpoint.test.ts` covering:
 - WHEN POST `/dev/simulate/inbound-message` is called
 - THEN the response status is 404
 
-#### Scenario: Endpoint returns 200 with valid payload
+#### Scenario: Endpoint returns 200 with valid payload including identity
 
 - GIVEN a server started with `ENABLE_SIMULATION_ENDPOINTS=true`
 - WHEN POST `/dev/simulate/inbound-message` is called with a valid command from a known sender
 - THEN the response status is 200
-- AND the body contains `traceId`, `inboundDecision`, `profileId`, `useCaseId`, `guideResult`
+- AND the body contains `traceId`, `identity`, `inboundDecision`, `profileId`, `useCaseId`, `guideResult`
 
 #### Scenario: Invalid JSON returns 400
 

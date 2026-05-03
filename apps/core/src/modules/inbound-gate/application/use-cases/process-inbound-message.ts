@@ -11,6 +11,8 @@ export type ProcessInboundMessageInput = {
   senderId: string;
   text: string;
   receivedAt?: Date;
+  /** Resolved person identifier from external identity resolution. Optional for compatibility. */
+  personId?: string;
 };
 
 type InboundEvaluator = {

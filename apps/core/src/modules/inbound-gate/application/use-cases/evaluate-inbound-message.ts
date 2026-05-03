@@ -110,6 +110,7 @@ export class EvaluateInboundMessage {
       | "invalid_sender"
       | "invalid_text"
       | "unknown_sender"
+      | "identity_blocked"
       | "urgent_or_risk_over_mediation"
       | "mediation_over_conversation"
       | "conversation_default" = "conversation_default",

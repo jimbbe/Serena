@@ -17,6 +17,8 @@ import { ProcessInboundMessage } from "../modules/inbound-gate/application/use-c
 import { EvaluateInboundMessage } from "../modules/inbound-gate/application/use-cases/evaluate-inbound-message.ts";
 import { InMemoryContactDirectory as InboundGateContactDirectory } from "../modules/inbound-gate/infrastructure/memory/in-memory-contact-directory.ts";
 import { InMemoryDecisionAudit } from "../modules/inbound-gate/infrastructure/memory/in-memory-decision-audit.ts";
+import { InMemoryExternalIdentityResolver } from "../modules/inbound-gate/infrastructure/memory/in-memory-external-identity-resolver.ts";
+import type { ResolvedInboundActor } from "../modules/inbound-gate/application/results/resolved-inbound-actor.ts";
 
 import { ExtractMediationRequest } from "../modules/mediation-understanding/application/use-cases/extract-mediation-request.ts";
 import { RuleBasedMediationUnderstanding } from "../modules/mediation-understanding/infrastructure/rules/rule-based-mediation-understanding.ts";
@@ -54,6 +56,7 @@ export async function createInMemoryPipeline(): Promise<{
   processedMessageStore: ProcessedMessageStore;
   aiGuideService: AiGuideService;
   processInboundMessage: ProcessInboundMessage;
+  identityResolver: InMemoryExternalIdentityResolver;
 }> {
   const contacts = await loadContactsFromSeed();
 
@@ -62,15 +65,37 @@ export async function createInMemoryPipeline(): Promise<{
   const resolveContact = new ResolveContact({ contactDirectory });
 
   // Inbound gate
-  const inboundGateContactDir = new InboundGateContactDirectory(
-    contacts.map((c) => c.whatsappId),
-  );
+  const inboundGateAllowedIds = contacts.map((c) => c.whatsappId);
+  // Allow resolved identity person IDs (elder and contacts from seed)
+  inboundGateAllowedIds.push("elder_001");
+  for (const contact of contacts) {
+    inboundGateAllowedIds.push(contact.id);
+  }
+  const inboundGateContactDir = new InboundGateContactDirectory(inboundGateAllowedIds);
   const decisionAudit = new InMemoryDecisionAudit();
   const evaluator = new EvaluateInboundMessage({
     contactDirectory: inboundGateContactDir,
     decisionAudit,
   });
   const processInboundMessage = new ProcessInboundMessage({ evaluator });
+
+  // External identity resolver — prime with contacts from seed as "contact" role
+  const extraIdentities: Record<string, ResolvedInboundActor> = {};
+  for (const contact of contacts) {
+    const key = `demo:whatsapp:${contact.whatsappId}`;
+    extraIdentities[key] = {
+      status: "resolved",
+      tenantId: "demo",
+      channel: "whatsapp",
+      externalSenderId: contact.whatsappId,
+      personId: contact.id,
+      actorId: contact.id,
+      role: "contact",
+      displayName: contact.displayName,
+      authorized: true,
+    };
+  }
+  const identityResolver = new InMemoryExternalIdentityResolver(extraIdentities);
 
   // Mediation understanding
   const mediationUnderstanding = new RuleBasedMediationUnderstanding();
@@ -124,5 +149,5 @@ export async function createInMemoryPipeline(): Promise<{
   const executionPipeline = new ExecutionPipeline({ provider: llmProvider, audit: aiAudit });
   const aiGuideService = new AiGuideService({ registry: aiRegistry, pipeline: executionPipeline });
 
-  return { orchestrator, bridgeStore, processedMessageStore, aiGuideService, processInboundMessage };
+  return { orchestrator, bridgeStore, processedMessageStore, aiGuideService, processInboundMessage, identityResolver };
 }

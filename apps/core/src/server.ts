@@ -7,13 +7,13 @@ const env = loadAppEnv();
 
 // Create orchestrator with shared in-memory dependencies.
 // Sessions survive across HTTP requests within the same process.
-const { orchestrator } = await createInMemoryPipeline();
-const pipelineHandler = createPipelineHandler(orchestrator);
+const { orchestrator, processedMessageStore } = await createInMemoryPipeline();
+const pipelineHandler = createPipelineHandler(orchestrator, processedMessageStore);
 
-const server = createHttpServer(env.environment, pipelineHandler);
+const server = createHttpServer(env.environment, pipelineHandler, env.internalToken);
 
 server.listen(env.port, env.host, () => {
   console.log(`serena-core listening on http://${env.host}:${env.port}`);
   console.log(`  GET  /health`);
-  console.log(`  POST /internal/pipeline/process`);
+  console.log(`  POST /internal/pipeline/process${env.internalToken ? "" : " (token NOT configured)"}`);
 });

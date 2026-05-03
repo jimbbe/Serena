@@ -1,8 +1,9 @@
 /**
- * T16 — HTTP integration tests for POST /internal/pipeline/process.
+ * T16 / T17B — HTTP integration tests for POST /internal/pipeline/process.
  *
  * Tests the full server routing, request/response serialisation,
- * and session continuity across multiple HTTP requests.
+ * session continuity across multiple HTTP requests, auth token
+ * validation, and messageId idempotency.
  *
  * All in-memory — no external infrastructure.
  */
@@ -23,8 +24,10 @@ const MARIA_WHATSAPP = "5491111111111";
 const CARLOS_WHATSAPP = "5492222222222";
 const UNKNOWN_WHATSAPP = "5499999999999";
 
+const TEST_TOKEN = "test-token";
+
 // ---------------------------------------------------------------------------
-// HTTP request helper
+// HTTP request helper (updated: optional headers)
 // ---------------------------------------------------------------------------
 
 async function request(
@@ -32,15 +35,17 @@ async function request(
   path: string,
   port: number,
   body?: unknown,
+  extraHeaders?: Record<string, string>,
 ): Promise<{ status: number; body: unknown }> {
   return new Promise((resolve, reject) => {
     const data = body !== undefined ? JSON.stringify(body) : undefined;
 
     const headers: Record<string, string> = {
-      "content-type": "application/json",
+      ...extraHeaders,
     };
 
-    if (data) {
+    if (data !== undefined) {
+      headers["content-type"] = "application/json";
       headers["content-length"] = Buffer.byteLength(data).toString();
     }
 
@@ -77,6 +82,21 @@ async function request(
   });
 }
 
+// Convenience: send a pipeline request with the test token and a unique messageId
+let messageIdCounter = 0;
+function pipelineRequest(
+  port: number,
+  body: unknown,
+  token?: string,
+  headers?: Record<string, string>,
+): Promise<{ status: number; body: unknown }> {
+  const finalHeaders: Record<string, string> = { ...headers };
+  if (token !== undefined) {
+    finalHeaders["x-serena-internal-token"] = token;
+  }
+  return request("POST", "/internal/pipeline/process", port, body, finalHeaders);
+}
+
 // ---------------------------------------------------------------------------
 // Test fixture — shared server + orchestrator for session continuity
 // ---------------------------------------------------------------------------
@@ -85,9 +105,9 @@ let server: http.Server;
 let port: number;
 
 before(async () => {
-  const { orchestrator } = await createInMemoryPipeline();
-  const pipelineHandler = createPipelineHandler(orchestrator);
-  const httpServer = createHttpServer("test", pipelineHandler);
+  const { orchestrator, processedMessageStore } = await createInMemoryPipeline();
+  const pipelineHandler = createPipelineHandler(orchestrator, processedMessageStore);
+  const httpServer = createHttpServer("test", pipelineHandler, TEST_TOKEN);
 
   // Listen on port 0 to get a random available port
   await new Promise<void>((resolve) => {
@@ -108,11 +128,22 @@ after(() => {
 });
 
 // ---------------------------------------------------------------------------
+// Helper: generate unique messageIds
+// ---------------------------------------------------------------------------
+
+function uid(prefix = "msg"): string {
+  return `${prefix}-${++messageIdCounter}`;
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 describe("HTTP server — routing and pipeline", () => {
-  // 1. GET /health
+  // =========================================================================
+  // HEALTH
+  // =========================================================================
+
   it("GET /health returns 200 with expected body", async () => {
     const { status, body } = await request("GET", "/health", port);
 
@@ -123,9 +154,47 @@ describe("HTTP server — routing and pipeline", () => {
     assert.equal(obj.environment, "test");
   });
 
-  // 2. Invalid JSON → 400
-  it("POST /internal/pipeline/process with invalid JSON returns 400", async () => {
-    // We need to send non-JSON raw data
+  // =========================================================================
+  // AUTH — T17B
+  // =========================================================================
+
+  it("POST /internal/pipeline/process without token returns 401", async () => {
+    const { status, body } = await pipelineRequest(
+      port,
+      { messageId: uid(), senderWhatsAppId: MARIA_WHATSAPP, messageText: "hola" },
+      undefined, // no token
+    );
+
+    assert.equal(status, 401);
+    const obj = body as Record<string, unknown>;
+    assert.equal(obj.error, "missing_token");
+  });
+
+  it("POST /internal/pipeline/process with wrong token returns 403", async () => {
+    const { status, body } = await pipelineRequest(
+      port,
+      { messageId: uid(), senderWhatsAppId: MARIA_WHATSAPP, messageText: "hola" },
+      "wrong-token",
+    );
+
+    assert.equal(status, 403);
+    const obj = body as Record<string, unknown>;
+    assert.equal(obj.error, "invalid_token");
+  });
+
+  it("POST /internal/pipeline/process with valid token returns 200", async () => {
+    const { status, body } = await pipelineRequest(
+      port,
+      { messageId: uid(), senderWhatsAppId: MARIA_WHATSAPP, messageText: "hola Serena" },
+      TEST_TOKEN,
+    );
+
+    assert.equal(status, 200);
+    const obj = body as Record<string, unknown>;
+    assert.equal(obj.type, "conversation_pending");
+  });
+
+  it("token check happens before body parsing — no token + bad JSON → 401 not 400", async () => {
     const { status, body } = await new Promise<{ status: number; body: unknown }>(
       (resolve, reject) => {
         const req = http.request(
@@ -135,6 +204,179 @@ describe("HTTP server — routing and pipeline", () => {
             path: "/internal/pipeline/process",
             method: "POST",
             headers: { "content-type": "application/json" },
+            // No X-Serena-Internal-Token header
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on("data", (c: Buffer) => chunks.push(c));
+            res.on("end", () => {
+              const raw = Buffer.concat(chunks).toString("utf-8");
+              resolve({
+                status: res.statusCode ?? 0,
+                body: JSON.parse(raw),
+              });
+            });
+          },
+        );
+        req.on("error", reject);
+        req.write("esto no es json");
+        req.end();
+      },
+    );
+
+    assert.equal(status, 401);
+    const obj = body as Record<string, unknown>;
+    assert.equal(obj.error, "missing_token");
+  });
+
+  // Test misconfigured token (no token env) — create a separate server
+  it("POST /internal/pipeline/process returns 500 when SERENA_INTERNAL_TOKEN is not configured", async () => {
+    // Create a fresh server with no token
+    const noTokenServer = createHttpServer("test", undefined, undefined);
+    let noTokenPort = 0;
+
+    await new Promise<void>((resolve) => {
+      noTokenServer.listen(0, "127.0.0.1", () => {
+        const addr = noTokenServer.address();
+        if (addr && typeof addr === "object") {
+          noTokenPort = addr.port;
+        }
+        resolve();
+      });
+    });
+
+    try {
+      const { status, body } = await request(
+        "POST",
+        "/internal/pipeline/process",
+        noTokenPort,
+        { messageId: "msg-1", senderWhatsAppId: MARIA_WHATSAPP, messageText: "hola" },
+        { "x-serena-internal-token": "some-token" },
+      );
+
+      assert.equal(status, 500);
+      const obj = body as Record<string, unknown>;
+      assert.equal(obj.error, "internal_token_not_configured");
+    } finally {
+      noTokenServer.close();
+    }
+  });
+
+  // =========================================================================
+  // IDEMPOTENCY — T17B
+  // =========================================================================
+
+  it("payload without messageId returns 400", async () => {
+    const { status, body } = await pipelineRequest(
+      port,
+      { senderWhatsAppId: MARIA_WHATSAPP, messageText: "hola" },
+      TEST_TOKEN,
+    );
+
+    assert.equal(status, 400);
+    const obj = body as Record<string, unknown>;
+    assert.equal(obj.error, "invalid_payload");
+    const fields = obj.fields as Array<{ field: string }>;
+    assert.ok(fields.some((f) => f.field === "messageId"));
+  });
+
+  it("payload with empty messageId returns 400", async () => {
+    const { status, body } = await pipelineRequest(
+      port,
+      { messageId: "", senderWhatsAppId: MARIA_WHATSAPP, messageText: "hola" },
+      TEST_TOKEN,
+    );
+
+    assert.equal(status, 400);
+    const obj = body as Record<string, unknown>;
+    assert.equal(obj.error, "invalid_payload");
+    const fields = obj.fields as Array<{ field: string }>;
+    assert.ok(fields.some((f) => f.field === "messageId"));
+  });
+
+  it("payload with whitespace-only messageId returns 400", async () => {
+    const { status, body } = await pipelineRequest(
+      port,
+      { messageId: "   ", senderWhatsAppId: MARIA_WHATSAPP, messageText: "hola" },
+      TEST_TOKEN,
+    );
+
+    assert.equal(status, 400);
+    const obj = body as Record<string, unknown>;
+    assert.equal(obj.error, "invalid_payload");
+    const fields = obj.fields as Array<{ field: string }>;
+    assert.ok(fields.some((f) => f.field === "messageId"));
+  });
+
+  it("two requests with same messageId: first executes, second returns duplicate=true", async () => {
+    const duplicatedId = uid("dup");
+
+    const first = await pipelineRequest(
+      port,
+      { messageId: duplicatedId, senderWhatsAppId: MARIA_WHATSAPP, messageText: "hola Serena" },
+      TEST_TOKEN,
+    );
+
+    assert.equal(first.status, 200);
+    const firstObj = first.body as Record<string, unknown>;
+    assert.equal(firstObj.type, "conversation_pending");
+    assert.equal(firstObj.duplicate, undefined);
+
+    const second = await pipelineRequest(
+      port,
+      { messageId: duplicatedId, senderWhatsAppId: CARLOS_WHATSAPP, messageText: "algo distinto" },
+      TEST_TOKEN,
+    );
+
+    assert.equal(second.status, 200);
+    const secondObj = second.body as Record<string, unknown>;
+    assert.equal(secondObj.duplicate, true);
+    // Should return the cached result from first request, not re-execute
+    assert.equal(secondObj.type, "conversation_pending");
+    assert.equal(secondObj.senderId, MARIA_WHATSAPP);
+  });
+
+  it("different messageIds execute pipeline independently", async () => {
+    const first = await pipelineRequest(
+      port,
+      { messageId: uid(), senderWhatsAppId: MARIA_WHATSAPP, messageText: "hola Serena" },
+      TEST_TOKEN,
+    );
+
+    assert.equal(first.status, 200);
+    const firstObj = first.body as Record<string, unknown>;
+    assert.equal(firstObj.type, "conversation_pending");
+    assert.equal(firstObj.duplicate, undefined);
+
+    const second = await pipelineRequest(
+      port,
+      { messageId: uid(), senderWhatsAppId: UNKNOWN_WHATSAPP, messageText: "hola" },
+      TEST_TOKEN,
+    );
+
+    assert.equal(second.status, 200);
+    const secondObj = second.body as Record<string, unknown>;
+    assert.equal(secondObj.type, "discard");
+    assert.equal(secondObj.duplicate, undefined);
+  });
+
+  // =========================================================================
+  // VALIDATION — existing T16 tests adapted for T17B
+  // =========================================================================
+
+  it("POST /internal/pipeline/process with invalid JSON returns 400", async () => {
+    const { status, body } = await new Promise<{ status: number; body: unknown }>(
+      (resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: "127.0.0.1",
+            port,
+            path: "/internal/pipeline/process",
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "x-serena-internal-token": TEST_TOKEN,
+            },
           },
           (res) => {
             const chunks: Buffer[] = [];
@@ -159,13 +401,11 @@ describe("HTTP server — routing and pipeline", () => {
     assert.equal(obj.error, "invalid_json");
   });
 
-  // 3. Missing required field → 400
   it("POST /internal/pipeline/process with missing senderWhatsAppId returns 400", async () => {
-    const { status, body } = await request(
-      "POST",
-      "/internal/pipeline/process",
+    const { status, body } = await pipelineRequest(
       port,
-      { messageText: "hola" },
+      { messageId: uid(), messageText: "hola" },
+      TEST_TOKEN,
     );
 
     assert.equal(status, 400);
@@ -175,13 +415,11 @@ describe("HTTP server — routing and pipeline", () => {
     assert.ok(fields.some((f) => f.field === "senderWhatsAppId"));
   });
 
-  // 4. Missing messageText → 400
   it("POST /internal/pipeline/process with missing messageText returns 400", async () => {
-    const { status, body } = await request(
-      "POST",
-      "/internal/pipeline/process",
+    const { status, body } = await pipelineRequest(
       port,
-      { senderWhatsAppId: MARIA_WHATSAPP },
+      { messageId: uid(), senderWhatsAppId: MARIA_WHATSAPP },
+      TEST_TOKEN,
     );
 
     assert.equal(status, 400);
@@ -191,17 +429,11 @@ describe("HTTP server — routing and pipeline", () => {
     assert.ok(fields.some((f) => f.field === "messageText"));
   });
 
-  // 5. Unknown sender → 200 with discard
   it("POST /internal/pipeline/process with unknown sender returns 200 discard", async () => {
-    const { status, body } = await request(
-      "POST",
-      "/internal/pipeline/process",
+    const { status, body } = await pipelineRequest(
       port,
-      {
-        senderWhatsAppId: UNKNOWN_WHATSAPP,
-        messageText: "hola, cómo estás?",
-        receivedAt: new Date().toISOString(),
-      },
+      { messageId: uid(), senderWhatsAppId: UNKNOWN_WHATSAPP, messageText: "hola, cómo estás?", receivedAt: new Date().toISOString() },
+      TEST_TOKEN,
     );
 
     assert.equal(status, 200);
@@ -210,17 +442,11 @@ describe("HTTP server — routing and pipeline", () => {
     assert.equal(obj.reason, "unknown_sender");
   });
 
-  // 6. Conversational message → conversation_pending
   it("POST /internal/pipeline/process with conversational message returns conversation_pending", async () => {
-    const { status, body } = await request(
-      "POST",
-      "/internal/pipeline/process",
+    const { status, body } = await pipelineRequest(
       port,
-      {
-        senderWhatsAppId: MARIA_WHATSAPP,
-        messageText: "hola Serena",
-        receivedAt: new Date().toISOString(),
-      },
+      { messageId: uid(), senderWhatsAppId: MARIA_WHATSAPP, messageText: "hola Serena", receivedAt: new Date().toISOString() },
+      TEST_TOKEN,
     );
 
     assert.equal(status, 200);
@@ -229,18 +455,17 @@ describe("HTTP server — routing and pipeline", () => {
     assert.equal(obj.senderId, MARIA_WHATSAPP);
   });
 
-  // 7. Full mediation round-trip: María starts → Carlos replies
   it("full mediation round-trip: María starts, Carlos replies → session continuity", async () => {
     // Step 1: María sends a mediation request
-    const startResp = await request(
-      "POST",
-      "/internal/pipeline/process",
+    const startResp = await pipelineRequest(
       port,
       {
+        messageId: uid("start"),
         senderWhatsAppId: MARIA_WHATSAPP,
         messageText: "avisale a Carlos que llego 15 minutos tarde",
         receivedAt: new Date().toISOString(),
       },
+      TEST_TOKEN,
     );
 
     assert.equal(startResp.status, 200);
@@ -256,15 +481,15 @@ describe("HTTP server — routing and pipeline", () => {
     const sessionId = start.sessionId as string;
 
     // Step 2: Carlos replies — should find the active session created above
-    const replyResp = await request(
-      "POST",
-      "/internal/pipeline/process",
+    const replyResp = await pipelineRequest(
       port,
       {
+        messageId: uid("reply"),
         senderWhatsAppId: CARLOS_WHATSAPP,
         messageText: "dale, no hay problema",
         receivedAt: new Date().toISOString(),
       },
+      TEST_TOKEN,
     );
 
     assert.equal(replyResp.status, 200);
@@ -278,7 +503,10 @@ describe("HTTP server — routing and pipeline", () => {
     assert.ok(typeof reply.rewordedText === "string");
   });
 
-  // 8. Non-existent route → 404
+  // =========================================================================
+  // ROUTING — no token needed for non-pipeline routes
+  // =========================================================================
+
   it("GET /nonexistent returns 404", async () => {
     const { status, body } = await request("GET", "/nonexistent", port);
 
@@ -287,37 +515,31 @@ describe("HTTP server — routing and pipeline", () => {
     assert.equal(obj.error, "not_found");
   });
 
-  // 9. Wrong method on pipeline endpoint → 405
   it("GET /internal/pipeline/process returns 405", async () => {
-    const { status, body } = await request(
-      "GET",
-      "/internal/pipeline/process",
-      port,
-    );
+    const { status, body } = await request("GET", "/internal/pipeline/process", port);
 
     assert.equal(status, 405);
     const obj = body as Record<string, unknown>;
     assert.equal(obj.error, "method_not_allowed");
   });
 
-  // 10. POST to unknown route → 404
   it("POST /unknown-route returns 404", async () => {
-    const { status, body } = await request("POST", "/unknown-route", port, {
-      foo: "bar",
-    });
+    const { status, body } = await request("POST", "/unknown-route", port, { foo: "bar" });
 
     assert.equal(status, 404);
     const obj = body as Record<string, unknown>;
     assert.equal(obj.error, "not_found");
   });
 
-  // 11. Empty body object → 400 (missing required fields)
+  // =========================================================================
+  // VALIDATION — remaining T16 tests adapted for T17B
+  // =========================================================================
+
   it("POST /internal/pipeline/process with empty JSON object returns 400", async () => {
-    const { status, body } = await request(
-      "POST",
-      "/internal/pipeline/process",
+    const { status, body } = await pipelineRequest(
       port,
       {},
+      TEST_TOKEN,
     );
 
     assert.equal(status, 400);
@@ -325,18 +547,16 @@ describe("HTTP server — routing and pipeline", () => {
     assert.equal(obj.error, "invalid_payload");
   });
 
-  // 12. "text" alias field works
   it("POST /internal/pipeline/process accepts 'text' as alias for 'messageText'", async () => {
-    // Use Juan — no active session, so conversational message stays conversation_pending
-    const { status, body } = await request(
-      "POST",
-      "/internal/pipeline/process",
+    const { status, body } = await pipelineRequest(
       port,
       {
+        messageId: uid(),
         senderWhatsAppId: "5493333333333", // Juan
         text: "hola Serena",
         receivedAt: new Date().toISOString(),
       },
+      TEST_TOKEN,
     );
 
     assert.equal(status, 200);
@@ -345,13 +565,11 @@ describe("HTTP server — routing and pipeline", () => {
     assert.equal(obj.senderId, "5493333333333");
   });
 
-  // 13. Body that is not an object → 400
   it("POST /internal/pipeline/process with array body returns 400", async () => {
-    const { status, body } = await request(
-      "POST",
-      "/internal/pipeline/process",
+    const { status, body } = await pipelineRequest(
       port,
       [1, 2, 3],
+      TEST_TOKEN,
     );
 
     assert.equal(status, 400);
@@ -359,17 +577,16 @@ describe("HTTP server — routing and pipeline", () => {
     assert.equal(obj.error, "invalid_payload");
   });
 
-  // 14. Risk/urgent message → risk_review_required
   it("POST /internal/pipeline/process with risk message returns risk_review_required", async () => {
-    const { status, body } = await request(
-      "POST",
-      "/internal/pipeline/process",
+    const { status, body } = await pipelineRequest(
       port,
       {
+        messageId: uid(),
         senderWhatsAppId: MARIA_WHATSAPP,
         messageText: "necesito ayuda urgente",
         receivedAt: new Date().toISOString(),
       },
+      TEST_TOKEN,
     );
 
     assert.equal(status, 200);

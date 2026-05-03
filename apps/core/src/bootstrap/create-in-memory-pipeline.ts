@@ -34,6 +34,9 @@ import { InMemoryMediationBridgeSessionStore } from "../modules/mediation-bridge
 import { IndirectRewording } from "../modules/prudent-rewording/infrastructure/templates/indirect-rewording.ts";
 import { RewordMessage } from "../modules/prudent-rewording/application/use-cases/reword-message.ts";
 
+import { InMemoryProcessedMessageStore } from "../modules/internal-pipeline/infrastructure/memory/in-memory-processed-message-store.ts";
+import type { ProcessedMessageStore } from "../modules/internal-pipeline/domain/processed-message-store.ts";
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -41,6 +44,7 @@ import { RewordMessage } from "../modules/prudent-rewording/application/use-case
 export async function createInMemoryPipeline(): Promise<{
   orchestrator: ProcessIncomingWhatsAppMessage;
   bridgeStore: InMemoryMediationBridgeSessionStore;
+  processedMessageStore: ProcessedMessageStore;
 }> {
   const contacts = await loadContactsFromSeed();
 
@@ -98,5 +102,8 @@ export async function createInMemoryPipeline(): Promise<{
 
   const orchestrator = new ProcessIncomingWhatsAppMessage(deps);
 
-  return { orchestrator, bridgeStore };
+  // Idempotency store — shared across requests within the same process
+  const processedMessageStore = new InMemoryProcessedMessageStore();
+
+  return { orchestrator, bridgeStore, processedMessageStore };
 }

@@ -24,16 +24,24 @@ These questions are intentionally left open until a task needs the decision.
 - **Evolution API hosting** — Where will the Evolution API instance run? On the same VPS? Separate service? The `whatsapp-gateway` adapter will need this URL.
 - **Persistence strategy** — Current modules use in-memory stores. When do we switch to PostgreSQL? Should we implement repositories alongside in-memory adapters, or defer the real DB until after the pipeline works end-to-end?
 
-## Architecture (T17A Open Questions)
+## Architecture (T17A / T17B Open Questions)
 
-Estas preguntas surgieron durante el diseno del contrato WhatsApp Gateway (ver `docs/t17a-whatsapp-gateway-contract.md`):
+Estas preguntas surgieron durante el diseno del contrato WhatsApp Gateway (T17A) y hardening interno (T17B):
 
 - **¿Donde vivira el Gateway?** — Decidido en T10: repo separado (`whatsapp-gateway`). Pregunta abierta: ¿el codigo de mapeo (`mapPipelineResultToGatewayAction`) se duplicara en el Gateway o se compartira via un package?
 - **¿El Gateway sera multi-proyecto / multi-numero?** — La arquitectura T10 preve que si. Pregunta abierta: ¿como se configura el ruteo de webhooks por instancia?
 - **¿Como se manejaran reintentos?** — Recomendacion inicial: exponential backoff con jitter, maximo 3 intentos, circuit breaker despues de 5 fallos consecutivos. Pregunta abierta: ¿el Gateway debe reintentar o Serena Core debe exponer un endpoint de reintento?
-- **¿Como se manejaran mensajes duplicados?** — La idempotencia por `messageId` esta documentada pero no implementada. Pregunta abierta: ¿donde se almacena el cache de `messageId` procesados? ¿En PostgreSQL o en Redis?
 - **¿Habra cola de mensajes / event bus en el futuro?** — Para produccion con volumen, se podria introducir una cola entre el Gateway y Serena Core. Pregunta abierta: ¿esto es necesario para MVP o es premature optimization?
 - **¿El Gateway debe notificar a la persona mayor cuando un mensaje produce `no_auto_send`?** — Por ahora no. En el futuro, `recipient_not_found` y `mediation_not_understood` podrian generar una respuesta automatica pidiendo aclaracion. Pregunta abierta: ¿esto es responsabilidad del Gateway o de Serena Core?
+
+## Idempotencia — Preguntas Pendientes (T17B+)
+
+Idempotencia in-memory implementada en T17B. Preguntas abiertas para T18/T19:
+
+- **¿Donde se almacena el cache durable de `messageId` procesados?** — Opciones: PostgreSQL (tabla `processed_messages`) o Redis (SET con TTL).
+- **¿Key de deduplicacion multi-proveedor/multi-instancia?** — La key actual es solo `messageId`. Para soportar multiples proveedores o instancias Evolution API, conviene una key compuesta: `provider + instanceId + messageId`.
+- **¿Politica de retencion/TTL?** — ¿Cuanto tiempo se retienen los mensajes procesados? ¿24h, 7d, indefinido? Depende del volumen esperado y del caso de uso.
+- **¿Comportamiento ante replay legitimo o reintentos tardios?** — Si un mensaje se reintenta dias despues, ¿debe considerarse duplicado o nuevo? La key compuesta + TTL ayuda a definir esta politica.
 
 ## Resolved In T10
 

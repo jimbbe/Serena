@@ -1,12 +1,13 @@
 /**
- * T16 — Internal pipeline HTTP handler.
+ * T16 / T17B — Internal pipeline HTTP handler.
  *
  * Handles POST /internal/pipeline/process:
  *   1. Reads JSON body
- *   2. Validates minimum fields
- *   3. Converts to PipelineInput
- *   4. Calls ProcessIncomingWhatsAppMessage
- *   5. Returns PipelineResult as JSON
+ *   2. Validates minimum fields (including messageId for idempotency)
+ *   3. Checks idempotency cache (ProcessedMessageStore)
+ *   4. Converts to PipelineInput
+ *   5. Calls ProcessIncomingWhatsAppMessage
+ *   6. Returns PipelineResult as JSON
  *
  * No external infrastructure. All in-memory.
  */
@@ -14,6 +15,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { ProcessIncomingWhatsAppMessage } from "../modules/orchestrator/application/use-cases/process-incoming-whatsapp-message.ts";
 import type { PipelineInput, PipelineResult } from "../modules/orchestrator/domain/pipeline-result.ts";
+import type { ProcessedMessageStore } from "../modules/internal-pipeline/domain/processed-message-store.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,6 +56,12 @@ function validatePipelineInput(body: unknown): { valid: true; input: PipelineInp
   }
 
   const obj = body as Record<string, unknown>;
+
+  // messageId — required, non-empty string (idempotency key)
+  const messageId = obj.messageId;
+  if (typeof messageId !== "string" || messageId.trim().length === 0) {
+    errors.push({ field: "messageId", message: "Required non-empty string" });
+  }
 
   // senderWhatsAppId — required, non-empty string
   const senderWhatsAppId = obj.senderWhatsAppId;
@@ -101,6 +109,7 @@ function validatePipelineInput(body: unknown): { valid: true; input: PipelineInp
 
 export function createPipelineHandler(
   orchestrator: ProcessIncomingWhatsAppMessage,
+  processedMessageStore?: ProcessedMessageStore,
 ): (req: IncomingMessage, res: ServerResponse) => Promise<void> {
   return async (req, res) => {
     // Read body
@@ -132,6 +141,17 @@ export function createPipelineHandler(
       return;
     }
 
+    // Extract messageId for idempotency check
+    const body = parsed as Record<string, unknown>;
+    const messageId = (body.messageId as string).trim();
+
+    // Idempotency check — return cached result if already processed
+    if (processedMessageStore?.has(messageId)) {
+      const cachedResult = processedMessageStore.get(messageId)!;
+      sendJson(res, 200, { ...cachedResult, duplicate: true });
+      return;
+    }
+
     // Execute pipeline
     let result: PipelineResult;
     try {
@@ -141,6 +161,9 @@ export function createPipelineHandler(
       sendJson(res, 500, { error: "pipeline_execution_failed", detail: message });
       return;
     }
+
+    // Cache result for future idempotency
+    processedMessageStore?.save(messageId, result);
 
     // Return result
     sendJson(res, 200, result);

@@ -6,7 +6,7 @@ La Fase 1 apunta a mediacion prudente por WhatsApp: Serena recibe un pedido, ide
 
 ## Estado Actual
 
-El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), y contrato WhatsApp Gateway especificado (T17A). 155 tests pasando.
+El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), y hardening interno completado (T17B). 165 tests pasando.
 
 ### Lo que existe hoy
 
@@ -37,6 +37,13 @@ El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura M
 
 - **orchestrator** (T15): caso de uso `ProcessIncomingWhatsAppMessage` que conecta inbound-gate → mediation-understanding → contact-directory → session-manager → mediation-bridge → prudent-rewording. Devuelve `PipelineResult` con variantes explicitas. 11 tests end-to-end in-memory.
 - **internal-pipeline-http** (T16): endpoint `POST /internal/pipeline/process` que valida JSON, ejecuta el pipeline orchestrator y devuelve `PipelineResult`. Factory in-memory con dependencias compartidas para continuidad de sesiones entre requests. 14 tests HTTP integrados. Ver `docs/t16-internal-pipeline-http.md`.
+
+**Hardening interno (T17B):**
+
+- **Autenticacion por token**: `X-Serena-Internal-Token` header requerido en `/internal/*`. Token via `SERENA_INTERNAL_TOKEN` env var. 401/403/500 segun error. Health publico.
+- **Idempotencia**: `messageId` en payload; `ProcessedMessageStore` in-memory evita re-ejecucion de mensajes duplicados. `duplicate: true` en respuesta HTTP.
+- **CI**: GitHub Actions workflow en `.github/workflows/ci.yml` (PR/push a main, Node 22, check + test).
+- Ver `docs/t17b-internal-hardening.md`.
 
 ### Lo que no existe todavia
 
@@ -194,13 +201,14 @@ Runbook operativo: `docs/deployment-t04.md`.
 
 ## Proximos Pasos
 
-Fase completada: **logica de negocio con adaptadores in-memory** (T06-T16). Pipeline end-to-end funciona con 155 tests y endpoint HTTP interno expuesto.
+Fase completada: **logica de negocio con adaptadores in-memory** (T06-T16). Pipeline end-to-end funciona con 165 tests y endpoint HTTP interno expuesto con hardening (T17B).
 
 **Contrato WhatsApp Gateway especificado (T17A):** ver `docs/t17a-whatsapp-gateway-contract.md` para el contrato completo entre Serena Core y el futuro WhatsApp Gateway.
 
-Proxima fase (T17B+): **infraestructura real**:
+**Hardening interno completado (T17B):** ver `docs/t17b-internal-hardening.md` para autenticacion por token, idempotencia, y CI.
 
-- **T17B**: WhatsApp Gateway repo — crear servicio agnostico multi-proyecto, multi-numero en repo separado
+Proxima fase (T18+): **infraestructura real**:
+
 - **T18**: Serena WhatsApp adapter — conectar serena-core a WhatsApp Gateway
 - **T19**: PostgreSQL adapters — reemplazar stores in-memory
 - **T20**: VPS deployment update — WhatsApp Gateway + Serena detras de Caddy

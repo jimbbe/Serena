@@ -36,6 +36,7 @@ function sendJson(response: ServerResponse, statusCode: number, body: object): v
 export function createHttpServer(
   environment: string,
   pipelineHandler?: PipelineRequestHandler,
+  internalToken?: string,
 ) {
   return createServer(async (req, res) => {
     const url = new URL(
@@ -43,7 +44,7 @@ export function createHttpServer(
       `http://${req.headers.host ?? "localhost"}`,
     );
 
-    // GET /health — liveness probe
+    // GET /health — liveness probe (public, no token required)
     if (req.method === "GET" && url.pathname === "/health") {
       const body: HealthResponse = {
         status: "ok",
@@ -64,6 +65,33 @@ export function createHttpServer(
         return;
       }
 
+      // Token check BEFORE body parsing (fail fast)
+      if (internalToken === undefined || internalToken === "") {
+        sendJson(res, 500, {
+          error: "internal_token_not_configured",
+          detail: "SERENA_INTERNAL_TOKEN is not set on the server",
+        });
+        return;
+      }
+
+      const providedToken = req.headers["x-serena-internal-token"] as string | undefined;
+
+      if (!providedToken) {
+        sendJson(res, 401, {
+          error: "missing_token",
+          detail: "X-Serena-Internal-Token header is required",
+        });
+        return;
+      }
+
+      if (providedToken !== internalToken) {
+        sendJson(res, 403, {
+          error: "invalid_token",
+          detail: "X-Serena-Internal-Token header does not match",
+        });
+        return;
+      }
+
       if (pipelineHandler) {
         try {
           await pipelineHandler(req, res);
@@ -80,7 +108,7 @@ export function createHttpServer(
       return;
     }
 
-    // Unknown route
+    // Unknown route — no token check
     sendJson(res, 404, {
       error: "not_found",
       detail: `No route matches ${req.method} ${url.pathname}`,

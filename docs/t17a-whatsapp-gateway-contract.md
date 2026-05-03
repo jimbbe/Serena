@@ -54,8 +54,8 @@ T17A es una tarea de **diseño y documentación**. No implementa nada que toque 
 - ❌ Deploy
 - ❌ Panel web
 - ❌ LLM
-- ❌ Autenticación HTTP completa (solo se documenta)
-- ❌ Persistencia de idempotencia (solo se documenta)
+- ❌ Autenticación HTTP completa (implementada en T17B — ver `docs/t17b-internal-hardening.md`)
+- ❌ Persistencia de idempotencia (implementación in-memory en T17B; persistencia durable pendiente para T18/T19)
 - ❌ Cliente HTTP hacia WhatsApp Gateway
 - ❌ Webhooks entrantes
 
@@ -96,7 +96,7 @@ El Gateway mapea `NormalizedWhatsAppInboundMessage` → `PipelineInput` así:
 | `receivedAt` | `receivedAt` | Directo |
 | `provider` | — | No se envía al core |
 | `instanceId` | — | No se envía al core |
-| `messageId` | — | No se envía al core; el core no persiste idempotencia hoy |
+| `messageId` | `messageId` | Obligatorio en el body (T17B). El core lo usa como key de idempotencia |
 | `raw` | — | Solo para logs del Gateway |
 
 **Ejemplo de request HTTP:**
@@ -105,15 +105,17 @@ El Gateway mapea `NormalizedWhatsAppInboundMessage` → `PipelineInput` así:
 POST /internal/pipeline/process HTTP/1.1
 Host: serena-core:3000
 Content-Type: application/json
+X-Serena-Internal-Token: <token>
 
 {
+  "messageId": "wamid.abc123",
   "senderWhatsAppId": "5492610000000",
   "messageText": "avisale a Carlos que llego 15 minutos tarde",
   "receivedAt": "2026-05-02T22:30:00.000Z"
 }
 ```
 
-El Gateway descarta los campos `provider`, `instanceId`, `messageId` y `raw` al construir el body para Serena Core. El contrato HTTP está definido en `docs/t16-internal-pipeline-http.md`.
+El Gateway descarta los campos `provider`, `instanceId` y `raw` al construir el body para Serena Core. `messageId` se incluye en el body como key de idempotencia (T17B). El contrato HTTP completo está en `docs/t16-internal-pipeline-http.md` y `docs/t17b-internal-hardening.md`.
 
 ---
 
@@ -138,9 +140,11 @@ Serena Core devuelve `PipelineResult`, un discriminated union con 8 variantes (d
 
 El endpoint `POST /internal/pipeline/process` responde:
 
-- **200 OK**: body = `PipelineResult` serializado (ver `docs/t16-internal-pipeline-http.md` para el JSON exacto de cada variante).
-- **400 Bad Request**: payload inválido (campos faltantes, JSON malformado).
-- **500 Internal Server Error**: error inesperado en el pipeline.
+- **200 OK**: body = `PipelineResult` serializado. Si el `messageId` ya fue procesado, incluye metadata `duplicate: true`.
+- **400 Bad Request**: payload inválido (campos faltantes — incluyendo `messageId`, JSON malformado).
+- **401 Unauthorized**: falta el header `X-Serena-Internal-Token`.
+- **403 Forbidden**: el token del header no coincide con `SERENA_INTERNAL_TOKEN`.
+- **500 Internal Server Error**: `SERENA_INTERNAL_TOKEN` no configurado o error inesperado en el pipeline.
 
 ### 5.3 Interpretación del Gateway
 
@@ -188,48 +192,58 @@ Cuando se implemente el envío real (T18), el Gateway usará estos campos para c
 
 ---
 
-## 7. Idempotencia Mínima
+## 7. Idempotencia (implementada en T17B)
 
 ### 7.1 Principio
 
-Cada mensaje de WhatsApp tiene un `messageId` estable asignado por el proveedor. Si el Gateway reenvía el mismo mensaje dos veces (por retry, redelivery, o bug), Serena Core debería poder detectarlo y no reprocesarlo.
+Cada mensaje de WhatsApp tiene un `messageId` estable asignado por el proveedor. Si el Gateway reenvía el mismo mensaje dos veces (por retry, redelivery, o bug), Serena Core lo detecta y no reprocesa el pipeline.
 
-### 7.2 Diseño propuesto (no implementado)
+### 7.2 Implementación actual
 
-| Componente | Responsabilidad |
+| Componente | Detalle |
 |---|---|
-| Gateway | Enviar `messageId` en un header `X-Serena-Message-Id` al llamar a Serena Core |
-| Serena Core | En una tarea futura (T17C o T19), mantener un cache/deduplicador de `messageId` procesados |
-| Contrato | Si el `messageId` ya fue procesado, devolver `409 Conflict` con el `PipelineResult` original (idempotent) |
+| Gateway | Incluye `messageId` **en el body JSON** del request |
+| Serena Core | `ProcessedMessageStore` (puerto + adapter in-memory) compara `messageId` antes de ejecutar el pipeline |
+| Duplicado | Devuelve `200 OK` con el `PipelineResult` cacheado y metadata `duplicate: true` |
+| Store | `InMemoryProcessedMessageStore` (Map<string, PipelineResult>). **Se pierde al reiniciar el proceso.** |
 
-### 7.3 Estado actual en T17A
+### 7.3 Limitación actual y trabajo pendiente
 
-- **No se implementa persistencia de idempotencia.** Solo se documenta la necesidad.
-- El Gateway **debe** generar y mantener un `messageId` estable por mensaje.
-- El header `X-Serena-Message-Id` se define como parte del contrato futuro.
+- **Sin persistencia durable**: la idempotencia actual es in-memory y no sobrevive a reinicios del proceso.
+- **Key simple**: actualmente la key es solo `messageId`. Para multi-proveedor/multi-instancia conviene una key compuesta (`provider + instanceId + messageId`).
+- **Sin TTL**: los mensajes procesados nunca expiran en memoria.
+
+Estas limitaciones se resolverán en T18/T19 con almacenamiento durable (PostgreSQL o Redis).
+
+Ver `docs/t17b-internal-hardening.md` para el contrato detallado.
 
 ---
 
-## 8. Seguridad Mínima para Llamada Interna
+## 8. Seguridad para Llamada Interna (implementada en T17B)
 
 ### 8.1 Principio
 
-`POST /internal/pipeline/process` es un endpoint interno. En producción con Docker Compose, solo es accesible desde la red `serena-internal`. Pero se recomienda una capa adicional de seguridad para el futuro.
+`POST /internal/pipeline/process` es un endpoint interno. Requiere un token compartido para autenticar llamadas entre servicios.
 
-### 8.2 Estrategia propuesta (no implementada)
+### 8.2 Implementación
 
 | Componente | Detalle |
 |---|---|
 | Header | `X-Serena-Internal-Token: <token>` |
 | Token | Desde variable de entorno `SERENA_INTERNAL_TOKEN` |
-| Validación | Serena Core compara el header con el token; si no coincide → `401 Unauthorized` |
+| Sin header | `401 Unauthorized` — `{"error":"missing_token"}` |
+| Token inválido | `403 Forbidden` — `{"error":"invalid_token"}` |
+| Token no configurado | `500 Internal Server Error` — `{"error":"internal_token_not_configured"}` |
+| Token válido | Request procesado normalmente |
 | Rotación | Cambiar la env var y reiniciar ambos servicios |
+| Health | `GET /health` siempre público, sin token |
 
-### 8.3 Estado actual en T17A
+### 8.3 Detalle de implementación
 
-- **No se implementa autenticación.** Solo se documenta la necesidad.
-- El endpoint sigue siendo abierto dentro de la red interna.
-- En producción (T04), Caddy no expone `/internal/*` públicamente.
+- El token se chequea **antes del body parsing** (fail fast). Requests no autorizados nunca consumen el stream del body.
+- En producción (T04), Caddy no expone `/internal/*` públicamente como capa adicional.
+
+Ver `docs/t17b-internal-hardening.md` para el contrato detallado.
 
 ---
 
@@ -239,12 +253,11 @@ El Gateway debe manejar estas respuestas de Serena Core:
 
 | HTTP Status | Significado | Acción del Gateway |
 |---|---|---|
-| `200 OK` | Pipeline ejecutado | Interpretar `PipelineResult` → `GatewayAction` |
-| `400 Bad Request` | Payload inválido | Log + descartar (no reintentar sin corregir) |
-| `401 Unauthorized` | Futuro: token interno inválido | Log + alerta (error de configuración) |
-| `403 Forbidden` | Futuro: acceso denegado por política | Log + alerta |
-| `409 Conflict` | Futuro: messageId duplicado (idempotencia) | Usar respuesta cacheada |
-| `500 Internal Server Error` | Error inesperado en pipeline | Log + reintentar con backoff (máx 3) |
+| `200 OK` | Pipeline ejecutado (puede incluir `duplicate: true`) | Interpretar `PipelineResult` → `GatewayAction` |
+| `400 Bad Request` | Payload inválido (incluye `messageId` faltante) | Log + descartar (no reintentar sin corregir) |
+| `401 Unauthorized` | Falta header `X-Serena-Internal-Token` | Log + alerta (error de configuración) |
+| `403 Forbidden` | Token del header no coincide con `SERENA_INTERNAL_TOKEN` | Log + alerta |
+| `500 Internal Server Error` | Token no configurado o error en pipeline | Log + reintentar con backoff (máx 3) |
 | `502/503/504` | Serena Core no disponible | Reintentar con backoff + circuit breaker |
 | Timeout / conexión rechazada | Serena Core caído | Circuit breaker + alerta |
 
@@ -348,9 +361,12 @@ Estas preguntas quedan abiertas para T17B o tareas posteriores:
    - Recomendación inicial: exponential backoff con jitter, máximo 3 intentos, circuit breaker después de 5 fallos consecutivos.
    - Pregunta abierta: ¿el Gateway debe reintentar o Serena Core debe exponer un endpoint de reintento?
 
-4. **¿Cómo se manejarán mensajes duplicados?**
-   - La idempotencia por `messageId` está documentada en §7 pero no implementada.
-   - Pregunta abierta: ¿dónde se almacena el cache de `messageId` procesados? ¿En PostgreSQL o en Redis?
+4. **¿Cómo se manejarán mensajes duplicados en producción durable?**
+   - Idempotencia in-memory implementada en T17B (`ProcessedMessageStore` + `InMemoryProcessedMessageStore`).
+   - Pendiente para T18/T19: store durable (PostgreSQL o Redis).
+   - Pendiente: key compuesta para multi-proveedor/multi-instancia (`provider + instanceId + messageId`).
+   - Pendiente: política de retención/TTL de mensajes procesados.
+   - Pendiente: comportamiento ante replay legítimo o reintentos tardíos.
 
 5. **¿Habrá cola de mensajes / event bus en el futuro?**
    - Para producción con volumen, se podría introducir una cola (RabbitMQ, Redis Streams) entre el Gateway y Serena Core.
@@ -375,8 +391,9 @@ Estas preguntas quedan abiertas para T17B o tareas posteriores:
 | `apps/core/src/modules/whatsapp-gateway/application/map-pipeline-result-to-gateway-action.ts` | Función de mapeo pura (T17A) |
 | `apps/core/src/modules/whatsapp-gateway/tests/map-pipeline-result-to-gateway-action.test.ts` | Tests de mapeo (T17A) |
 | `docs/t16-internal-pipeline-http.md` | Contrato HTTP del endpoint de pipeline |
+| `docs/t17b-internal-hardening.md` | Contrato de hardening interno (T17B): auth + idempotencia |
 | `docs/t10-mvp-architecture.md` | Arquitectura MVP (incluye sección WhatsApp Gateway) |
 
 ---
 
-*Documento creado en T17A. Actualizado por última vez: 2026-05-02.*
+*Documento creado en T17A. Última actualización: T17B — alineación de idempotencia y seguridad con implementación real.*

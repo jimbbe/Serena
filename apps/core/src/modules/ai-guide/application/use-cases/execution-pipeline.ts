@@ -1,7 +1,29 @@
 import type { UseCaseContract } from "../../domain/use-case-contract.ts";
-import type { GuideResult } from "../../domain/guide-result.ts";
+import type { GuideResult, GuideResultSuccess, GuideResultFailed } from "../../domain/guide-result.ts";
 import type { LlmProvider } from "../ports/llm-provider.ts";
 import type { AiInvocationAudit } from "../ports/ai-invocation-audit.ts";
+
+type AuditOutcome = {
+  auditRecorded: boolean;
+  auditId: string | undefined;
+};
+
+function makeMetadata(
+  model: string,
+  attempts: number,
+  outcome: AuditOutcome
+): GuideResultSuccess["metadata"] | GuideResultFailed["metadata"] {
+  const base = {
+    provider: "mock" as const,
+    model,
+    attempts,
+    auditRecorded: outcome.auditRecorded,
+  };
+  if (outcome.auditId !== undefined) {
+    return { ...base, auditId: outcome.auditId };
+  }
+  return base;
+}
 
 export class ExecutionPipeline {
   private readonly provider: LlmProvider;
@@ -19,8 +41,6 @@ export class ExecutionPipeline {
     const userPrompt = this.renderTemplate(contract.inputTemplate, input);
     const startTime = Date.now();
 
-    // Retry only applies to provider errors (exceptions from invoke()).
-    // Empty content is a validation error — it throws immediately without retry.
     const maxAttempts = contract.executionPolicy.retryOnFailure
       ? 1 + contract.executionPolicy.maxRetries
       : 1;
@@ -39,8 +59,60 @@ export class ExecutionPipeline {
 
         // Validate result is not empty (validation error — not retried)
         if (!content || content.trim().length === 0) {
-          const emptyError = new Error("Empty result from provider");
-          // Record failed audit for empty result
+          throw new Error("Empty result from provider");
+        }
+
+        const executionTimeMs = Date.now() - startTime;
+        const outcome = await this.recordAudit(
+          contract,
+          userPrompt,
+          content,
+          providerResult.tokensUsed,
+          executionTimeMs,
+          true
+        );
+
+        return {
+          status: "success",
+          useCaseId: contract.id,
+          output: content,
+          metadata: makeMetadata(
+            providerResult.modelUsed ?? "mock-model-v1",
+            attempt + 1,
+            outcome
+          ),
+        };
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        lastError = error;
+
+        const executionTimeMs = Date.now() - startTime;
+
+        // Empty result is a hard failure — don't retry
+        const isHardFailure = error.message === "Empty result from provider";
+        if (isHardFailure) {
+          const outcome = await this.recordAudit(
+            contract,
+            userPrompt,
+            "",
+            0,
+            executionTimeMs,
+            false,
+            error.message
+          );
+
+          return {
+            status: "failed",
+            useCaseId: contract.id,
+            error: { message: error.message },
+            metadata: makeMetadata("mock-model-v1", attempt + 1, outcome),
+          };
+        }
+
+        // Provider error — retry if attempts remain
+        if (attempt < maxAttempts - 1) {
+          // Audit the failure attempt (fire-and-forget is fine here)
+          // but we still want it recorded for the next attempt context
           if (this.audit) {
             try {
               await this.audit.record(
@@ -51,125 +123,93 @@ export class ExecutionPipeline {
                 },
                 {
                   output: "",
-                  executionTimeMs: Date.now() - startTime,
+                  tokensUsed: 0,
+                  executionTimeMs,
                   success: false,
-                  error: emptyError.message,
+                  error: error.message,
                 }
               );
             } catch {
-              // Audit failed
+              // Audit failure during retry loop — continue anyway
             }
           }
-          throw emptyError;
-        }
-
-        const executionTimeMs = Date.now() - startTime;
-
-        // Record audit (fire-and-forget — don't propagate audit errors)
-        let audited = false;
-        if (this.audit) {
-          try {
-            await this.audit.record(
-              {
-                useCaseId: contract.id,
-                systemPrompt: contract.systemPrompt,
-                userPrompt,
-              },
-              {
-                output: content,
-                executionTimeMs,
-                success: true,
-                ...(providerResult.tokensUsed !== undefined
-                  ? { tokensUsed: providerResult.tokensUsed }
-                  : {}),
-              }
-            );
-            audited = true;
-          } catch {
-            // Audit failed — don't throw, just mark as not audited
-          }
-        }
-
-        return {
-          useCaseId: contract.id,
-          output: content,
-          metadata: {
-            executionTimeMs,
-            retryCount: attempt,
-            ...(providerResult.tokensUsed !== undefined
-              ? { tokensUsed: providerResult.tokensUsed }
-              : {}),
-            ...(providerResult.modelUsed !== undefined
-              ? { modelUsed: providerResult.modelUsed }
-              : {}),
-          },
-          audited,
-        };
-      } catch (err) {
-        const error = err instanceof Error ? err : new Error(String(err));
-        lastError = error;
-
-        // Provider errors → record audit and retry if applicable
-        // "Empty result" errors also get here after audit is already recorded above;
-        // in that case we don't double-record.
-        const isProviderError =
-          error.message !== "Empty result from provider";
-
-        if (isProviderError && this.audit) {
-          try {
-            await this.audit.record(
-              {
-                useCaseId: contract.id,
-                systemPrompt: contract.systemPrompt,
-                userPrompt,
-              },
-              {
-                output: "",
-                executionTimeMs: Date.now() - startTime,
-                success: false,
-                error: error.message,
-              }
-            );
-          } catch {
-            // Audit failed
-          }
-        }
-
-        // If this is NOT a provider error (empty result), throw immediately
-        if (!isProviderError) {
-          throw error;
-        }
-
-        // If more retry attempts remain, continue
-        if (attempt < maxAttempts - 1) {
           continue;
         }
 
-        // All attempts exhausted — return failed result
-        const executionTimeMs = Date.now() - startTime;
+        // All attempts exhausted — record final audit
+        const outcome = await this.recordAudit(
+          contract,
+          userPrompt,
+          "",
+          0,
+          executionTimeMs,
+          false,
+          error.message
+        );
+
         return {
+          status: "failed",
           useCaseId: contract.id,
-          output: error.message,
-          metadata: {
-            executionTimeMs,
-            retryCount: maxAttempts - 1,
+          error: {
+            message: error.message,
+            ...(error.name !== "Error" ? { code: error.name } : {}),
+            cause: error.cause,
           },
-          audited: false,
+          metadata: makeMetadata("mock-model-v1", maxAttempts, outcome),
         };
       }
     }
 
-    // Unreachable but TypeScript needs it
-    const executionTimeMs = Date.now() - startTime;
+    // Unreachable — TypeScript safety net
     return {
+      status: "failed",
       useCaseId: contract.id,
-      output: lastError?.message ?? "Unknown error",
-      metadata: {
-        executionTimeMs,
-        retryCount: maxAttempts - 1,
+      error: {
+        message: lastError?.message ?? "Unknown error",
       },
-      audited: false,
+      metadata: makeMetadata("mock-model-v1", maxAttempts, {
+        auditRecorded: false,
+        auditId: undefined,
+      }),
     };
+  }
+
+  private async recordAudit(
+    contract: UseCaseContract,
+    userPrompt: string,
+    output: string,
+    tokensUsed: number | undefined,
+    executionTimeMs: number,
+    success: boolean,
+    errorMessage?: string
+  ): Promise<AuditOutcome> {
+    if (!this.audit) {
+      return { auditRecorded: false, auditId: undefined };
+    }
+
+    try {
+      const auditResult = await this.audit.record(
+        {
+          useCaseId: contract.id,
+          systemPrompt: contract.systemPrompt,
+          userPrompt,
+        },
+        {
+          output,
+          executionTimeMs,
+          success,
+          ...(tokensUsed !== undefined ? { tokensUsed } : {}),
+          ...(errorMessage !== undefined ? { error: errorMessage } : {}),
+        }
+      );
+      return {
+        auditRecorded: true,
+        auditId: auditResult.auditId,
+      };
+    } catch {
+      // Audit failure must not crash the pipeline
+      return { auditRecorded: false, auditId: undefined };
+    }
   }
 
   private renderTemplate(

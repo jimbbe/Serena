@@ -1,13 +1,34 @@
 import type { GuideUseCaseId } from "./guide-use-case-id.ts";
 
-export type GuideResult<T = unknown> = {
+/** Discriminated union: a technical failure must never appear as a successful output. */
+export type GuideResult = GuideResultSuccess | GuideResultFailed;
+
+export type GuideResultSuccess = {
+  status: "success";
   useCaseId: GuideUseCaseId;
-  output: T;
+  output: unknown;
   metadata: {
-    tokensUsed?: number;
-    modelUsed?: string;
-    executionTimeMs: number;
-    retryCount: number;
+    provider: string;
+    model: string;
+    attempts: number;
+    auditId?: string;
+    auditRecorded: boolean;
   };
-  audited: boolean;
+};
+
+export type GuideResultFailed = {
+  status: "failed";
+  useCaseId: GuideUseCaseId;
+  error: {
+    message: string;
+    code?: string;
+    cause?: unknown;
+  };
+  metadata: {
+    provider: string;
+    model: string;
+    attempts: number;
+    auditId?: string;
+    auditRecorded: boolean;
+  };
 };

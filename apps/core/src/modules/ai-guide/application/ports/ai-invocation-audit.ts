@@ -5,5 +5,5 @@ export type AiInvocationAudit = {
   record(
     input: { useCaseId: GuideUseCaseId; systemPrompt: string; userPrompt: string },
     result: { output: string; tokensUsed?: number; executionTimeMs: number; success: boolean; error?: string }
-  ): Promise<void>;
+  ): Promise<{ auditId?: string }>;
 };

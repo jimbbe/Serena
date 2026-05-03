@@ -181,6 +181,21 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - Documentation: `docs/t17b-internal-hardening.md`.
 - `npm run check` y `npm test` pasan (165 tests, 0 fallas).
 
+## Implemented In T18: Mock WhatsApp Gateway / Dry-Run Adapter
+
+- Self-contained npm workspace `@serena/gateway-wa` at `apps/gateway-wa/`.
+- Copies frozen domain types from `@serena/core` (T17A contract): `PipelineResult`, `PipelineInput`, `WhatsAppGatewayAction`, `NormalizedWhatsAppInboundMessage`.
+- New domain types: `MockWhatsAppEvent` (simulated inbound message) and `DryRunResult` (full execution trace).
+- Application layer: `normalizeMockWhatsAppEvent` (pure validation + mapping), `callSerenaCore` (HTTP client with config validation), `mapPipelineResultToGatewayAction` (copied from core), `runDryGatewayEvent` (full orchestrator).
+- Communicates with Serena Core exclusively via HTTP `POST /internal/pipeline/process` with `X-Serena-Internal-Token` header.
+- Always returns `sent: false` and `mode: "dry_run"` — never sends real messages.
+- `wouldSend` populated only for `draft_ready` actions (`mediation_started` and `mediation_reply_recorded`).
+- Zero npm dependencies — Node 22 built-in `fetch` and `node:test`.
+- 38 tests covering normalization (valid/invalid/trimming), all 8 PipelineResult variants via fake fetch, HTTP error propagation, wouldSend logic, sent always false. Uses fake `fetch` for deterministic testing.
+- Root `package.json` updated with `typecheck:gateway-wa` and `test:gateway-wa` scripts.
+- Documentation: `apps/gateway-wa/README.md`, `docs/t18-mock-whatsapp-gateway.md`.
+- `npm run check` and `npm test` include gateway-wa workspace.
+
 ## Expected Next Task
 
 Conectar infraestructura real: WhatsApp/Evolution API adapter (T18), PostgreSQL adapters (T19). La especificacion de contrato T17A y el hardening T17B sirven como base para la integracion segura con el WhatsApp Gateway.

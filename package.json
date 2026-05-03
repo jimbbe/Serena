@@ -9,11 +9,14 @@
     "packages/*"
   ],
   "scripts": {
-    "test": "npm run -w @serena/core test",
+    "test": "npm run test:core && npm run test:gateway-wa",
+    "test:core": "npm run -w @serena/core test",
+    "test:gateway-wa": "npm run -w @serena/gateway-wa test",
     "check": "npm run check:structure && npm run typecheck",
     "check:structure": "node --experimental-strip-types scripts/check-structure.ts",
-    "typecheck": "npm run typecheck:core && npm run typecheck:scripts",
+    "typecheck": "npm run typecheck:core && npm run typecheck:gateway-wa && npm run typecheck:scripts",
     "typecheck:core": "npm run -w @serena/core typecheck",
+    "typecheck:gateway-wa": "npm run -w @serena/gateway-wa typecheck",
     "typecheck:scripts": "tsc -p scripts/tsconfig.json"
   },
   "devDependencies": {

@@ -6,7 +6,7 @@ La Fase 1 apunta a mediacion prudente por WhatsApp: Serena recibe un pedido, ide
 
 ## Estado Actual
 
-El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), y hardening interno completado (T17B). 165 tests pasando.
+El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), hardening interno completado (T17B), y mock WhatsApp Gateway / dry-run adapter implementado (T18). 203 tests pasando.
 
 ### Lo que existe hoy
 
@@ -38,6 +38,9 @@ El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura M
 - **orchestrator** (T15): caso de uso `ProcessIncomingWhatsAppMessage` que conecta inbound-gate → mediation-understanding → contact-directory → session-manager → mediation-bridge → prudent-rewording. Devuelve `PipelineResult` con variantes explicitas. 11 tests end-to-end in-memory.
 - **internal-pipeline-http** (T16): endpoint `POST /internal/pipeline/process` que valida JSON, ejecuta el pipeline orchestrator y devuelve `PipelineResult`. Factory in-memory con dependencias compartidas para continuidad de sesiones entre requests. 14 tests HTTP integrados. Ver `docs/t16-internal-pipeline-http.md`.
 
+**Mock WhatsApp Gateway (T18):**
+- `apps/gateway-wa/` workspace con mock gateway / dry-run adapter. Simula el flujo completo del WhatsApp Gateway sin enviar mensajes reales (`sent: false`). Copia tipos del contrato T17A. 38 tests con fake `fetch`. Sin dependencias npm externas. Ver `docs/t18-mock-whatsapp-gateway.md`.
+
 **Hardening interno (T17B):**
 
 - **Autenticacion por token**: `X-Serena-Internal-Token` header requerido en `/internal/*`. Token via `SERENA_INTERNAL_TOKEN` env var. 401/403/500 segun error. Health publico.
@@ -48,9 +51,9 @@ El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura M
 ### Lo que no existe todavia
 
 - Conexion real a PostgreSQL desde la aplicacion (los modulos actuales usan stores in-memory)
-- Integracion con WhatsApp / Evolution API
+- Integracion con WhatsApp / Evolution API real
 - Panel web
-- Envio real de mensajes (el pipeline produce drafts/intenciones, no envia)
+- Envio real de mensajes (el pipeline produce drafts/intenciones, no envia; el mock T18 simula el flujo del gateway sin enviar)
 
 ## Forma De Trabajo
 
@@ -86,7 +89,7 @@ Todavia no esta decidido que modulo va en Node.js/TypeScript y cual va en Go. Es
 ```text
 apps/
   core/          # nucleo de producto: inbound-gate, mediation-bridge, contact-directory, mediation-understanding, prudent-rewording, session-manager, + contratos
-  gateway-wa/    # placeholder para futuro gateway/adaptador WhatsApp
+  gateway-wa/    # mock WhatsApp gateway / dry-run adapter (T18)
   panel/         # placeholder para futuro panel, si corresponde
 packages/
   shared/        # tipos, contratos y utilidades compartidas no acopladas a infraestructura
@@ -201,17 +204,19 @@ Runbook operativo: `docs/deployment-t04.md`.
 
 ## Proximos Pasos
 
-Fase completada: **logica de negocio con adaptadores in-memory** (T06-T16). Pipeline end-to-end funciona con 165 tests y endpoint HTTP interno expuesto con hardening (T17B).
+Fase completada: **logica de negocio con adaptadores in-memory** (T06-T16). Pipeline end-to-end funciona con 203 tests (165 core + 38 gateway-wa) y endpoint HTTP interno expuesto con hardening (T17B).
 
 **Contrato WhatsApp Gateway especificado (T17A):** ver `docs/t17a-whatsapp-gateway-contract.md` para el contrato completo entre Serena Core y el futuro WhatsApp Gateway.
 
 **Hardening interno completado (T17B):** ver `docs/t17b-internal-hardening.md` para autenticacion por token, idempotencia, y CI.
 
-Proxima fase (T18+): **infraestructura real**:
+**Mock WhatsApp Gateway implementado (T18):** ver `docs/t18-mock-whatsapp-gateway.md` para el mock gateway / dry-run adapter.
 
-- **T18**: Serena WhatsApp adapter — conectar serena-core a WhatsApp Gateway
+Proxima fase (T19+): **infraestructura real**:
+
 - **T19**: PostgreSQL adapters — reemplazar stores in-memory
-- **T20**: VPS deployment update — WhatsApp Gateway + Serena detras de Caddy
+- **T20**: WhatsApp / Evolution API real integration
+- **T21**: VPS deployment update — WhatsApp Gateway + Serena detras de Caddy
 
 Ver tambien:
 

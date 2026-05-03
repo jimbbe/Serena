@@ -6,7 +6,7 @@ La Fase 1 apunta a mediacion prudente por WhatsApp: Serena recibe un pedido, ide
 
 ## Estado Actual
 
-El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), y endpoint HTTP interno expuesto (T16) que permite invocar el pipeline orchestrador via `POST /internal/pipeline/process`.
+El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), y contrato WhatsApp Gateway especificado (T17A). 155 tests pasando.
 
 ### Lo que existe hoy
 
@@ -28,9 +28,10 @@ El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura M
 - **session-manager** (T14): dominio `SessionResolution` con variantes explicitas, puerto `ActiveSessionQuery`, adapter in-memory, use case `ResolveSession`. Lookup order-independent, sesiones cerradas ignoradas, ambiguedad explicita. 16 tests.
 - **T10 MVP Architecture**: documento `docs/t10-mvp-architecture.md` define la arquitectura Clean/Hexagonal de la Fase 1, flujo completo de mediacion prudente, y los modulos requeridos para MVP.
 
-**Solo contratos (sin implementacion aun):**
+**Contratos y especificaciones:**
 
-- **whatsapp-gateway**: tiene tipo `IncomingWhatsAppMessage` y puerto `WhatsAppGateway`; falta integracion real.
+- **T17A — WhatsApp Gateway Contract**: `docs/t17a-whatsapp-gateway-contract.md` define el contrato completo entre Serena Core y el futuro WhatsApp Gateway. Incluye tipos (`NormalizedWhatsAppInboundMessage`, `WhatsAppGatewayAction`), funcion de mapeo pura (`mapPipelineResultToGatewayAction`) con 15 tests, politica de envio futuro, idempotencia y seguridad documentadas. Sin integracion real todavia.
+- **whatsapp-gateway**: tiene tipo `IncomingWhatsAppMessage` y puerto `WhatsAppGateway`; falta integracion real con Evolution API.
 
  **Modulos con pipeline implementado:**
 
@@ -193,11 +194,13 @@ Runbook operativo: `docs/deployment-t04.md`.
 
 ## Proximos Pasos
 
-Fase completada: **logica de negocio con adaptadores in-memory** (T06-T16). Pipeline end-to-end funciona con 140 tests y endpoint HTTP interno expuesto.
+Fase completada: **logica de negocio con adaptadores in-memory** (T06-T16). Pipeline end-to-end funciona con 155 tests y endpoint HTTP interno expuesto.
 
-Proxima fase (T17+): **infraestructura real**:
+**Contrato WhatsApp Gateway especificado (T17A):** ver `docs/t17a-whatsapp-gateway-contract.md` para el contrato completo entre Serena Core y el futuro WhatsApp Gateway.
 
-- **T17**: WhatsApp Gateway — repo separado, servicio agnostico multi-proyecto, multi-numero
+Proxima fase (T17B+): **infraestructura real**:
+
+- **T17B**: WhatsApp Gateway repo — crear servicio agnostico multi-proyecto, multi-numero en repo separado
 - **T18**: Serena WhatsApp adapter — conectar serena-core a WhatsApp Gateway
 - **T19**: PostgreSQL adapters — reemplazar stores in-memory
 - **T20**: VPS deployment update — WhatsApp Gateway + Serena detras de Caddy
@@ -207,4 +210,5 @@ Ver tambien:
 - `docs/project-status.md`
 - `docs/open-questions.md`
 - `docs/t10-mvp-architecture.md`
+- `docs/t17a-whatsapp-gateway-contract.md`
 - `docs/deployment-t04.md` (runbook operativo actual)

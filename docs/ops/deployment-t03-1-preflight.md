@@ -1,6 +1,6 @@
 # Deployment Preflight T03.1 [HISTÓRICO — pre-T04]
 
-> ⚠️ Este documento describe el preflight ANTES del deploy T04. Los bloqueos de SSH, DNS y backup quedaron resueltos durante T04. Para el estado operativo actual, ver `docs/deployment-t04.md`.
+> ⚠️ Este documento describe el preflight ANTES del deploy T04. Los bloqueos de SSH, DNS y backup quedaron resueltos durante T04. Para el estado operativo actual, ver `docs/ops/deployment-t04.md`.
 
 T03.1 is a real operational preflight for the Hostinger VPS before a future T04 deploy. It does not deploy Serena, does not edit DNS, does not edit Caddy, and does not reload production services.
 

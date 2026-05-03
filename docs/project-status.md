@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), and a mock WhatsApp Gateway with dry-run adapter (T18). 203 tests passing.
+Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), and a mock WhatsApp Gateway with dry-run adapter (T18). Documentation reorganized into `docs/architecture/` and `docs/ops/` (T18.1). 203 tests passing.
 
 ## Decided
 
@@ -45,14 +45,14 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 
 ## Prepared In T03
 
-- `docs/deployment-t03.md` documents the VPS deployment strategy, preflight checks, deploy commands, verification commands and rollback commands.
+- `docs/ops/deployment-t03.md` documents the VPS deployment strategy, preflight checks, deploy commands, verification commands and rollback commands.
 - `infra/vps/docker-compose.yml` templates the future `serena-core` VPS Compose project attached to external network `proxy` with no host ports.
 - `infra/vps/Caddyfile.serena.example` templates the future Caddy route `serena.goingmerry01.tech -> serena-core:3000`.
 - PostgreSQL was intentionally excluded from the T03 VPS template because the app did not use persistence yet; T04 incorporated private PostgreSQL into the VPS stack as base infrastructure.
 
 ## Verified In T03.1
 
-- `docs/deployment-t03-1-preflight.md` records the real Hostinger VPS preflight before T04.
+- `docs/ops/deployment-t03-1-preflight.md` records the real Hostinger VPS preflight before T04.
 - VPS `1619520` is running at IPv4 `177.7.32.90` and IPv6 `2a02:4780:75:6109::1`.
 - Hostinger Docker Manager shows `caddy-edge`, `necrologia-bot`, and `hermes-agent-m41v` running; no Serena project/container was observed.
 - Caddy is located at `/docker/caddy-edge/docker-compose.yml` and generates `/config-src/Caddyfile` through `caddyfile-writer`.
@@ -61,7 +61,7 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 
 ## Deployed In T04
 
-- `docs/deployment-t04.md` records the final operational state, access, deploy, verify, rollback and risks.
+- `docs/ops/deployment-t04.md` records the final operational state, access, deploy, verify, rollback and risks.
 - SSH to `root@177.7.32.90` was confirmed.
 - Docker/Compose, external network `proxy`, DNS for `serena.goingmerry01.tech`, `/docker/serena` write access and Caddy backups were confirmed.
 - Serena stack is deployed at `/docker/serena`.
@@ -94,7 +94,7 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 
 ## Defined In T10: MVP Architecture
 
-- Documento `docs/t10-mvp-architecture.md` define la arquitectura Clean/Hexagonal de la Fase 1.
+- Documento `docs/architecture/t10-mvp-architecture.md` define la arquitectura Clean/Hexagonal de la Fase 1.
 - Flujo completo de mediacion prudente: inbound-gate → session-manager → contact-directory → mediation-understanding → prudent-rewording → mediation-bridge → whatsapp-gateway.
 - Separacion de capas: domain (tipos puros), application (puertos, use cases), infrastructure (adapters concretos).
 - Modulos definidos como necesarios para MVP: inbound-gate, session-manager, contact-directory, mediation-understanding, prudent-rewording, mediation-bridge, orchestrator, whatsapp-gateway.
@@ -154,11 +154,11 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - Handler `internal-pipeline-handler.ts` valida campos requeridos (`senderWhatsAppId`, `messageText` o alias `text`), `receivedAt` opcional, rechaza con 400/405/404 segun corresponda.
 - Server `bootstrap/server.ts` rutea `POST /internal/pipeline/process` y `GET /health`; cualquier otro metodo o ruta devuelve 404 o 405.
 - Tests: 14 tests HTTP integrados cubriendo validacion JSON, ruteo, sesion continua (Maria inicia → Carlos responde → sesion encontrada en un solo test autocontenido), edge cases (404, 405, body invalido, array, campo alias, mensaje de riesgo).
-- Ninguna conexion a infraestructura externa. Documento de contrato: `docs/t16-internal-pipeline-http.md`.
+- Ninguna conexion a infraestructura externa. Documento de contrato: `docs/architecture/t16-internal-pipeline-http.md`.
 
 ## Defined In T17A: WhatsApp Gateway Contract
 
-- Documento `docs/t17a-whatsapp-gateway-contract.md` define el contrato completo entre Serena Core y el futuro WhatsApp Gateway (servicio independiente, repo `whatsapp-gateway`).
+- Documento `docs/architecture/t17a-whatsapp-gateway-contract.md` define el contrato completo entre Serena Core y el futuro WhatsApp Gateway (servicio independiente, repo `whatsapp-gateway`).
 - Principio: el Gateway no contiene logica de negocio de Serena. Solo normaliza payloads, llama a `POST /internal/pipeline/process`, interpreta `PipelineResult` via `mapPipelineResultToGatewayAction`, y eventualmente envia mensajes.
 - Tipos agregados: `NormalizedWhatsAppInboundMessage` (contrato de entrada normalizado desde el Gateway), `WhatsAppGatewayAction` (accion resultante del pipeline: `ignore`, `no_auto_send`, `draft_ready`, `manual_review_required`, `error`).
 - Funcion pura `mapPipelineResultToGatewayAction` en `apps/core/src/modules/whatsapp-gateway/application/` mapea cada variante de `PipelineResult` a una accion concreta. Sin side effects, sin HTTP, sin WhatsApp.
@@ -178,7 +178,7 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - CI: `.github/workflows/ci.yml` with triggers `pull_request: [main]` + `push: [main]`. Single job on `ubuntu-latest`, Node 22. Steps: checkout → setup-node → npm ci → npm run check → npm test.
 - All in-memory — no PostgreSQL, no external deps. Idempotency data lost on restart (documented limitation).
 - Tests: 24 HTTP pipeline tests (was 14) covering auth (5), idempotency (5), and all original scenarios updated with token injection. 165 total tests passing.
-- Documentation: `docs/t17b-internal-hardening.md`.
+- Documentation: `docs/architecture/t17b-internal-hardening.md`.
 - `npm run check` y `npm test` pasan (165 tests, 0 fallas).
 
 ## Implemented In T18: Mock WhatsApp Gateway / Dry-Run Adapter
@@ -193,9 +193,12 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - Zero npm dependencies — Node 22 built-in `fetch` and `node:test`.
 - 38 tests covering normalization (valid/invalid/trimming), all 8 PipelineResult variants via fake fetch, HTTP error propagation, wouldSend logic, sent always false. Uses fake `fetch` for deterministic testing.
 - Root `package.json` updated with `typecheck:gateway-wa` and `test:gateway-wa` scripts.
-- Documentation: `apps/gateway-wa/README.md`, `docs/t18-mock-whatsapp-gateway.md`.
+- Documentation: `apps/gateway-wa/README.md`, `docs/architecture/t18-mock-whatsapp-gateway.md`.
 - `npm run check` and `npm test` include gateway-wa workspace.
 
 ## Expected Next Task
 
-Next: T19 / T18B — Evolution API adapter in controlled mode; later PostgreSQL adapters. La especificacion de contrato T17A, el hardening T17B, y el mock gateway T18 sirven como base para la integracion segura con el WhatsApp Gateway real.
+Next: T19 — Evolution API adapter in controlled mode; later PostgreSQL adapters. La especificación de contrato T17A, el hardening T17B, el mock gateway T18, y la documentación ordenada (T18.1) sirven como base para la integración segura con el WhatsApp Gateway real.
+
+### Repository note
+Este repositorio es el centro operativo del proyecto. Contiene documentación técnica (`docs/architecture/`) y operativa (`docs/ops/`) con datos reales de VPS, deploy, rutas de Caddy y backups. Debe hacerse privado antes de uso productivo o exposición pública prolongada.

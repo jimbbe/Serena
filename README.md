@@ -6,7 +6,22 @@ La Fase 1 apunta a mediacion prudente por WhatsApp: Serena recibe un pedido, ide
 
 ## Estado Actual
 
-El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), hardening interno completado (T17B), y mock WhatsApp Gateway / dry-run adapter implementado (T18). 203 tests pasando.
+El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), hardening interno completado (T17B), mock WhatsApp Gateway / dry-run adapter implementado (T18), y documentacion reorganizada (T18.1). 203 tests pasando.
+
+## 🔒 Centro Operativo del Proyecto
+
+Este repositorio funciona como centro operativo del proyecto Serena. Contiene documentacion tecnica y operativa real de VPS, deploy, rutas de Caddy, backups, y configuracion de infraestructura.
+
+⚠️ **IMPORTANTE:** Este repositorio debe hacerse privado antes de uso productivo o exposicion publica prolongada. Por ahora se mantienen IPs reales, hostnames, rutas y comandos de deploy porque OpenCode los usa para operar.
+
+### Donde encontrar cada cosa
+
+| Seccion | Ubicacion |
+|---------|-----------|
+| Arquitectura y diseno | `docs/architecture/` |
+| Operacion, deploy y VPS | `docs/ops/` |
+| Estado del proyecto | `docs/project-status.md` |
+| Preguntas abiertas | `docs/open-questions.md` |
 
 ### Lo que existe hoy
 
@@ -26,27 +41,27 @@ El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura M
 - **mediation-understanding** (T12): dominio `MediationRequest`, puerto `MediationUnderstanding`, extraccion basada en reglas con patrones en espanol, use case `ExtractMediationRequest`. 18 tests.
 - **prudent-rewording** (T13): dominio `RewordingContext`, puerto `PrudentRewording`, adapter de templates `IndirectRewording`, use case `RewordMessage`. 15 tests.
 - **session-manager** (T14): dominio `SessionResolution` con variantes explicitas, puerto `ActiveSessionQuery`, adapter in-memory, use case `ResolveSession`. Lookup order-independent, sesiones cerradas ignoradas, ambiguedad explicita. 16 tests.
-- **T10 MVP Architecture**: documento `docs/t10-mvp-architecture.md` define la arquitectura Clean/Hexagonal de la Fase 1, flujo completo de mediacion prudente, y los modulos requeridos para MVP.
+- **T10 MVP Architecture**: documento `docs/architecture/t10-mvp-architecture.md` define la arquitectura Clean/Hexagonal de la Fase 1, flujo completo de mediacion prudente, y los modulos requeridos para MVP.
 
 **Contratos y especificaciones:**
 
-- **T17A — WhatsApp Gateway Contract**: `docs/t17a-whatsapp-gateway-contract.md` define el contrato completo entre Serena Core y el futuro WhatsApp Gateway. Incluye tipos (`NormalizedWhatsAppInboundMessage`, `WhatsAppGatewayAction`), funcion de mapeo pura (`mapPipelineResultToGatewayAction`) con 15 tests, politica de envio futuro, idempotencia y seguridad documentadas. Sin integracion real todavia.
+- **T17A — WhatsApp Gateway Contract**: `docs/architecture/t17a-whatsapp-gateway-contract.md` define el contrato completo entre Serena Core y el futuro WhatsApp Gateway. Incluye tipos (`NormalizedWhatsAppInboundMessage`, `WhatsAppGatewayAction`), funcion de mapeo pura (`mapPipelineResultToGatewayAction`) con 15 tests, politica de envio futuro, idempotencia y seguridad documentadas. Sin integracion real todavia.
 - **whatsapp-gateway**: tiene tipo `IncomingWhatsAppMessage` y puerto `WhatsAppGateway`; falta integracion real con Evolution API.
 
  **Modulos con pipeline implementado:**
 
 - **orchestrator** (T15): caso de uso `ProcessIncomingWhatsAppMessage` que conecta inbound-gate → mediation-understanding → contact-directory → session-manager → mediation-bridge → prudent-rewording. Devuelve `PipelineResult` con variantes explicitas. 11 tests end-to-end in-memory.
-- **internal-pipeline-http** (T16): endpoint `POST /internal/pipeline/process` que valida JSON, ejecuta el pipeline orchestrator y devuelve `PipelineResult`. Factory in-memory con dependencias compartidas para continuidad de sesiones entre requests. 14 tests HTTP integrados. Ver `docs/t16-internal-pipeline-http.md`.
+- **internal-pipeline-http** (T16): endpoint `POST /internal/pipeline/process` que valida JSON, ejecuta el pipeline orchestrator y devuelve `PipelineResult`. Factory in-memory con dependencias compartidas para continuidad de sesiones entre requests. 14 tests HTTP integrados. Ver `docs/architecture/t16-internal-pipeline-http.md`.
 
 **Mock WhatsApp Gateway (T18):**
-- `apps/gateway-wa/` workspace con mock gateway / dry-run adapter. Simula el flujo completo del WhatsApp Gateway sin enviar mensajes reales (`sent: false`). Copia tipos del contrato T17A. 38 tests con fake `fetch`. Sin dependencias npm externas. Ver `docs/t18-mock-whatsapp-gateway.md`.
+- `apps/gateway-wa/` workspace con mock gateway / dry-run adapter. Simula el flujo completo del WhatsApp Gateway sin enviar mensajes reales (`sent: false`). Copia tipos del contrato T17A. 38 tests con fake `fetch`. Sin dependencias npm externas. Ver `docs/architecture/t18-mock-whatsapp-gateway.md`.
 
 **Hardening interno (T17B):**
 
 - **Autenticacion por token**: `X-Serena-Internal-Token` header requerido en `/internal/*`. Token via `SERENA_INTERNAL_TOKEN` env var. 401/403/500 segun error. Health publico.
 - **Idempotencia**: `messageId` en payload; `ProcessedMessageStore` in-memory evita re-ejecucion de mensajes duplicados. `duplicate: true` en respuesta HTTP.
 - **CI**: GitHub Actions workflow en `.github/workflows/ci.yml` (PR/push a main, Node 22, check + test).
-- Ver `docs/t17b-internal-hardening.md`.
+- Ver `docs/architecture/t17b-internal-hardening.md`.
 
 ### Lo que no existe todavia
 
@@ -94,7 +109,7 @@ apps/
 packages/
   shared/        # tipos, contratos y utilidades compartidas no acopladas a infraestructura
 infra/           # infraestructura local (T02) y VPS (T03-T04)
-docs/            # estado, arquitectura, decisiones, preguntas abiertas y runbooks
+docs/            # documentacion: estado (project-status), preguntas abiertas (open-questions), arquitectura (architecture/) y operaciones (ops/)
 tests/           # pruebas transversales o de aceptacion cuando existan
 scripts/         # tooling local del repositorio
 ```
@@ -176,7 +191,7 @@ Ese comando valida la estructura base sin levantar servicios ni requerir depende
 
 T03 deja documentado y versionado el camino de despliegue para `serena-core`, sin tocar produccion:
 
-- `docs/deployment-t03.md` describe estrategia, preflight, comandos de deploy, verificacion y rollback.
+- `docs/ops/deployment-t03.md` describe estrategia, preflight, comandos de deploy, verificacion y rollback.
 - `infra/vps/docker-compose.yml` definia el camino inicial de `serena-core` detras de Caddy, unido a la red externa `proxy` y sin puertos host. T04 lo extendio con PostgreSQL privado.
 - `infra/vps/Caddyfile.serena.example` contiene solo la ruta futura `serena.goingmerry01.tech -> serena-core:3000`.
 
@@ -184,7 +199,7 @@ T03 deja documentado y versionado el camino de despliegue para `serena-core`, si
 
 T03.1 releva la VPS real sin hacer deploy:
 
-- `docs/deployment-t03-1-preflight.md` consolida inventario, DNS, Caddy/proxy, comandos de deploy/verify/rollback y bloqueos.
+- `docs/ops/deployment-t03-1-preflight.md` consolida inventario, DNS, Caddy/proxy, comandos de deploy/verify/rollback y bloqueos.
 - VPS confirmada: `srv1619520.hstgr.cloud` / `177.7.32.90`.
 - Caddy confirmado en `/docker/caddy-edge/docker-compose.yml`.
 - Los bloqueos de SSH, DNS, Docker/Compose, `proxy` y backup quedaron resueltos durante T04.
@@ -200,17 +215,17 @@ T04 dejo operativo el stack base en la VPS:
 - ruta publica: `https://serena.goingmerry01.tech/health`
 - Caddy valida y recarga correctamente con la ruta `serena.goingmerry01.tech -> serena-core:3000`
 
-Runbook operativo: `docs/deployment-t04.md`.
+Runbook operativo: `docs/ops/deployment-t04.md`.
 
 ## Proximos Pasos
 
 Fase completada: **logica de negocio con adaptadores in-memory** (T06-T16). Pipeline end-to-end funciona con 203 tests (165 core + 38 gateway-wa) y endpoint HTTP interno expuesto con hardening (T17B).
 
-**Contrato WhatsApp Gateway especificado (T17A):** ver `docs/t17a-whatsapp-gateway-contract.md` para el contrato completo entre Serena Core y el futuro WhatsApp Gateway.
+**Contrato WhatsApp Gateway especificado (T17A):** ver `docs/architecture/t17a-whatsapp-gateway-contract.md` para el contrato completo entre Serena Core y el futuro WhatsApp Gateway.
 
-**Hardening interno completado (T17B):** ver `docs/t17b-internal-hardening.md` para autenticacion por token, idempotencia, y CI.
+**Hardening interno completado (T17B):** ver `docs/architecture/t17b-internal-hardening.md` para autenticacion por token, idempotencia, y CI.
 
-**Mock WhatsApp Gateway implementado (T18):** ver `docs/t18-mock-whatsapp-gateway.md` para el mock gateway / dry-run adapter.
+**Mock WhatsApp Gateway implementado (T18):** ver `docs/architecture/t18-mock-whatsapp-gateway.md` para el mock gateway / dry-run adapter.
 
 Proxima fase (T19+): **infraestructura real**:
 
@@ -222,6 +237,6 @@ Ver tambien:
 
 - `docs/project-status.md`
 - `docs/open-questions.md`
-- `docs/t10-mvp-architecture.md`
-- `docs/t17a-whatsapp-gateway-contract.md`
-- `docs/deployment-t04.md` (runbook operativo actual)
+- `docs/architecture/t10-mvp-architecture.md`
+- `docs/architecture/t17a-whatsapp-gateway-contract.md`
+- `docs/ops/deployment-t04.md` (runbook operativo actual)

@@ -138,6 +138,6 @@ Tests cover:
 
 ## Related
 
-- T17A: WhatsApp Gateway Contract (`docs/t17a-whatsapp-gateway-contract.md`)
-- T17B: Internal Hardening (`docs/t17b-internal-hardening.md`)
-- T16: Internal Pipeline HTTP (`docs/t16-internal-pipeline-http.md`)
+- T17A: WhatsApp Gateway Contract (`docs/architecture/t17a-whatsapp-gateway-contract.md`)
+- T17B: Internal Hardening (`docs/architecture/t17b-internal-hardening.md`)
+- T16: Internal Pipeline HTTP (`docs/architecture/t16-internal-pipeline-http.md`)

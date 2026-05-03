@@ -41,7 +41,7 @@ Este principio se concreta en el contrato de abajo: el Gateway recibe un `Pipeli
 T17A es una tarea de **diseño y documentación**. No implementa nada que toque infraestructura externa.
 
 **Incluido en T17A:**
-- ✅ `docs/t17a-whatsapp-gateway-contract.md` (este documento)
+- ✅ `docs/architecture/t17a-whatsapp-gateway-contract.md` (este documento)
 - ✅ Tipos TypeScript mínimos para fijar el contrato en código
 - ✅ Función pura `mapPipelineResultToGatewayAction` con tests
 - ✅ Actualización de docs principales
@@ -54,7 +54,7 @@ T17A es una tarea de **diseño y documentación**. No implementa nada que toque 
 - ❌ Deploy
 - ❌ Panel web
 - ❌ LLM
-- ❌ Autenticación HTTP completa (implementada en T17B — ver `docs/t17b-internal-hardening.md`)
+- ❌ Autenticación HTTP completa (implementada en T17B — ver `docs/architecture/t17b-internal-hardening.md`)
 - ❌ Persistencia de idempotencia (implementación in-memory en T17B; persistencia durable pendiente para T18/T19)
 - ❌ Cliente HTTP hacia WhatsApp Gateway
 - ❌ Webhooks entrantes
@@ -115,7 +115,7 @@ X-Serena-Internal-Token: <token>
 }
 ```
 
-El Gateway descarta los campos `provider`, `instanceId` y `raw` al construir el body para Serena Core. `messageId` se incluye en el body como key de idempotencia (T17B). El contrato HTTP completo está en `docs/t16-internal-pipeline-http.md` y `docs/t17b-internal-hardening.md`.
+El Gateway descarta los campos `provider`, `instanceId` y `raw` al construir el body para Serena Core. `messageId` se incluye en el body como key de idempotencia (T17B). El contrato HTTP completo está en `docs/architecture/t16-internal-pipeline-http.md` y `docs/architecture/t17b-internal-hardening.md`.
 
 ---
 
@@ -215,7 +215,7 @@ Cada mensaje de WhatsApp tiene un `messageId` estable asignado por el proveedor.
 
 Estas limitaciones se resolverán en T18/T19 con almacenamiento durable (PostgreSQL o Redis).
 
-Ver `docs/t17b-internal-hardening.md` para el contrato detallado.
+Ver `docs/architecture/t17b-internal-hardening.md` para el contrato detallado.
 
 ---
 
@@ -243,7 +243,7 @@ Ver `docs/t17b-internal-hardening.md` para el contrato detallado.
 - El token se chequea **antes del body parsing** (fail fast). Requests no autorizados nunca consumen el stream del body.
 - En producción (T04), Caddy no expone `/internal/*` públicamente como capa adicional.
 
-Ver `docs/t17b-internal-hardening.md` para el contrato detallado.
+Ver `docs/architecture/t17b-internal-hardening.md` para el contrato detallado.
 
 ---
 
@@ -382,17 +382,13 @@ Estas preguntas quedan abiertas para T17B o tareas posteriores:
 
 | Archivo | Rol |
 |---|---|
-| `docs/t17a-whatsapp-gateway-contract.md` | Este documento — especificación del contrato |
-| `apps/core/src/modules/orchestrator/domain/pipeline-result.ts` | Tipos `PipelineResult` y `PipelineInput` |
-| `apps/core/src/modules/whatsapp-gateway/domain/incoming-message.ts` | Tipo `IncomingWhatsAppMessage` existente |
-| `apps/core/src/modules/whatsapp-gateway/application/ports/whatsapp-gateway.ts` | Puerto `WhatsAppGateway` existente |
-| `apps/core/src/modules/whatsapp-gateway/domain/normalized-inbound-message.ts` | Tipo `NormalizedWhatsAppInboundMessage` (T17A) |
-| `apps/core/src/modules/whatsapp-gateway/domain/gateway-action.ts` | Tipo `WhatsAppGatewayAction` (T17A) |
-| `apps/core/src/modules/whatsapp-gateway/application/map-pipeline-result-to-gateway-action.ts` | Función de mapeo pura (T17A) |
-| `apps/core/src/modules/whatsapp-gateway/tests/map-pipeline-result-to-gateway-action.test.ts` | Tests de mapeo (T17A) |
-| `docs/t16-internal-pipeline-http.md` | Contrato HTTP del endpoint de pipeline |
-| `docs/t17b-internal-hardening.md` | Contrato de hardening interno (T17B): auth + idempotencia |
-| `docs/t10-mvp-architecture.md` | Arquitectura MVP (incluye sección WhatsApp Gateway) |
+| `docs/architecture/t17a-whatsapp-gateway-contract.md` | Este documento — especificación del contrato |
+
+| `docs/architecture/t16-internal-pipeline-http.md` | Contrato HTTP del endpoint de pipeline |
+
+| `docs/architecture/t17b-internal-hardening.md` | Contrato de hardening interno (T17B): auth + idempotencia |
+
+| `docs/architecture/t10-mvp-architecture.md` | Arquitectura MVP (incluye sección WhatsApp Gateway) |
 
 ---
 

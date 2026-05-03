@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), and internal hardening completed (T17B). 165 tests passing.
+Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), and a mock WhatsApp Gateway with dry-run adapter (T18). 203 tests passing.
 
 ## Decided
 
@@ -164,8 +164,8 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - Funcion pura `mapPipelineResultToGatewayAction` en `apps/core/src/modules/whatsapp-gateway/application/` mapea cada variante de `PipelineResult` a una accion concreta. Sin side effects, sin HTTP, sin WhatsApp.
 - Tests: 15 tests cubriendo todas las variantes de `PipelineResult` → `GatewayAction`, incluyendo edge cases (texto largo, texto vacio, signals vacios, single session ambiguous).
 - Politica de envio futuro documentada: `mediation_started` y `mediation_reply_recorded` producen `draft_ready` (no se envia en fase actual), `risk_review_required` y `ambiguous_active_session` → `manual_review_required`, el resto → `no_auto_send` o `ignore`.
-- Idempotencia minima documentada (por `messageId`, header `X-Serena-Message-Id`, no implementada).
-- Seguridad interna futura documentada (header `X-Serena-Internal-Token`, no implementada).
+- Idempotencia documentada en T17A (por `messageId` en body). T17B la implemento in-memory: duplicados devuelven `duplicate: true` con resultado cacheado. Pendiente: persistencia durable y key compuesta para multi-provider/multi-instance.
+- Seguridad interna documentada en T17A (header `X-Serena-Internal-Token`). T17B la implemento: token validado antes del body parsing en routing layer.
 - Errores HTTP esperados documentados (200, 400, 401/403 futuro, 409 futuro, 500, timeouts).
 - Preguntas abiertas registradas en `docs/open-questions.md`.
 - No se conecto Evolution API, WhatsApp, ni PostgreSQL.
@@ -181,6 +181,21 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - Documentation: `docs/t17b-internal-hardening.md`.
 - `npm run check` y `npm test` pasan (165 tests, 0 fallas).
 
+## Implemented In T18: Mock WhatsApp Gateway / Dry-Run Adapter
+
+- Self-contained npm workspace `@serena/gateway-wa` at `apps/gateway-wa/`.
+- Copies frozen domain types from `@serena/core` (T17A contract): `PipelineResult`, `PipelineInput`, `WhatsAppGatewayAction`, `NormalizedWhatsAppInboundMessage`.
+- New domain types: `MockWhatsAppEvent` (simulated inbound message) and `DryRunResult` (full execution trace).
+- Application layer: `normalizeMockWhatsAppEvent` (pure validation + mapping), `callSerenaCore` (HTTP client with config validation), `mapPipelineResultToGatewayAction` (copied from core), `runDryGatewayEvent` (full orchestrator).
+- Communicates with Serena Core exclusively via HTTP `POST /internal/pipeline/process` with `X-Serena-Internal-Token` header.
+- Always returns `sent: false` and `mode: "dry_run"` — never sends real messages.
+- `wouldSend` populated only for `draft_ready` actions (`mediation_started` and `mediation_reply_recorded`).
+- Zero npm dependencies — Node 22 built-in `fetch` and `node:test`.
+- 38 tests covering normalization (valid/invalid/trimming), all 8 PipelineResult variants via fake fetch, HTTP error propagation, wouldSend logic, sent always false. Uses fake `fetch` for deterministic testing.
+- Root `package.json` updated with `typecheck:gateway-wa` and `test:gateway-wa` scripts.
+- Documentation: `apps/gateway-wa/README.md`, `docs/t18-mock-whatsapp-gateway.md`.
+- `npm run check` and `npm test` include gateway-wa workspace.
+
 ## Expected Next Task
 
-Conectar infraestructura real: WhatsApp/Evolution API adapter (T18), PostgreSQL adapters (T19). La especificacion de contrato T17A y el hardening T17B sirven como base para la integracion segura con el WhatsApp Gateway.
+Next: T19 / T18B — Evolution API adapter in controlled mode; later PostgreSQL adapters. La especificacion de contrato T17A, el hardening T17B, y el mock gateway T18 sirven como base para la integracion segura con el WhatsApp Gateway real.

@@ -25,9 +25,9 @@ function renderTextContract(contract: { description: string }): string {
   return [
     "Contrato de salida:",
     "- Formato esperado: texto.",
-    `- Descripción: ${contract.description}`,
-    "- Devolvé solo el texto final.",
-    "- No incluyas análisis interno.",
+    "- Descripci\u00f3n: " + contract.description,
+    "- Devolv\u00e9 solo el texto final.",
+    "- No incluyas an\u00e1lisis interno.",
   ].join("\n");
 }
 
@@ -49,19 +49,19 @@ function renderJsonContract(contract: JsonContractShape): string {
   const lines: string[] = [
     "Contrato de salida:",
     "- Formato esperado: JSON.",
-    `- Modo estricto: ${strict}.`,
-    `- Descripción: ${description}`,
+    "- Modo estricto: " + String(strict) + ".",
+    "- Descripci\u00f3n: " + description,
     "",
     "Campos:",
   ];
 
   fields.forEach((f, index) => {
-    lines.push(`${index + 1}. ${f.name}`);
-    lines.push(`   - Tipo: ${f.type}`);
-    lines.push(`   - Requerido: ${f.required ? "sí" : "no"}`);
-    lines.push(`   - Descripción: ${f.description}`);
+    lines.push((index + 1) + ". " + f.name);
+    lines.push("   - Tipo: " + f.type);
+    lines.push("   - Requerido: " + (f.required ? "s\u00ed" : "no"));
+    lines.push("   - Descripci\u00f3n: " + f.description);
     if (f.allowedValues !== undefined && f.allowedValues.length > 0) {
-      lines.push(`   - Valores permitidos: ${f.allowedValues.join(", ")}`);
+      lines.push("   - Valores permitidos: " + f.allowedValues.join(", "));
     }
   });
 
@@ -69,19 +69,19 @@ function renderJsonContract(contract: JsonContractShape): string {
   lines.push("Reglas:");
 
   if (strict) {
-    lines.push("- Devolvé solo JSON válido.");
+    lines.push("- Devolv\u00e9 solo JSON v\u00e1lido.");
     lines.push("- No incluyas markdown.");
     lines.push("- No incluyas texto fuera del JSON.");
   }
 
-  lines.push("- Incluí todos los campos requeridos.");
+  lines.push("- Inclu\u00ed todos los campos requeridos.");
 
   const hasAllowedValues = fields.some(
     (f) => f.allowedValues !== undefined && f.allowedValues.length > 0
   );
   if (hasAllowedValues) {
     lines.push(
-      "- Usá solo valores permitidos cuando el campo declare allowedValues."
+      "- Us\u00e1 solo valores permitidos cuando el campo declare allowedValues."
     );
   }
 

@@ -2,6 +2,7 @@
 export type ContextPolicy = {
   includeCurrentMessage: boolean;
   includeResolvedIdentity: boolean;
+  includeActorContext: boolean;
   includeChannelMetadata: boolean;
   includeConversationHistory: boolean;
   maxRecentMessages?: number;

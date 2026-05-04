@@ -53,7 +53,8 @@ test("response includes content as string", async () => {
 });
 
 test("different input produces different response", async () => {
-  const provider = new MockLlmProvider();
+  // Use empty Map to bypass default canned responses and test fallback behavior
+  const provider = new MockLlmProvider(new Map());
 
   const result1 = await provider.invoke({
     promptId: REPLY,
@@ -120,7 +121,8 @@ test("canned responses keyed by promptId, not systemPrompt text", async () => {
 });
 
 test("mock fallback uses promptId + userPrompt hash (not systemPrompt)", async () => {
-  const provider = new MockLlmProvider();
+  // Use empty Map to bypass default canned responses
+  const provider = new MockLlmProvider(new Map());
 
   const result = await provider.invoke({
     promptId: REPLY,

@@ -261,9 +261,23 @@ export class ExecutionPipeline {
         ? this.contextBuilder.renderTemplate(promptDef.inputTemplate, input)
         : "";
 
-    // Context assembly from policy (Phase 1: uses only currentMessage from input)
+    const currentMessage =
+      (renderedTemplate !== "" ? renderedTemplate : undefined) ?? input["input"] ?? "";
+
+    // Assemble actor context from available input fields
+    const actorRole = input["actorRole"];
+    const actorChannel = input["channel"];
+    const actorParts: string[] = [];
+    if (actorRole) actorParts.push(`rol: ${actorRole}`);
+    if (actorChannel) actorParts.push(`canal: ${actorChannel}`);
+    const actorContext = actorParts.length > 0 ? actorParts.join(", ") : undefined;
+
+    // Build context string from policy flags
     const contextString = this.contextBuilder.build(promptDef.contextPolicy, {
-      currentMessage: (renderedTemplate !== "" ? renderedTemplate : undefined) ?? input["input"] ?? "",
+      currentMessage,
+      resolvedIdentity: input["resolvedIdentity"],
+      actorContext,
+      channelMetadata: input["channel"],
     });
 
     return contextString;

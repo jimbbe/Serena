@@ -189,27 +189,21 @@ export class ProcessChannelInboundMessage {
     try {
       guideResult = await this.aiGuideService.execute(useCaseId, {
         input: cmd.text,
+        actorRole: identity.role ?? "unknown",
+        resolvedIdentity: identity.displayName ?? identity.personId ?? cmd.externalSenderId,
+        channel: cmd.channel,
+        tenantId: cmd.tenantId ?? "demo",
+        personId: identity.personId ?? "",
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 
-      // Clarification is not yet implemented — structured error, not a crash
-      if (message.includes("Not implemented")) {
-        guideError = {
-          message: "Clarification use case not yet implemented",
-          code: "not_implemented",
-        };
-        warnings.push(
-          "clarification profile maps to a not-yet-implemented use case",
-        );
-      } else {
-        // Unexpected failure — still capture as guideError, do not throw
-        guideError = {
-          message,
-          code: "pipeline_execution_failed",
-        };
-        errors.push(`AI guide execution failed: ${message}`);
-      }
+      // Unexpected failure — capture as guideError, do not throw
+      guideError = {
+        message,
+        code: "pipeline_execution_failed",
+      };
+      errors.push(`AI guide execution failed: ${message}`);
     }
 
     // NOTE: Outbound messages are NOT recorded here.

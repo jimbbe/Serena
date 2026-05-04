@@ -7,6 +7,7 @@ import type { ContextPolicy } from "../domain/context-policy.ts";
 const fullPolicy: ContextPolicy = {
   includeCurrentMessage: true,
   includeResolvedIdentity: true,
+  includeActorContext: true,
   includeChannelMetadata: true,
   includeConversationHistory: true,
   maxRecentMessages: 3,
@@ -25,6 +26,7 @@ test("builds with all data available", () => {
   const output = builder.build(fullPolicy, {
     currentMessage: "Hola",
     resolvedIdentity: "Abuela Rosa",
+    actorContext: "rol: elder, canal: whatsapp",
     channelMetadata: "WhatsApp",
     recentMessages: ["msg1", "msg2", "msg3", "msg4"],
     knownContacts: ["Carlos", "María"],
@@ -33,6 +35,7 @@ test("builds with all data available", () => {
 
   assert.ok(output.includes("Hola"));
   assert.ok(output.includes("Abuela Rosa"));
+  assert.ok(output.includes("rol: elder"));
   assert.ok(output.includes("WhatsApp"));
   assert.ok(output.includes("Carlos"));
   assert.ok(output.includes("María"));
@@ -73,6 +76,7 @@ test("respects maxRecentMessages limit (only N most recent)", () => {
     {
       includeCurrentMessage: false,
       includeResolvedIdentity: false,
+      includeActorContext: false,
       includeChannelMetadata: false,
       includeConversationHistory: true,
       maxRecentMessages: 2,
@@ -125,6 +129,29 @@ test("handles empty current message gracefully", () => {
 
   // Should produce empty or minimal output without crashing
   assert.equal(output, "");
+});
+
+test("includes actorContext when policy flag is true", () => {
+  const builder = makeBuilder();
+  const output = builder.build(
+    { ...fullPolicy, includeResolvedIdentity: false, includeChannelMetadata: false, includeConversationHistory: false, includeKnownContacts: false, includeSafetyMemory: false },
+    { currentMessage: "Hola", actorContext: "rol: elder, canal: simulation" }
+  );
+
+  assert.ok(output.includes("rol: elder"));
+  assert.ok(output.includes("canal: simulation"));
+  assert.ok(output.includes("Contexto del actor"));
+});
+
+test("omits actorContext when flag is false", () => {
+  const builder = makeBuilder();
+  const output = builder.build(
+    { ...fullPolicy, includeActorContext: false },
+    { currentMessage: "Hola", actorContext: "rol: elder" }
+  );
+
+  assert.ok(!output.includes("Contexto del actor"));
+  assert.ok(!output.includes("rol: elder"));
 });
 
 test("produces plain string output", () => {

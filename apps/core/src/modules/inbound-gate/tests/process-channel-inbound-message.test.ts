@@ -23,6 +23,32 @@ import type { ConversationStore } from "../../conversation-store/port/conversati
 import type { Conversation } from "../../conversation-store/domain/conversation.ts";
 import type { ConversationMessage } from "../../conversation-store/domain/conversation-message.ts";
 
+import { AiGuideService } from "../../ai-guide/application/use-cases/ai-guide-service.ts";
+import { UseCaseRegistry } from "../../ai-guide/application/use-cases/use-case-registry.ts";
+import { ExecutionPipeline } from "../../ai-guide/application/use-cases/execution-pipeline.ts";
+import { MockLlmProvider } from "../../ai-guide/infrastructure/memory/mock-llm-provider.ts";
+import { InMemoryPromptRegistry } from "../../ai-guide/application/prompts/in-memory-prompt-registry.ts";
+import { ContextBuilder } from "../../ai-guide/application/prompts/context-builder.ts";
+import { defaultPrompts } from "../../ai-guide/application/prompts/default-prompts.ts";
+import { defaultContracts } from "../../ai-guide/application/use-cases/contracts.ts";
+
+/**
+ * Creates a real AiGuideService wired to MockLlmProvider and PromptRegistry
+ * so clarification can execute end-to-end with default canned responses.
+ */
+function createRealAiGuideService(): { aiGuideService: AiGuideService } {
+  const registry = new UseCaseRegistry();
+  for (const contract of defaultContracts) {
+    registry.register(contract);
+  }
+  const provider = new MockLlmProvider();
+  const promptRegistry = new InMemoryPromptRegistry(defaultPrompts);
+  const contextBuilder = new ContextBuilder();
+  const pipeline = new ExecutionPipeline({ provider, registry: promptRegistry, contextBuilder });
+  const aiGuideService = new AiGuideService({ registry, pipeline });
+  return { aiGuideService };
+}
+
 // ---------------------------------------------------------------------------
 // Helpers — mock factories
 // ---------------------------------------------------------------------------
@@ -465,12 +491,9 @@ test("mediation understanding flow calls AI guide with correct use case", async 
   assert.ok(result.identity !== undefined);
 });
 
-test("clarification not implemented returns structured error", async () => {
-  const mockAiService = {
-    execute: async (useCaseId: GuideUseCaseId, _input: Record<string, string>): Promise<GuideResult> => {
-      throw new Error(`Not implemented: ${useCaseId}. The clarification use case is not yet implemented.`);
-    },
-  };
+test("clarification executes successfully (no longer blocked)", async () => {
+  // AiGuideService now executes clarification normally via MockLlmProvider
+  const { aiGuideService } = createRealAiGuideService();
 
   const mockProcessInbound = {
     execute: async (_input: ProcessInboundMessageInput) => ({
@@ -481,7 +504,7 @@ test("clarification not implemented returns structured error", async () => {
 
   const useCase = new ProcessChannelInboundMessage({
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
-    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    aiGuideService,
     identityResolver: mockResolver(resolvedIdentity()),
     conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
@@ -492,16 +515,13 @@ test("clarification not implemented returns structured error", async () => {
     text: "clarify this",
   });
 
-  // Must NOT throw — structured error returned in result
-  assert.equal(result.guideResult, undefined);
-  assert.ok(result.guideError !== undefined);
-  assert.equal(result.guideError!.code, "not_implemented");
-  assert.equal(result.guideError!.message, "Clarification use case not yet implemented");
+  // Clarification executes successfully — guideResult present, no guideError
+  assert.ok(result.guideResult !== undefined);
+  assert.equal(result.guideResult!.status, "success");
+  assert.equal(result.guideResult!.useCaseId, "serena.mediation.clarify");
+  assert.equal(result.guideError, undefined);
   assert.equal(result.profileId, "clarification");
   assert.equal(result.useCaseId, "serena.mediation.clarify");
-  assert.ok(
-    result.warnings.includes("clarification profile maps to a not-yet-implemented use case"),
-  );
   assert.ok(result.identity !== undefined);
 });
 

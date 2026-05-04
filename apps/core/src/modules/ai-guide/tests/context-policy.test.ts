@@ -12,37 +12,40 @@ function findPrompt(id: string): PromptDefinition {
 
 // ── REQ-4 table values ──────────────────────────────────────────────
 
-test("serena.conversation.reply contextPolicy matches REQ-4 table", () => {
+test("serena.conversation.reply contextPolicy matches MVP values", () => {
   const cp = findPrompt("serena.conversation.reply.v1").contextPolicy;
 
   assert.equal(cp.includeCurrentMessage, true);
   assert.equal(cp.includeResolvedIdentity, true);
+  assert.equal(cp.includeActorContext, true);
   assert.equal(cp.includeChannelMetadata, true);
   assert.equal(cp.includeConversationHistory, true);
-  assert.equal(cp.maxRecentMessages, 8);
+  assert.equal(cp.maxRecentMessages, 6);
   assert.equal(cp.includeKnownContacts, false);
-  assert.equal(cp.includeSafetyMemory, true);
+  assert.equal(cp.includeSafetyMemory, false);
   assert.equal(cp.includeFullConversation, false);
 });
 
-test("serena.risk.review contextPolicy matches REQ-4 table", () => {
+test("serena.risk.review contextPolicy matches MVP values", () => {
   const cp = findPrompt("serena.risk.review.v1").contextPolicy;
 
   assert.equal(cp.includeCurrentMessage, true);
   assert.equal(cp.includeResolvedIdentity, true);
+  assert.equal(cp.includeActorContext, true);
   assert.equal(cp.includeChannelMetadata, true);
   assert.equal(cp.includeConversationHistory, true);
   assert.equal(cp.maxRecentMessages, 5);
   assert.equal(cp.includeKnownContacts, false);
-  assert.equal(cp.includeSafetyMemory, true);
+  assert.equal(cp.includeSafetyMemory, false);
   assert.equal(cp.includeFullConversation, false);
 });
 
-test("serena.mediation.understand_request contextPolicy matches REQ-4 table", () => {
+test("serena.mediation.understand_request contextPolicy matches MVP values", () => {
   const cp = findPrompt("serena.mediation.understand_request.v1").contextPolicy;
 
   assert.equal(cp.includeCurrentMessage, true);
   assert.equal(cp.includeResolvedIdentity, true);
+  assert.equal(cp.includeActorContext, true);
   assert.equal(cp.includeChannelMetadata, true);
   assert.equal(cp.includeConversationHistory, true);
   assert.equal(cp.maxRecentMessages, 4);
@@ -51,11 +54,12 @@ test("serena.mediation.understand_request contextPolicy matches REQ-4 table", ()
   assert.equal(cp.includeFullConversation, false);
 });
 
-test("serena.mediation.clarify contextPolicy matches REQ-4 table", () => {
+test("serena.mediation.clarify contextPolicy matches MVP values", () => {
   const cp = findPrompt("serena.mediation.clarify.v1").contextPolicy;
 
   assert.equal(cp.includeCurrentMessage, true);
   assert.equal(cp.includeResolvedIdentity, true);
+  assert.equal(cp.includeActorContext, true);
   assert.equal(cp.includeChannelMetadata, false);
   assert.equal(cp.includeConversationHistory, true);
   assert.equal(cp.maxRecentMessages, 3);
@@ -81,6 +85,7 @@ test("all context policies have valid structure", () => {
     const cp = prompt.contextPolicy;
     assert.equal(typeof cp.includeCurrentMessage, "boolean");
     assert.equal(typeof cp.includeResolvedIdentity, "boolean");
+    assert.equal(typeof cp.includeActorContext, "boolean");
     assert.equal(typeof cp.includeChannelMetadata, "boolean");
     assert.equal(typeof cp.includeConversationHistory, "boolean");
     assert.equal(typeof cp.includeKnownContacts, "boolean");
@@ -125,4 +130,10 @@ test("conversation.reply and risk.review have safetyNotes", () => {
   assert.ok(reply.safetyNotes!.length > 0);
   assert.ok(risk.safetyNotes !== undefined);
   assert.ok(risk.safetyNotes!.length > 0);
+});
+
+test("mediation.understand_request.v1 has safetyNotes", () => {
+  const prompt = findPrompt("serena.mediation.understand_request.v1");
+  assert.ok(prompt.safetyNotes !== undefined);
+  assert.ok(prompt.safetyNotes!.length > 0);
 });

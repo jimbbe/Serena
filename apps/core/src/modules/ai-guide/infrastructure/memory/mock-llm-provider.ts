@@ -12,6 +12,57 @@ export class MockLlmProvider implements LlmProvider {
     canned?: Map<PromptId, { content: string; tokensUsed?: number }>
   ) {
     this.cannedResponses = canned ?? new Map();
+    // Only seed defaults when no map is explicitly provided
+    if (!canned) this.primeDefaults();
+  }
+
+  /**
+   * Seeds default canned responses matching current OutputContracts.
+   * These are used when no explicit canned response is configured.
+   */
+  private primeDefaults(): void {
+    const defaults: Array<[PromptId, string]> = [
+      [
+        "serena.mediation.understand_request.v1",
+        JSON.stringify({
+          isMediationRequest: true,
+          recipientHint: "Mari",
+          messageDraft: "Llego más tarde.",
+          requiresConfirmation: true,
+          missingFields: ["confirmation"],
+          riskSignal: false,
+        }),
+      ],
+      [
+        "serena.mediation.clarify.v1",
+        JSON.stringify({
+          question: "¿A quién querés que le avise?",
+          reason: "Falta el destinatario del mensaje.",
+        }),
+      ],
+      [
+        "serena.risk.review.v1",
+        JSON.stringify({
+          riskLevel: "low",
+          riskType: "unknown",
+          source: "direct",
+          situationSummary: "No se detectan señales claras de riesgo.",
+          recommendedAction: "reply",
+          requiresEscalation: false,
+          missingInformation: [],
+        }),
+      ],
+      [
+        "serena.conversation.reply.v1",
+        "Entendido. ¿Hay algo más en lo que pueda ayudarte?",
+      ],
+    ];
+
+    for (const [id, content] of defaults) {
+      if (!this.cannedResponses.has(id)) {
+        this.cannedResponses.set(id, { content, tokensUsed: 15 });
+      }
+    }
   }
 
   async invoke(input: {

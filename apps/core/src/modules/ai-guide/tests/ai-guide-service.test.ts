@@ -120,7 +120,7 @@ test("execute throws for unregistered use case", async () => {
   );
 });
 
-test("execute throws NotImplementedError for clarification", async () => {
+test("execute returns success for clarification use case", async () => {
   const { registry, service } = setupService();
   registry.register(
     makeContract({
@@ -129,17 +129,15 @@ test("execute throws NotImplementedError for clarification", async () => {
     })
   );
 
-  await assert.rejects(
-    () => service.execute("serena.mediation.clarify", { input: "test" }),
-    /not implemented/i
-  );
-});
+  const result = await service.execute("serena.mediation.clarify", { input: "Decile algo a alguien" });
 
-test("execute throws for clarification even without a registered contract", async () => {
-  const { service } = setupService();
-
-  await assert.rejects(
-    () => service.execute("serena.mediation.clarify", { input: "test" }),
-    /not implemented/i
-  );
+  assert.equal(result.status, "success");
+  const success = result as GuideResultSuccess;
+  assert.equal(success.useCaseId, "serena.mediation.clarify");
+  assert.equal(success.metadata.promptId, CLARIFY);
+  assert.ok(typeof success.output === "string");
+  // Clarification output should be JSON with question and reason
+  const parsed = JSON.parse(success.output as string);
+  assert.ok(typeof parsed.question === "string");
+  assert.ok(typeof parsed.reason === "string");
 });

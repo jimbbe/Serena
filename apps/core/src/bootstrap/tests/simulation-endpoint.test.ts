@@ -489,10 +489,10 @@ describe("POST /dev/simulate/inbound-message", () => {
   });
 
   // =========================================================================
-  // Clarification — not implemented (200, not 500)
+  // Clarification — executes successfully (no longer "not implemented")
   // =========================================================================
 
-  it("clarification profile returns 200 with structured guideError", async () => {
+  it("clarification profile returns 200 with successful guideResult", async () => {
     // The real ProcessInboundMessage never produces a "clarification" profile,
     // so we construct a mocked version that returns a clarification route.
     const mockProcessInbound = {
@@ -561,18 +561,19 @@ describe("POST /dev/simulate/inbound-message", () => {
       assert.equal(status, 200);
       const obj = body as Record<string, unknown>;
 
-      // Clarification returns 200 (NOT 500)
+      // Clarification now executes successfully — guideResult present, no guideError
       assert.equal(obj.profileId, "clarification");
       assert.equal(obj.useCaseId, "serena.mediation.clarify");
-      assert.equal(obj.guideResult, undefined);
+      assert.ok(obj.guideResult !== undefined, "guideResult should be present");
 
-      const guideError = obj.guideError as Record<string, unknown> | undefined;
-      assert.ok(guideError !== undefined);
-      assert.equal(guideError.code, "not_implemented");
-      assert.equal(guideError.message, "Clarification use case not yet implemented");
+      const guideResult = obj.guideResult as Record<string, unknown>;
+      assert.equal(guideResult.status, "success");
+      assert.equal(guideResult.useCaseId, "serena.mediation.clarify");
+      assert.ok(typeof guideResult.output === "string");
+      assert.ok((guideResult.output as string).length > 0);
 
-      const warnings = obj.warnings as string[];
-      assert.ok(warnings.includes("clarification profile maps to a not-yet-implemented use case"));
+      // No guideError since clarification executes successfully
+      assert.equal(obj.guideError, undefined);
     } finally {
       clarificationServer.close();
     }

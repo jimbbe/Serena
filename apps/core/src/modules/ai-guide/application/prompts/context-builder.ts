@@ -7,11 +7,12 @@ import type { ContextPolicy } from "../../domain/context-policy.ts";
  */
 export type ContextData = {
   currentMessage: string;
-  resolvedIdentity?: string;
-  channelMetadata?: string;
-  recentMessages?: string[];
-  knownContacts?: string[];
-  safetyMemory?: string;
+  resolvedIdentity?: string | undefined;
+  actorContext?: string | undefined;
+  channelMetadata?: string | undefined;
+  recentMessages?: string[] | undefined;
+  knownContacts?: string[] | undefined;
+  safetyMemory?: string | undefined;
 };
 
 /**
@@ -46,6 +47,11 @@ export class ContextBuilder {
     // Resolved identity
     if (policy.includeResolvedIdentity && data.resolvedIdentity) {
       sections.push(`Identidad: ${data.resolvedIdentity}`);
+    }
+
+    // Actor context (role, channel, permissions — prepared for future growth)
+    if (policy.includeActorContext && data.actorContext) {
+      sections.push(`Contexto del actor: ${data.actorContext}`);
     }
 
     // Channel metadata

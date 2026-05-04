@@ -1,10 +1,30 @@
 # AI Guide — Prompt System
 
-Documentación autoritativa del sistema de prompts de Serena. Cubre el `PromptRegistry`, `ContextPolicy`, `OutputContract`, y el flujo completo desde un `useCaseId` hasta el `GuideResult`.
+Documentación autoritativa del sistema de prompts de Serena. Cubre el `PromptRegistry`, `ContextPolicy`, `OutputContract`, actor context, y el flujo completo desde un `useCaseId` hasta el `GuideResult`.
 
 ---
 
-## 1. PromptRegistry — Concepto
+## 1. Visión del Producto
+
+### MVP inmediato: puente de mediación
+
+El primer MVP prueba a **Serena como puente de mediación entre dos personas**. Ejemplo concreto: Jim le dice a Serena _"Decile a Mari que llego más tarde"_, Serena analiza el pedido, extrae destinatario y mensaje, redacta draft, y pide confirmación.
+
+Todo esto se prueba vía **Simulation API / Scenario Runner**, sin WhatsApp real, sin LLM real, sin dispositivo físico.
+
+### Futuro
+
+Serena está pensada para una única persona mayor (la abuela), con:
+- Un **dispositivo físico local** (`serena_device`) para ella.
+- **WhatsApp** como canal remoto para familiares, autorizados, admin o desconocidos.
+- **Roles y permisos** que determinen qué puede hacer cada actor.
+- **Risk review** como sistema de seguridad, no como conversación casual.
+
+Pero eso viene después. El MVP actual valida **mediación**.
+
+---
+
+## 2. PromptRegistry — Concepto
 
 ### Qué es
 
@@ -14,30 +34,26 @@ El **PromptRegistry** es el catálogo centralizado de definiciones de prompts ve
 
 Antes de este cambio, los `UseCaseContract` tenían `systemPrompt` e `inputTemplate` como strings inline. Esto causaba dos problemas graves:
 
-1. **Fragilidad en tests**: `MockLlmProvider` keyeaba respuestas por el texto exacto del system prompt. Cualquier cambio de texto (una coma, un espacio) rompía tests en cadena.
+1. **Fragilidad en tests**: `MockLlmProvider` keyeaba respuestas por el texto exacto del system prompt. Cualquier cambio de texto rompía tests en cadena.
 2. **Imposibilidad de auditar versiones**: Sin un identificador estable, era imposible saber qué versión de un prompt produjo un resultado dado.
 
 El `PromptRegistry` resuelve ambos: los mocks keyean por `promptId` (inmutable), y el `GuideResult` registra `promptId` y `promptVersion` en metadata.
 
-### Cómo se resuelven los prompts
+### Por qué el prompt se elige por caso de uso, no por canal
 
-```
-useCaseId → UseCaseContract.promptId → PromptRegistry.get(promptId) → PromptDefinition
-```
-
-El `PromptRegistry` es un port en `application/ports/` con implementación en memoria (`InMemoryPromptRegistry`). No tiene dependencias externas (sin DB, sin red, sin archivos).
+El prompt pertenece al dominio de AI Guide, no al adaptador de infraestructura. Si los prompts vivieran en el adaptador de WhatsApp, cambiar de canal requeriría duplicar prompts. El `PromptRegistry` permite que cualquier canal (`whatsapp`, `serena_device`, `simulation`) use los mismos prompts versionados.
 
 ---
 
-## 2. PromptId — Formato
+## 3. PromptId — Formato
 
 Los `PromptId` siguen la convención: `{module}.{capability}.{action}.v{n}`
 
 ```
-serena.conversation.reply.v1
-serena.risk.review.v1
 serena.mediation.understand_request.v1
 serena.mediation.clarify.v1
+serena.conversation.reply.v1
+serena.risk.review.v1
 ```
 
 - Son un TypeScript string literal union (mismo patrón que `GuideUseCaseId`).
@@ -46,7 +62,7 @@ serena.mediation.clarify.v1
 
 ---
 
-## 3. PromptDefinition — Estructura
+## 4. PromptDefinition — Estructura
 
 Cada prompt tiene esta definición completa:
 
@@ -65,7 +81,7 @@ Cada prompt tiene esta definición completa:
 
 ---
 
-## 4. UseCaseContract — Forma
+## 5. UseCaseContract — Forma
 
 El contrato es **lean**: referencia el prompt por ID y define la política de ejecución.
 
@@ -81,7 +97,7 @@ El contrato es **lean**: referencia el prompt por ID y define la política de ej
 
 ---
 
-## 5. ContextPolicy — Banderas
+## 6. ContextPolicy — Banderas
 
 Define exactamente qué contexto recibe el LLM para cada caso de uso.
 
@@ -89,6 +105,7 @@ Define exactamente qué contexto recibe el LLM para cada caso de uso.
 |---------|------|-------------|
 | `includeCurrentMessage` | `boolean` | Incluye el mensaje actual del usuario |
 | `includeResolvedIdentity` | `boolean` | Incluye la identidad resuelta de la persona |
+| `includeActorContext` | `boolean` | Incluye contexto del actor (rol, canal, permisos) |
 | `includeChannelMetadata` | `boolean` | Incluye metadata del canal (WhatsApp, voz, etc.) |
 | `includeConversationHistory` | `boolean` | Incluye historial reciente de conversación |
 | `maxRecentMessages?` | `number` | Límite de mensajes recientes si `includeConversationHistory` es true |
@@ -97,94 +114,129 @@ Define exactamente qué contexto recibe el LLM para cada caso de uso.
 | `includeFullConversation` | `boolean` | Incluye la conversación completa (Phase 1: siempre false) |
 | `notes?` | `string` | Notas para documentación |
 
-### Valores por caso de uso
+### Valores por caso de uso (MVP)
 
-| Use Case | currentMsg | identity | channel | history | maxRecent | contacts | safety | fullConv |
-|----------|-----------|----------|---------|---------|-----------|----------|--------|----------|
-| `serena.conversation.reply` | ✅ | ✅ | ✅ | ✅ | 8 | ❌ | ✅ | ❌ |
-| `serena.risk.review` | ✅ | ✅ | ✅ | ✅ | 5 | ❌ | ✅ | ❌ |
-| `serena.mediation.understand_request` | ✅ | ✅ | ✅ | ✅ | 4 | ✅ | ❌ | ❌ |
-| `serena.mediation.clarify` | ✅ | ✅ | ❌ | ✅ | 3 | ✅ | ❌ | ❌ |
+| Use Case | current | identity | actor | channel | history | max | contacts | safety | full |
+|----------|---------|----------|-------|---------|---------|-----|----------|--------|------|
+| `mediation.understand_request` | ✅ | ✅ | ✅ | ✅ | ✅ | 4 | ✅ | ❌ | ❌ |
+| `mediation.clarify` | ✅ | ✅ | ✅ | ❌ | ✅ | 3 | ✅ | ❌ | ❌ |
+| `conversation.reply` | ✅ | ✅ | ✅ | ✅ | ✅ | 6 | ❌ | ❌ | ❌ |
+| `risk.review` | ✅ | ✅ | ✅ | ✅ | ✅ | 5 | ❌ | ❌ | ❌ |
 
----
-
-## 6. OutputContract — Text vs JSON
-
-| Prompt | Formato | Schema |
-|--------|---------|--------|
-| `serena.conversation.reply.v1` | `text` | Texto libre, respuesta conversacional |
-| `serena.risk.review.v1` | `json` | `{ riskLevel, signals[], requiresImmediateAction, reasoning }` |
-| `serena.mediation.understand_request.v1` | `json` | `{ hasMediationRequest, recipient?, messageContent?, urgency, confidence, reasoning }` |
-| `serena.mediation.clarify.v1` | `json` | `{ clarificationQuestions[], ambiguousElements[], suggestedResponse }` |
+**Regla fuerte**: ningún caso incluye conversación completa por defecto.
 
 ---
 
-## 7. Flujo Completo
+## 7. OutputContract
+
+| Prompt | Formato | Esquema |
+|--------|---------|---------|
+| `serena.mediation.understand_request.v1` | `json` | `{ isMediationRequest, recipientHint, messageDraft, requiresConfirmation, missingFields[], riskSignal }` |
+| `serena.mediation.clarify.v1` | `json` | `{ question, reason }` |
+| `serena.conversation.reply.v1` | `text` | Texto libre breve |
+| `serena.risk.review.v1` | `json` | `{ riskLevel, riskType, source, situationSummary, recommendedAction, requiresEscalation, missingInformation[] }` |
+
+---
+
+## 8. Actor Context
+
+El `ContextBuilder` acepta un campo `actorContext` que se construye a partir de la identidad resuelta del mensaje. Está **preparado** para crecimiento futuro, pero sin implementar todavía un `PermissionPolicy` completo.
+
+Campos previstos (futuro):
+- `actorRole`: `"elder" | "authorized_contact" | "unauthorized_contact" | "admin" | "unknown"`
+- `channel`: canal de origen
+- `permissions`: permisos del actor
+- `isPrimarySubject`: si es la persona principal
+- `relationshipToSubject`: vínculo con la persona principal
+
+En el MVP actual, el `actorRole` se deriva del `ResolvedInboundActor.role`:
+- `"elder"` → `elder`
+- `"contact"` → `authorized_contact` (contacto conocido/autorizado en el seed data)
+
+El `PermissionPolicy` completo vendrá en una fase futura.
+
+---
+
+## 9. Flujo Completo
 
 ```
-profileId → useCaseId → promptId → PromptRegistry → ContextBuilder → ExecutionPipeline → GuideResult
+profileId → useCaseId → UseCaseContract → promptId
+  → PromptRegistry.get(promptId) → PromptDefinition
+  → ContextBuilder.build(policy, contextData) → userPrompt
+  → LlmProvider.invoke({ promptId, promptVersion, systemPrompt, userPrompt })
+  → GuideResult { metadata: { ..., promptId, promptVersion } }
 ```
 
-1. El router de perfiles determina el `useCaseId` según el contenido del mensaje.
-2. `AiGuideService` obtiene el `UseCaseContract` del `UseCaseRegistry`.
-3. El `ExecutionPipeline` resuelve el `PromptDefinition` desde el `PromptRegistry` usando `contract.promptId`.
-4. El `ContextBuilder` arma el `userPrompt` según el `ContextPolicy` (template interpolation + flags).
-5. El pipeline invoca al `LlmProvider` con `{ promptId, promptVersion, systemPrompt, userPrompt, developerPrompt? }`.
-6. El resultado se audita con `{ promptId, promptVersion, useCaseId, userPrompt }`.
-7. El `GuideResult` incluye `promptId` y `promptVersion` en `metadata`.
+1. `ProcessChannelInboundMessage` resuelve la identidad del actor.
+2. El router de perfiles determina el `useCaseId` según el contenido del mensaje.
+3. `AiGuideService` obtiene el `UseCaseContract` del `UseCaseRegistry`.
+4. El `ExecutionPipeline` resuelve el `PromptDefinition` desde el `PromptRegistry`.
+5. El `ContextBuilder` arma el `userPrompt` según el `ContextPolicy`, incluyendo actor context y metadata del canal.
+6. El pipeline invoca al `LlmProvider` con `{ promptId, promptVersion, systemPrompt, userPrompt }`.
+7. El resultado se audita con `{ promptId, promptVersion, useCaseId, userPrompt }`.
+8. El `GuideResult` incluye `promptId` y `promptVersion` en `metadata`.
 
 ---
 
-## 8. Por Qué los Prompts No Viven en los Adaptadores de WhatsApp
+## 10. Principios de Diseño
 
-**Separación de concerns**: Los prompts son dominio de AI Guide, no de infraestructura de mensajería.
-
-- Los adaptadores de WhatsApp manejan transporte (recibir/enviar mensajes).
-- Los prompts definen el comportamiento del LLM.
-- Si los prompts vivieran en el adaptador, cambiar de WhatsApp a Telegram requeriría duplicar prompts.
-- El `PromptRegistry` permite que cualquier canal use los mismos prompts versionados.
-
-**Domain ownership**: Los prompts pertenecen al módulo `ai-guide`, que es responsable de la calidad y seguridad de las respuestas del LLM.
+- **El LLM no es el módulo; el caso de uso es el módulo.**
+- **El prompt se elige por caso de uso, no por canal.**
+- **Cada caso recibe solo el contexto necesario.**
+- **No mandar toda la conversación por defecto.**
+- `mediation.understand_request` **no envía mensajes** — solo analiza.
+- `mediation.clarify` **no asume información faltante** — pregunta.
+- `conversation.reply` **no promete acciones no ejecutadas.**
+- `risk.review` **no responde al usuario final** — clasifica.
+- Los outputs JSON deben ser estables y validables.
+- Clean Architecture: dominio sin dependencias, aplicación depende de dominio, infraestructura implementa puertos.
 
 ---
 
-## 9. Cómo Versionar un Prompt Nuevo
+## 11. Cómo Versionar un Prompt Nuevo
 
 1. **Nombrar**: Seguir la convención `{module}.{capability}.{action}.v{n}`
-   - Ejemplo: `serena.conversation.reply.v2`
 2. **Agregar al tipo**: Añadir el nuevo ID al union type `PromptId` en `domain/prompt-id.ts`.
 3. **Definir**: Crear la entrada en `defaultPrompts` en `application/prompts/default-prompts.ts`.
 4. **Actualizar contrato**: Si un caso de uso migra a la nueva versión, actualizar `promptId` en `contracts.ts`.
-5. **Coexistencia**: Versiones viejas y nuevas pueden coexistir en el registry. Distintos casos de uso pueden usar distintas versiones.
+5. **Coexistencia**: Versiones viejas y nuevas pueden coexistir en el registry.
 
 ---
 
-## 10. Cómo Auditar Qué Versión de Prompt Produjo un Resultado
+## 12. Cómo Auditar Qué Versión de Prompt Produjo un Resultado
 
 Cada `GuideResult` (success y failed) incluye en su `metadata`:
 
 ```typescript
 {
-  promptId: PromptId;      // ej. "serena.conversation.reply.v1"
+  promptId: PromptId;      // ej. "serena.mediation.understand_request.v1"
   promptVersion: number;   // ej. 1
-  // ... otros campos de metadata
 }
 ```
 
 Los registros de auditoría (`AuditRecord`) también almacenan `promptId` y `promptVersion`.
 
-Para trazar qué prompt produjo un resultado:
-1. Inspeccionar `result.metadata.promptId` y `result.metadata.promptVersion`.
-2. Buscar en los registros de auditoría por `promptId` para ver todas las invocaciones de esa versión.
-3. Comparar resultados entre versiones (`v1` vs `v2`) para evaluar mejoras.
+---
+
+## 13. Restricciones del MVP
+
+No implementado todavía:
+- WhatsApp real ni `serena_device` real.
+- OpenAI/OpenRouter adapter.
+- Envío real de mensajes.
+- Permisos/admin completos (PermissionPolicy).
+- Prompts en DB.
+- Panel admin.
+- Memoria semántica avanzada.
+- Summarizer.
+- Herramientas externas.
 
 ---
 
 ## Referencias
 
-- Spec: `openspec/changes/prompt-registry/spec.md`
-- Design: `openspec/changes/prompt-registry/design.md`
-- Tasks: `openspec/changes/prompt-registry/tasks.md`
 - Domain types: `apps/core/src/modules/ai-guide/domain/`
-- Implementations: `apps/core/src/modules/ai-guide/application/prompts/`
+- Prompt definitions: `apps/core/src/modules/ai-guide/application/prompts/default-prompts.ts`
+- ContextBuilder: `apps/core/src/modules/ai-guide/application/prompts/context-builder.ts`
+- Pipeline: `apps/core/src/modules/ai-guide/application/use-cases/execution-pipeline.ts`
 - Tests: `apps/core/src/modules/ai-guide/tests/`

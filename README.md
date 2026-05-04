@@ -6,7 +6,7 @@ La Fase 1 apunta a mediacion prudente por WhatsApp: Serena recibe un pedido, ide
 
 ## Estado Actual
 
-El repositorio tiene el stack base desplegado en la VPS (T04), la arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), hardening interno completado (T17B), mock WhatsApp Gateway / dry-run adapter implementado (T18), y documentacion reorganizada (T18.1). 203 tests pasando.
+El repositorio tiene stack base desplegado en VPS (T04), arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), hardening interno completado (T17B), mock WhatsApp Gateway / dry-run adapter (T18), documentacion reorganizada (T18.1), modulo ai-guide con pipeline de ejecucion agnostico de LLM (T19), canal inbound channel-agnostic con resolucion de identidad externa (T20), y Simulation API con single-step y scenario runner multi-step. **345 tests pasando** (307 core + 38 gateway-wa).
 
 ## 🔒 Centro Operativo del Proyecto
 
@@ -48,13 +48,21 @@ Este repositorio funciona como centro operativo del proyecto Serena. Contiene do
 - **T17A — WhatsApp Gateway Contract**: `docs/architecture/t17a-whatsapp-gateway-contract.md` define el contrato completo entre Serena Core y el futuro WhatsApp Gateway. Incluye tipos (`NormalizedWhatsAppInboundMessage`, `WhatsAppGatewayAction`), funcion de mapeo pura (`mapPipelineResultToGatewayAction`) con 15 tests, politica de envio futuro, idempotencia y seguridad documentadas. Sin integracion real todavia.
 - **whatsapp-gateway**: tiene tipo `IncomingWhatsAppMessage` y puerto `WhatsAppGateway`; falta integracion real con Evolution API.
 
- **Modulos con pipeline implementado:**
+**Modulos con pipeline implementado:**
 
 - **orchestrator** (T15): caso de uso `ProcessIncomingWhatsAppMessage` que conecta inbound-gate → mediation-understanding → contact-directory → session-manager → mediation-bridge → prudent-rewording. Devuelve `PipelineResult` con variantes explicitas. 11 tests end-to-end in-memory.
-- **internal-pipeline-http** (T16): endpoint `POST /internal/pipeline/process` que valida JSON, ejecuta el pipeline orchestrator y devuelve `PipelineResult`. Factory in-memory con dependencias compartidas para continuidad de sesiones entre requests. 14 tests HTTP integrados. Ver `docs/architecture/t16-internal-pipeline-http.md`.
+- **internal-pipeline-http** (T16): endpoint `POST /internal/pipeline/process` que valida JSON, ejecuta el pipeline orchestrator y devuelve `PipelineResult`. Factory in-memory con dependencias compartidas para continuidad de sesiones entre requests. Con hardening (auth token + idempotencia). Ver `docs/architecture/t16-internal-pipeline-http.md`.
+- **ai-guide** (T19): modulo Clean/Hexagonal completamente agnostico de cualquier LLM provider. Incluye `UseCaseRegistry`, `ExecutionPipeline` con retry loop, `AiGuideService`, y contratos pre-definidos (`conversation.reply`, `risk.review`, `mediation.understand_request`). 28 tests con `MockLlmProvider` deterministico. Sin dependencia de otros modulos Serena.
+- **channel-agnostic inbound** (T20): `InboundMessageCommand` normaliza mensajes de cualquier canal (whatsapp, voice, web_chat, telegram, system, simulation) en un solo contrato. `ProcessChannelInboundMessage` ejecuta el pipeline completo con resolucion de identidad → inbound gate → AI guide → `ChannelInboundResult`. La resolucion de identidad corre ANTES del gate.
+- **external identity resolution** (T20): `ExternalIdentityResolver` traduce identificadores externos de canal a identidad interna (`personId`, `role`, `authorized`). Bloquea actores bloqueados antes del gate. Soporta multi-canal: mismo `personId` puede llegar por WhatsApp, voz o web_chat. Adapter in-memory con seed data (Marta en 3 canales).
 
 **Mock WhatsApp Gateway (T18):**
 - `apps/gateway-wa/` workspace con mock gateway / dry-run adapter. Simula el flujo completo del WhatsApp Gateway sin enviar mensajes reales (`sent: false`). Copia tipos del contrato T17A. 38 tests con fake `fetch`. Sin dependencias npm externas. Ver `docs/architecture/t18-mock-whatsapp-gateway.md`.
+
+**Simulation API (T20):**
+- Endpoint `POST /dev/simulate/inbound-message` — ejecuta el pipeline completo (inbound gate → AI guide) con mock LLM, sin WhatsApp real ni envio de mensajes. Devuelve traza completa: identidad resuelta, decision del gate, perfil LLM, resultado del AI guide. Solo habilitado con `ENABLE_SIMULATION_ENDPOINTS=true`.
+- Endpoint `POST /dev/simulate/scenario` — scenario runner multi-step. Ejecuta secuencias de pasos con estado compartido in-memory (sesiones persisten entre pasos). Soporta multi-actor, stopOnError, merge de metadata. Devuelve resultados por paso + summary agregado.
+- Ver `docs/simulation-api.md` para contrato completo, ejemplos curl y limitaciones.
 
 **Hardening interno (T17B):**
 
@@ -63,12 +71,34 @@ Este repositorio funciona como centro operativo del proyecto Serena. Contiene do
 - **CI**: GitHub Actions workflow en `.github/workflows/ci.yml` (PR/push a main, Node 22, check + test).
 - Ver `docs/architecture/t17b-internal-hardening.md`.
 
+### Pipeline actual
+
+El flujo conceptual de procesamiento de un mensaje entrante:
+
+```
+InboundMessageCommand                     # comando channel-agnostic (whatsapp, voice, web_chat, ...)
+  → ExternalIdentityResolver.resolve()    # traduce externalSenderId → personId/role/authorized
+  → [bloqueado? → short-circuit]          # identidades bloqueadas no pasan al gate
+  → ProcessChannelInboundMessage          # use case coordinador
+    → ProcessInboundMessage               # inbound gate: evalua, decide, rutea
+    → profileToUseCaseId                  # mapea perfil LLM → use case AI guide
+    → AiGuideService.execute()            # ejecuta AI guide (mock deterministico en dev)
+  → ChannelInboundResult                  # traza completa: identity, decision, guideResult, errores
+```
+
+- **WhatsApp sera un adapter futuro real**: el core no depende de WhatsApp. El `InboundMessageCommand` acepta cualquier canal. Cuando se integre Evolution API / Baileys, un `WhatsAppAdapter` normalizara el payload de WhatsApp a `InboundMessageCommand` y lo pasara al pipeline. El mock `gateway-wa` (T18) ya simula ese flujo.
+- **La Simulation API** (`POST /dev/simulate/inbound-message` y `POST /dev/simulate/scenario`) ejecuta exactamente este pipeline sin mensajes reales, sin WhatsApp real y sin LLM real.
+- Ver `docs/simulation-api.md` para el contrato completo de los endpoints de simulacion.
+
 ### Lo que no existe todavia
 
-- Conexion real a PostgreSQL desde la aplicacion (los modulos actuales usan stores in-memory)
-- Integracion con WhatsApp / Evolution API real
-- Panel web
-- Envio real de mensajes (el pipeline produce drafts/intenciones, no envia; el mock T18 simula el flujo del gateway sin enviar)
+- WhatsApp / Evolution API / Baileys real (solo contrato T17A y mock T18)
+- LLM provider real (OpenAI / OpenRouter); solo `MockLlmProvider` deterministico
+- Envio real de mensajes (el pipeline produce resultados, no envia; el mock simula `sent: false`)
+- Persistencia real de conversaciones (todo es in-memory, se pierde en restart)
+- Conexion real a PostgreSQL desde la aplicacion (stores in-memory)
+- Panel web / dashboard
+- Scheduler / cron real para tareas periodicas
 
 ## Forma De Trabajo
 
@@ -103,7 +133,7 @@ Todavia no esta decidido que modulo va en Node.js/TypeScript y cual va en Go. Es
 
 ```text
 apps/
-  core/          # nucleo de producto: inbound-gate, mediation-bridge, contact-directory, mediation-understanding, prudent-rewording, session-manager, + contratos
+  core/          # nucleo de producto: inbound-gate, mediation-bridge, contact-directory, mediation-understanding, prudent-rewording, session-manager, ai-guide, orchestrator, internal-pipeline, whatsapp-gateway (contrato)
   gateway-wa/    # mock WhatsApp gateway / dry-run adapter (T18)
   panel/         # placeholder para futuro panel, si corresponde
 packages/
@@ -219,24 +249,22 @@ Runbook operativo: `docs/ops/deployment-t04.md`.
 
 ## Proximos Pasos
 
-Fase completada: **logica de negocio con adaptadores in-memory** (T06-T16). Pipeline end-to-end funciona con 203 tests (165 core + 38 gateway-wa) y endpoint HTTP interno expuesto con hardening (T17B).
+Fase completada: **logica de negocio con pipeline channel-agnostic** (T06-T20). Pipeline end-to-end funciona con 345 tests (307 core + 38 gateway-wa). Endpoint HTTP interno con hardening (T17B), AI guide agnostico (T19), canal inbound multi-channel con resolucion de identidad (T20), y Simulation API con single-step y scenario runner.
 
-**Contrato WhatsApp Gateway especificado (T17A):** ver `docs/architecture/t17a-whatsapp-gateway-contract.md` para el contrato completo entre Serena Core y el futuro WhatsApp Gateway.
+**Proximo paso inmediato**: **scenario runner multi-step para simulaciones conversacionales** — el endpoint `POST /dev/simulate/scenario` ya existe. El foco inmediato es robustecerlo con mas escenarios de prueba y cobertura de edge cases.
 
-**Hardening interno completado (T17B):** ver `docs/architecture/t17b-internal-hardening.md` para autenticacion por token, idempotencia, y CI.
+**Despues**: decidir entre dos caminos:
 
-**Mock WhatsApp Gateway implementado (T18):** ver `docs/architecture/t18-mock-whatsapp-gateway.md` para el mock gateway / dry-run adapter.
+1. **Persistencia conversacional** — reemplazar stores in-memory con PostgreSQL adapters para que sesiones, contactos y auditoria sobrevivan restarts.
+2. **Adapter WhatsApp real** — integrar Evolution API / Baileys como adapter de canal real, respetando el contrato T17A y sin acoplar el core a WhatsApp.
 
-Proxima fase (T19+): **infraestructura real**:
-
-- **T19**: PostgreSQL adapters — reemplazar stores in-memory
-- **T20**: WhatsApp / Evolution API real integration
-- **T21**: VPS deployment update — WhatsApp Gateway + Serena detras de Caddy
+La decision depende de si queremos primero produccion real (WhatsApp) o primero datos durables (PostgreSQL).
 
 Ver tambien:
 
 - `docs/project-status.md`
 - `docs/open-questions.md`
+- `docs/simulation-api.md`
 - `docs/architecture/t10-mvp-architecture.md`
 - `docs/architecture/t17a-whatsapp-gateway-contract.md`
 - `docs/ops/deployment-t04.md` (runbook operativo actual)

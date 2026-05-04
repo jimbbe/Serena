@@ -129,7 +129,23 @@ Define exactamente qué contexto recibe el LLM para cada caso de uso.
 
 ## 7. OutputContract
 
-El `OutputContract` documenta en código qué campos devuelve cada prompt y qué significa cada uno. Esto le permite a Serena (y a futuro a un validador) saber qué esperar sin depender exclusivamente del prompt.
+El `OutputContract` documenta en código qué campos devuelve cada prompt y qué significa cada uno. Además, **el `ExecutionPipeline` renderiza automáticamente el `OutputContract` y lo incluye en el `developerPrompt` enviado al LLM**, eliminando la dualidad entre documentación interna y lo que realmente recibe el modelo.
+
+### Renderizado automático
+
+```
+PromptDefinition.outputContract
+  → renderOutputContract()
+  → ExecutionPipeline
+  → LLM request con developerPrompt += contrato renderizado
+```
+
+El LLM recibe:
+1. `systemPrompt` — rol, reglas y comportamiento.
+2. `userPrompt` — contexto construido por `ContextBuilder`.
+3. `developerPrompt` — **contrato de salida renderizado desde `OutputContract`** con nombre, tipo, descripción y `allowedValues` de cada campo.
+
+Esto asegura que no haya dos fuentes de verdad: la definición formal en código alimenta directamente el prompt que recibe el modelo.
 
 ### Forma del contrato
 
@@ -310,6 +326,7 @@ Los registros de auditoría (`AuditRecord`) también almacenan `promptId` y `pro
 ## 13. Restricciones del MVP
 
 No implementado todavía:
+- Validación JSON fuerte con Zod/JSON Schema (viene en PR posterior).
 - WhatsApp real ni `serena_device` real.
 - OpenAI/OpenRouter adapter.
 - Envío real de mensajes.

@@ -5,6 +5,7 @@ import type { LlmProvider } from "../ports/llm-provider.ts";
 import type { AiInvocationAudit } from "../ports/ai-invocation-audit.ts";
 import type { PromptRegistry } from "../ports/prompt-registry.ts";
 import type { ContextBuilder } from "../prompts/context-builder.ts";
+import { renderOutputContract } from "../prompts/render-output-contract.ts";
 
 type AuditOutcome = {
   auditRecorded: boolean;
@@ -88,14 +89,20 @@ export class ExecutionPipeline {
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
+        const outputContractInstructions = renderOutputContract(promptDef.outputContract);
+        const developerPrompt = [
+          promptDef.developerPrompt,
+          outputContractInstructions,
+        ]
+          .filter(Boolean)
+          .join("\n\n");
+
         const providerResult = await this.provider.invoke({
           promptId: promptDef.id,
           promptVersion: promptDef.version,
           systemPrompt: promptDef.systemPrompt,
           userPrompt,
-          ...(promptDef.developerPrompt !== undefined
-            ? { developerPrompt: promptDef.developerPrompt }
-            : {}),
+          ...(developerPrompt !== "" ? { developerPrompt } : {}),
           policy: contract.executionPolicy,
         });
 

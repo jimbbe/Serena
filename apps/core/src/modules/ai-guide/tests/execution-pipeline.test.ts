@@ -286,6 +286,95 @@ test("pipeline fails when prompt not in registry", async () => {
   );
 });
 
+// ── Output contract rendering tests ──────────────────────────────
+
+test("pipeline sends output contract rendered to provider as developerPrompt", async () => {
+  let receivedDeveloperPrompt: string | undefined;
+  const mockProvider = new MockLlmProvider();
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke(req) {
+        receivedDeveloperPrompt = req.developerPrompt;
+        return mockProvider.invoke(req);
+      },
+    },
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+
+  await pipeline.execute(makeContract(), { input: "Hello" });
+
+  assert.ok(
+    receivedDeveloperPrompt !== undefined,
+    "developerPrompt must be sent to provider"
+  );
+  assert.ok(
+    receivedDeveloperPrompt!.includes("Contrato de salida"),
+    "developerPrompt must contain output contract header"
+  );
+});
+
+test("understand_request pipeline includes field names in developerPrompt", async () => {
+  let receivedDeveloperPrompt: string | undefined;
+  const mockProvider = new MockLlmProvider();
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke(req) {
+        receivedDeveloperPrompt = req.developerPrompt;
+        return mockProvider.invoke(req);
+      },
+    },
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+
+  await pipeline.execute(
+    makeContract({
+      id: "serena.mediation.understand_request",
+      promptId: "serena.mediation.understand_request.v1",
+    }),
+    { input: "Decile a Mari que llego más tarde" }
+  );
+
+  assert.ok(receivedDeveloperPrompt !== undefined);
+  assert.ok(receivedDeveloperPrompt!.includes("isMediationRequest"));
+  assert.ok(receivedDeveloperPrompt!.includes("recipientHint"));
+  assert.ok(receivedDeveloperPrompt!.includes("messageDraft"));
+  assert.ok(receivedDeveloperPrompt!.includes("missingFields"));
+  assert.ok(receivedDeveloperPrompt!.includes("riskSignal"));
+  assert.ok(receivedDeveloperPrompt!.includes("recipient"));
+  assert.ok(receivedDeveloperPrompt!.includes("message"));
+  assert.ok(receivedDeveloperPrompt!.includes("confirmation"));
+});
+
+test("risk.review pipeline includes field names and allowedValues in developerPrompt", async () => {
+  let receivedDeveloperPrompt: string | undefined;
+  const mockProvider = new MockLlmProvider();
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke(req) {
+        receivedDeveloperPrompt = req.developerPrompt;
+        return mockProvider.invoke(req);
+      },
+    },
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+
+  await pipeline.execute(
+    makeContract({ id: "serena.risk.review", promptId: "serena.risk.review.v1" }),
+    { input: "Me siento mal" }
+  );
+
+  assert.ok(receivedDeveloperPrompt !== undefined);
+  assert.ok(receivedDeveloperPrompt!.includes("riskLevel"));
+  assert.ok(receivedDeveloperPrompt!.includes("riskType"));
+  assert.ok(receivedDeveloperPrompt!.includes("recommendedAction"));
+  assert.ok(receivedDeveloperPrompt!.includes("low"));
+  assert.ok(receivedDeveloperPrompt!.includes("critical"));
+  assert.ok(receivedDeveloperPrompt!.includes("notify_contact"));
+});
+
 // ── Type narrowing convenience tests ────────────────────────────────
 
 test("discriminated union narrows correctly via status check", async () => {

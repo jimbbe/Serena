@@ -115,6 +115,18 @@ export type ScenarioResult = {
   steps: ScenarioStepResult[];
   /** Aggregate summary. */
   summary: ScenarioSummary;
+  /**
+   * Last active conversation across scenario steps.
+   *
+   * Reflects the conversation state after the final successfully
+   * processed step.  Useful for API consumers that need a quick
+   * handle without drilling into per-step results.
+   */
+  conversation?: {
+    readonly id: string;
+    readonly status: string;
+    readonly messageCount: number;
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -247,6 +259,9 @@ export class SimulationScenarioRunner {
     const steps: ScenarioStepResult[] = [];
     const stopOnError = request.stopOnError ?? false;
 
+    // Auto-propagated conversationId from previous step result
+    let autoConversationId: string | undefined;
+
     for (let i = 0; i < request.steps.length; i++) {
       const stepInput = request.steps[i]!;
 
@@ -263,7 +278,11 @@ export class SimulationScenarioRunner {
         command.personId = stepInput.personId;
       }
 
-      const effectiveConversationId = stepInput.conversationId ?? request.conversationId;
+      // conversationId resolution: step override > auto-propagated > scenario default
+      const effectiveConversationId =
+        stepInput.conversationId ??
+        autoConversationId ??
+        request.conversationId;
       if (effectiveConversationId !== undefined) {
         command.conversationId = effectiveConversationId;
       }
@@ -310,6 +329,12 @@ export class SimulationScenarioRunner {
         error,
       });
 
+      // Auto-propagate conversationId from result to next step
+      // (step-level override takes priority — see conversationId resolution above)
+      if (result?.conversation?.id !== undefined) {
+        autoConversationId = result.conversation.id;
+      }
+
       // stopOnError: use the shared failure predicate so controlled
       // failures (guideResult.status === "failed", guideError, etc.)
       // also stop execution — not just thrown exceptions.
@@ -321,11 +346,22 @@ export class SimulationScenarioRunner {
 
     const summary = calculateSummary(steps);
 
+    // Extract the last active conversation for top-level convenience.
+    let scenarioConversation: ScenarioResult["conversation"] = undefined;
+    for (let i = steps.length - 1; i >= 0; i--) {
+      const conv = steps[i]!.result?.conversation;
+      if (conv !== undefined) {
+        scenarioConversation = conv;
+        break;
+      }
+    }
+
     return {
       scenarioId: request.scenarioId,
       traceId,
       steps,
       summary,
+      ...(scenarioConversation !== undefined ? { conversation: scenarioConversation } : {}),
     };
   }
 }

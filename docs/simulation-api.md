@@ -82,6 +82,11 @@ guarded by the environment variable.
   "guideResult":      { /* AI guide response */ }, // AI output (undefined if blocked or error)
   "guideError":       null,           // structured error { message, code? } if AI failed
   "simulatedOutbound": null,          // simulated draft (Phase 1: always null)
+  "conversation":    {                 // conversation tracking (when identity is resolved)
+    "id":            "a1b2c3d4-...",   // auto-generated conversation UUID
+    "status":        "open",           // conversation status (always "open" in Phase 1)
+    "messageCount":  2                 // number of messages in this conversation (inbound + outbound)
+  },
   "warnings":         [],             // non-fatal issues (e.g. missing optional fields)
   "errors":           []              // fatal issues (empty = success)
 }
@@ -320,6 +325,94 @@ curl -X POST http://localhost:3000/dev/simulate/inbound-message \
 - **Clarification not implemented** — the `clarification` LLM profile is mapped but `AiGuideService` throws a controlled error that appears as a structured `guideError` in the response (200, not 500).
 - **Empty simulatedOutbound** — mediation drafts are not generated yet. The field is reserved for Phase 2.
 - **Identity resolution runs first** — the `ExternalIdentityResolver` translates external channel IDs to internal `personId` BEFORE gate evaluation. Blocked identities short-circuit the entire pipeline. Unknown identities continue to the gate (which will likely block them as unknown senders).
+
+## Conversation Tracking (NEW)
+
+Every resolved identity automatically gets conversation tracking. When the identity resolver returns `status: "resolved"`, the pipeline:
+
+1. **Finds or creates** a conversation scoped to the tenant + person pair
+2. **Appends** the inbound message to the conversation
+3. **Appends** the AI guide output as an outbound message
+4. **Returns** conversation info in the response
+
+### Auto-created conversationId
+
+If no `conversationId` is provided in the request, the store auto-generates a UUID:
+
+```bash
+curl -X POST http://localhost:3000/dev/simulate/inbound-message \
+  -H "Content-Type: application/json" \
+  -d '{
+    "channel": "whatsapp",
+    "externalSenderId": "5491111111111",
+    "text": "hola"
+  }'
+```
+
+```jsonc
+{
+  "conversation": {
+    "id": "d4e5f6a7-b8c9-...",  // auto-generated UUID
+    "status": "open",
+    "messageCount": 2             // inbound "hola" + AI response
+  }
+}
+```
+
+### Manual conversationId
+
+Pass `conversationId` in the request to continue an existing conversation:
+
+```bash
+curl -X POST http://localhost:3000/dev/simulate/inbound-message \
+  -H "Content-Type: application/json" \
+  -d '{
+    "channel": "whatsapp",
+    "externalSenderId": "5491111111111",
+    "text": "y cómo estás vos?",
+    "conversationId": "d4e5f6a7-b8c9-..."
+  }'
+```
+
+If the `conversationId` exists and belongs to the same tenant + person pair, it is reused.
+If it doesn't exist (or belongs to a different tenant/person), a new conversation is created.
+
+### Scenario continuity
+
+In multi-step scenarios (`POST /dev/simulate/scenario`), the `conversationId` is automatically
+propagated from one step to the next. All steps by the same sender share the same conversation
+unless a step explicitly overrides `conversationId`.
+
+```bash
+curl -X POST http://localhost:3000/dev/simulate/scenario \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scenarioId": "chat-flow",
+    "tenantId": "demo",
+    "channel": "whatsapp",
+    "externalSenderId": "5491111111111",
+    "steps": [
+      { "text": "hola" },
+      { "text": "cómo estás?" },
+      { "text": "chau" }
+    ]
+  }'
+```
+
+All three steps share the same auto-generated conversation ID.
+
+### Store lifetime
+
+The conversation store is **in-memory only** (not persistent). All conversations and
+messages are lost on server restart. PostgreSQL persistence will be added in a future phase.
+
+### Identity constraints
+
+- Only `resolved` identities get conversations — `unknown` and `blocked` identities do not
+- Conversations are scoped by `tenantId + personId`, not by channel or `externalSenderId`
+- Different senders (Marta vs María) get different conversations
+- The same person across different channels (whatsapp vs voice) gets the same conversation
+  (when identity resolver maps both to the same `personId`)
 
 ---
 

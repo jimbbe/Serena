@@ -20,12 +20,14 @@ import type { ChannelInboundResult } from "../results/channel-inbound-result.ts"
 import type { ResolvedInboundActor } from "../results/resolved-inbound-actor.ts";
 import type { GuideUseCaseId } from "../../../ai-guide/domain/guide-use-case-id.ts";
 import type { GuideResult } from "../../../ai-guide/domain/guide-result.ts";
+import type { ConversationMessage } from "../../../conversation-store/domain/conversation-message.ts";
 
 import { profileToUseCaseId } from "../mappers/profile-to-usecase.ts";
 import type { ProcessInboundMessage } from "./process-inbound-message.ts";
 import type { ProcessInboundMessageInput } from "./process-inbound-message.ts";
 import type { AiGuideService } from "../../../ai-guide/application/use-cases/ai-guide-service.ts";
 import type { ExternalIdentityResolver } from "../ports/external-identity-resolver.ts";
+import type { ConversationStore } from "../../../conversation-store/port/conversation-store.ts";
 
 // ---------------------------------------------------------------------------
 // Dependencies
@@ -35,6 +37,7 @@ export type ProcessChannelInboundMessageDependencies = {
   processInboundMessage: ProcessInboundMessage;
   aiGuideService: AiGuideService;
   identityResolver: ExternalIdentityResolver;
+  conversationStore: ConversationStore;
   /** Optional custom trace ID generator (defaults to crypto.randomUUID). */
   generateTraceId?: () => string;
 };
@@ -47,12 +50,14 @@ export class ProcessChannelInboundMessage {
   private readonly processInboundMessage: ProcessInboundMessage;
   private readonly aiGuideService: AiGuideService;
   private readonly identityResolver: ExternalIdentityResolver;
+  private readonly conversationStore: ConversationStore;
   private readonly generateTraceId: () => string;
 
   constructor(deps: ProcessChannelInboundMessageDependencies) {
     this.processInboundMessage = deps.processInboundMessage;
     this.aiGuideService = deps.aiGuideService;
     this.identityResolver = deps.identityResolver;
+    this.conversationStore = deps.conversationStore;
     this.generateTraceId = deps.generateTraceId ?? (() => randomUUID());
   }
 
@@ -67,9 +72,6 @@ export class ProcessChannelInboundMessage {
     }
     if (!cmd.personId) {
       warnings.push("Missing optional field: personId");
-    }
-    if (!cmd.conversationId) {
-      warnings.push("Missing optional field: conversationId");
     }
 
     // 0. Resolve external identity BEFORE gate evaluation
@@ -90,7 +92,32 @@ export class ProcessChannelInboundMessage {
       };
     }
 
-    // 1. Short-circuit: blocked identity
+    // 1. Conversation tracking — create conversation for resolved identities
+    let conversationId: string | undefined;
+    if (identity.status === "resolved") {
+      const personId = identity.personId ?? cmd.externalSenderId;
+      const conv = await this.conversationStore.findOrCreateConversation({
+        tenantId: identity.tenantId,
+        personId,
+        ...(cmd.conversationId !== undefined ? { conversationId: cmd.conversationId } : {}),
+      });
+      conversationId = conv.id;
+
+      // Append inbound message
+      const inboundMsg: ConversationMessage = {
+        id: randomUUID(),
+        conversationId: conv.id,
+        tenantId: identity.tenantId,
+        personId,
+        channel: cmd.channel,
+        direction: "inbound",
+        text: cmd.text,
+        occurredAt: new Date(),
+      };
+      await this.conversationStore.appendMessage(inboundMsg);
+    }
+
+    // 2. Short-circuit: blocked identity
     if (identity.status === "blocked") {
       return {
         traceId,
@@ -117,15 +144,15 @@ export class ProcessChannelInboundMessage {
       };
     }
 
-    // 2. Adapt InboundMessageCommand → ProcessInboundMessageInput
+    // 3. Adapt InboundMessageCommand → ProcessInboundMessageInput
     //    For resolved identities: use personId as senderId (NOT externalSenderId)
     //    For unknown identities: externalSenderId passes through (gate decides)
     const adaptedInput = this.adaptInput(cmd, identity);
 
-    // 3. Execute inbound gate evaluation
+    // 4. Execute inbound gate evaluation
     const { decision, route } = await this.processInboundMessage.execute(adaptedInput);
 
-    // 4. Discard path — no AI guide needed
+    // 5. Discard path — no AI guide needed
     if (route.nextStep === "discard") {
       return {
         traceId,
@@ -135,12 +162,19 @@ export class ProcessChannelInboundMessage {
         profileId: undefined,
         useCaseId: undefined,
         guideResult: undefined,
+        ...(conversationId !== undefined ? {
+          conversation: {
+            id: conversationId,
+            status: "open",
+            messageCount: 1,
+          },
+        } : {}),
         warnings,
         errors,
       };
     }
 
-    // 5. LLM profile required — resolve profile and execute AI guide
+    // 6. LLM profile required — resolve profile and execute AI guide
     const profileId = route.profileId;
     const useCaseId: GuideUseCaseId = profileToUseCaseId(profileId);
 
@@ -173,6 +207,25 @@ export class ProcessChannelInboundMessage {
       }
     }
 
+    // Record outbound messages if simulatedOutput is present
+    let outboundMessageCount = 0;
+    if (guideResult !== undefined && conversationId !== undefined) {
+      const outboundText =
+        guideResult.status === "success" ? String(guideResult.output) : "(ai guide failed)";
+      const outboundMsg: ConversationMessage = {
+        id: randomUUID(),
+        conversationId,
+        tenantId: identity.tenantId,
+        personId: identity.personId ?? cmd.externalSenderId,
+        channel: cmd.channel,
+        direction: "outbound",
+        text: outboundText,
+        occurredAt: new Date(),
+      };
+      await this.conversationStore.appendMessage(outboundMsg);
+      outboundMessageCount = 1;
+    }
+
     return {
       traceId,
       channel: cmd.channel,
@@ -182,6 +235,13 @@ export class ProcessChannelInboundMessage {
       useCaseId,
       guideResult,
       ...(guideError !== undefined ? { guideError } : {}),
+      ...(conversationId !== undefined ? {
+        conversation: {
+          id: conversationId,
+          status: "open",
+          messageCount: 1 + outboundMessageCount,
+        },
+      } : {}),
       warnings,
       errors,
     };

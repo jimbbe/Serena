@@ -45,16 +45,15 @@ export const mediationUnderstandRequestV1: PromptDefinition = {
     includeResolvedIdentity: true,
     includeActorContext: true,
     includeChannelMetadata: true,
-    includeConversationHistory: true,
-    maxRecentMessages: 4,
-    includeKnownContacts: true,
+    includeConversationHistory: false,
+    includeKnownContacts: false,
     includeSafetyMemory: false,
     includeFullConversation: false,
   },
   outputContract: {
     format: "json",
     description: "Análisis estructurado del pedido de mediación.",
-    strict: false,
+    strict: true,
     fields: [
       {
         name: "isMediationRequest",

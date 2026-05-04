@@ -441,3 +441,171 @@ test("failed result narrows correctly", async () => {
     assert.fail("failing provider should return failed");
   }
 });
+
+// ── Output contract validation tests (P1) ────────────────────────────
+
+test("provider returns invalid JSON for risk.review → failed", async () => {
+  const audit = new InMemoryAiInvocationAudit();
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke() {
+        return { content: "not json", tokensUsed: 5, modelUsed: "mock" };
+      },
+    },
+    audit,
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+  const contract = makeContract({
+    id: "serena.risk.review",
+    promptId: "serena.risk.review.v1",
+  });
+
+  const result = await pipeline.execute(contract, { input: "test" });
+
+  assert.equal(result.status, "failed");
+  const failed = result as GuideResultFailed;
+  assert.ok(
+    failed.error.message.startsWith("Output contract validation failed:"),
+    `Expected validation failure, got: ${failed.error.message}`
+  );
+  assert.ok(failed.error.message.includes("Invalid JSON"));
+  assert.equal(failed.metadata.promptId, "serena.risk.review.v1");
+});
+
+test("provider returns JSON missing required field → failed", async () => {
+  const audit = new InMemoryAiInvocationAudit();
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke() {
+        return { content: '{"riskLevel": "low"}', tokensUsed: 3, modelUsed: "mock" };
+      },
+    },
+    audit,
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+  const contract = makeContract({
+    id: "serena.risk.review",
+    promptId: "serena.risk.review.v1",
+  });
+
+  const result = await pipeline.execute(contract, { input: "test" });
+
+  assert.equal(result.status, "failed");
+  const failed = result as GuideResultFailed;
+  assert.ok(failed.error.message.includes("Missing required field"));
+});
+
+test("provider returns invalid enum value → failed", async () => {
+  const audit = new InMemoryAiInvocationAudit();
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke() {
+        return { content: '{"riskLevel": "extreme"}', tokensUsed: 4, modelUsed: "mock" };
+      },
+    },
+    audit,
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+  const contract = makeContract({
+    id: "serena.risk.review",
+    promptId: "serena.risk.review.v1",
+  });
+
+  const result = await pipeline.execute(contract, { input: "test" });
+
+  assert.equal(result.status, "failed");
+  const failed = result as GuideResultFailed;
+  assert.ok(failed.error.message.includes("Invalid value"), `Expected invalid value, got: ${failed.error.message}`);
+});
+
+test("provider returns valid JSON → success", async () => {
+  const audit = new InMemoryAiInvocationAudit();
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke() {
+        return {
+          content: JSON.stringify({
+            riskLevel: "low",
+            riskType: "unknown",
+            source: "direct",
+            situationSummary: "No se detectan riesgos.",
+            recommendedAction: "reply",
+            requiresEscalation: false,
+            missingInformation: [],
+          }),
+          tokensUsed: 10,
+          modelUsed: "mock",
+        };
+      },
+    },
+    audit,
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+  const contract = makeContract({
+    id: "serena.risk.review",
+    promptId: "serena.risk.review.v1",
+  });
+
+  const result = await pipeline.execute(contract, { input: "test" });
+
+  assert.equal(result.status, "success");
+  const success = result as GuideResultSuccess;
+  assert.equal(success.metadata.promptId, "serena.risk.review.v1");
+});
+
+test("validation failure audits success=false with provider output", async () => {
+  const audit = new InMemoryAiInvocationAudit();
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke() {
+        return { content: "not valid json", tokensUsed: 7, modelUsed: "mock" };
+      },
+    },
+    audit,
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+  const contract = makeContract({
+    id: "serena.risk.review",
+    promptId: "serena.risk.review.v1",
+  });
+
+  await pipeline.execute(contract, { input: "test" });
+
+  const records = audit.getRecords();
+  assert.equal(records.length, 1);
+  const r0 = records[0]!;
+  assert.equal(r0.success, false, "audit must record failure");
+  assert.equal(r0.output, "not valid json", "audit must preserve provider output for debugging");
+  assert.ok(r0.error !== undefined, "audit must contain error message");
+});
+
+test("validation failure does NOT retry even with retryOnFailure=true", async () => {
+  let callCount = 0;
+  const audit = new InMemoryAiInvocationAudit();
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke() {
+        callCount++;
+        return { content: "bad json", tokensUsed: 2, modelUsed: "mock" };
+      },
+    },
+    audit,
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+  const contract = makeContract({
+    id: "serena.risk.review",
+    promptId: "serena.risk.review.v1",
+    executionPolicy: { ...defaultPolicy, retryOnFailure: true, maxRetries: 2 },
+  });
+
+  const result = await pipeline.execute(contract, { input: "test" });
+
+  assert.equal(result.status, "failed");
+  assert.equal(callCount, 1, "validation failure must not retry");
+});

@@ -40,13 +40,13 @@ The system SHALL include tests for `ContextPolicy` covering: each of the 4 use c
 
 - GIVEN the ContextPolicy for `serena.conversation.reply`
 - WHEN evaluated
-- THEN includeCurrentMessage=true, includeResolvedIdentity=true, includeChannelMetadata=true, includeConversationHistory=true, maxRecentMessages=8, includeSafetyMemory=true, includeKnownContacts=false, includeFullConversation=false
+- THEN includeCurrentMessage=true, includeResolvedIdentity=true, includeActorContext=true, includeChannelMetadata=true, includeConversationHistory=false, includeKnownContacts=false, includeSafetyMemory=false, includeFullConversation=false
 
 #### Scenario: Risk review contextPolicy
 
 - GIVEN the ContextPolicy for `serena.risk.review`
 - WHEN evaluated
-- THEN includeCurrentMessage=true, includeResolvedIdentity=true, includeChannelMetadata=true, includeConversationHistory=true, maxRecentMessages=5, includeSafetyMemory=true, includeKnownContacts=false, includeFullConversation=false
+- THEN includeCurrentMessage=true, includeResolvedIdentity=true, includeActorContext=true, includeChannelMetadata=true, includeConversationHistory=false, includeKnownContacts=false, includeSafetyMemory=false, includeFullConversation=false
 
 ### Requirement: ContextBuilder Tests
 
@@ -55,14 +55,13 @@ The system SHALL include tests for `ContextBuilder` covering: building with all 
 #### Scenario: ContextBuilder with all data
 
 - GIVEN a ContextPolicy with includeCurrentMessage=true, includeConversationHistory=true (maxRecentMessages=3), includeResolvedIdentity=true
-- WHEN ContextBuilder.build() is called with currentMessage="Hola", 4 recent messages, resolvedIdentity="Abuela Rosa"
-- THEN the output includes "Hola", "Abuela Rosa", and only the 3 most recent messages
+- WHEN ContextBuilder.build() is called in isolation with currentMessage="Hola", 4 recent messages, resolvedIdentity="Abuela Rosa"
+- THEN the output includes "Hola", "Abuela Rosa", and only the 3 most recent messages (note: Phase 1 prompts set includeConversationHistory=false, but the builder supports the flag when enabled)
 
 #### Scenario: ContextBuilder handles missing optional data
 
 - GIVEN a ContextPolicy with includeKnownContacts=true, includeSafetyMemory=true
-- WHEN ContextBuilder.build() is called WITHOUT knownContacts or safetyMemory
-- THEN the output is built successfully without those sections
+- WHEN ContextBuilder.build() is called in isolation WITHOUT knownContacts or safetyMemory (note: Phase 1 prompts set these to false, but the builder handles them gracefully when enabled)
 
 ### Requirement: Registry Tests
 
@@ -82,7 +81,7 @@ Tests SHALL cover: registering a new contract, retrieving a registered contract,
 
 ### Requirement: Pipeline Tests
 
-Tests SHALL cover: successful execution with valid contract, PromptRegistry, and provider; pipeline records audit with promptId and promptVersion; pipeline builds user prompt via ContextBuilder; pipeline fails gracefully when prompt not in registry; empty result handling; provider error handling with and without retry.
+Tests SHALL cover: successful execution with valid contract, PromptRegistry, and provider; pipeline records audit with promptId and promptVersion; pipeline builds user prompt via ContextBuilder; pipeline fails gracefully when prompt not in registry; empty result handling; provider error handling with and without retry; output contract validation failures (invalid JSON, missing required fields, invalid enum values) treated as hard failures with no retry, audit recording success=false and preserving provider output.
 
 #### Scenario: Pipeline executes successfully with prompt metadata
 
@@ -93,6 +92,26 @@ Tests SHALL cover: successful execution with valid contract, PromptRegistry, and
 #### Scenario: Pipeline fails when prompt not in registry
 
 - GIVEN a contract with a promptId not in the registry
+- WHEN the pipeline executes
+- THEN it returns a failed GuideResult
+
+#### Scenario: Pipeline fails on output contract validation
+
+- GIVEN a provider that returns invalid JSON for a JSON contract
+- WHEN the pipeline executes
+- THEN it returns a failed GuideResult with "Output contract validation failed:" prefix
+- AND audit records success=false with the provider output preserved
+- AND the pipeline does NOT retry even with retryOnFailure=true
+
+#### Scenario: Pipeline fails on missing required field
+
+- GIVEN a provider that returns JSON missing a required field
+- WHEN the pipeline executes
+- THEN it returns a failed GuideResult
+
+#### Scenario: Pipeline fails on invalid enum value
+
+- GIVEN a provider that returns JSON with an enum value outside allowedValues
 - WHEN the pipeline executes
 - THEN it returns a failed GuideResult
 
@@ -146,13 +165,17 @@ Tests SHALL cover: records invocation with auditId, promptId, promptVersion and 
 
 ### Requirement: All Existing Tests Pass
 
-The system SHALL ensure that all 28 existing tests continue to pass after the prompt-registry update, with updated contract factories and mock keying. The total test count SHALL be 334 (28 existing + 3 new test files with 28 new tests + cross-module updates).
+The system SHALL ensure that all tests continue to pass after each change. The full test suite (core + gateway-wa) SHALL pass with zero failures, and all tests SHALL use only mock implementations without external dependencies.
 
 #### Scenario: Full test suite passes
 
-- GIVEN all test files are updated to the new prompt-registry shape
-- WHEN `npm run check` is executed
-- THEN all 334 tests pass with zero failures
+- GIVEN all test files are up to date
+- WHEN `npm run test` is executed
+- THEN all tests pass with zero failures
+
+### Requirement: OutputContract Validation Tests
+
+The system SHALL include tests for `validateOutputContract()` covering all supported field types and edge cases: text format empty/valid, JSON parse errors, JSON non-object input, missing required fields, type mismatches for each supported type, allowedValues for string/enum/string[]/enum[] fields, optional fields, and integration with the 4 real contracts.
 
 ### Requirement: Test Isolation
 

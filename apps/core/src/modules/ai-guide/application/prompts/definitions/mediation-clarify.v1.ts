@@ -37,16 +37,15 @@ export const mediationClarifyV1: PromptDefinition = {
     includeResolvedIdentity: true,
     includeActorContext: true,
     includeChannelMetadata: false,
-    includeConversationHistory: true,
-    maxRecentMessages: 3,
-    includeKnownContacts: true,
+    includeConversationHistory: false,
+    includeKnownContacts: false,
     includeSafetyMemory: false,
     includeFullConversation: false,
   },
   outputContract: {
     format: "json",
     description: "Pregunta de aclaración para el flujo de mediación.",
-    strict: false,
+    strict: true,
     fields: [
       {
         name: "question",

@@ -6,6 +6,7 @@ import type { AiInvocationAudit } from "../ports/ai-invocation-audit.ts";
 import type { PromptRegistry } from "../ports/prompt-registry.ts";
 import type { ContextBuilder } from "../prompts/context-builder.ts";
 import { renderOutputContract } from "../prompts/render-output-contract.ts";
+import { validateOutputContract } from "../prompts/validate-output-contract.ts";
 import { parsePromptVersion } from "../../domain/prompt-version.ts";
 
 type AuditOutcome = {
@@ -105,6 +106,8 @@ export class ExecutionPipeline {
     let lastError: Error | undefined;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      let lastContent = "";
+      let lastTokensUsed: number | undefined;
       try {
         const outputContractInstructions = renderOutputContract(promptDef.outputContract);
         const developerPrompt = [
@@ -124,10 +127,18 @@ export class ExecutionPipeline {
         });
 
         const content = providerResult.content;
+        lastContent = content;
+        lastTokensUsed = providerResult.tokensUsed;
 
         // Validate result is not empty (validation error — not retried)
         if (!content || content.trim().length === 0) {
           throw new Error("Empty result from provider");
+        }
+
+        // Validate output against declared OutputContract (hard failure — not retried)
+        const validation = validateOutputContract(promptDef.outputContract, content);
+        if (!validation.ok) {
+          throw new Error(`Output contract validation failed: ${validation.message}`);
         }
 
         const executionTimeMs = Date.now() - startTime;
@@ -160,16 +171,19 @@ export class ExecutionPipeline {
 
         const executionTimeMs = Date.now() - startTime;
 
-        // Empty result is a hard failure — don't retry
-        const isHardFailure = error.message === "Empty result from provider";
+        // Empty result or output contract validation are hard failures — don't retry
+        const isHardFailure =
+          error.message === "Empty result from provider" ||
+          error.message.startsWith("Output contract validation failed:");
         if (isHardFailure) {
+          const isValidationFailure = error.message.startsWith("Output contract validation failed:");
           const outcome = await this.recordAudit(
             contract,
             promptDef.id,
             promptDef.version,
             userPrompt,
-            "",
-            0,
+            isValidationFailure ? lastContent : "",  // preserve invalid output for debuggability
+            isValidationFailure ? lastTokensUsed : 0,
             executionTimeMs,
             false,
             error.message

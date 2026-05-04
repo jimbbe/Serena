@@ -114,22 +114,33 @@ Define exactamente qué contexto recibe el LLM para cada caso de uso.
 | `includeFullConversation` | `boolean` | Incluye la conversación completa (Phase 1: siempre false) |
 | `notes?` | `string` | Notas para documentación |
 
-### Valores por caso de uso (MVP)
+### Valores por caso de uso (Phase 1)
 
-| Use Case | current | identity | actor | channel | history | max | contacts | safety | full |
-|----------|---------|----------|-------|---------|---------|-----|----------|--------|------|
-| `mediation.understand_request` | ✅ | ✅ | ✅ | ✅ | ✅ | 4 | ✅ | ❌ | ❌ |
-| `mediation.clarify` | ✅ | ✅ | ✅ | ❌ | ✅ | 3 | ✅ | ❌ | ❌ |
-| `conversation.reply` | ✅ | ✅ | ✅ | ✅ | ✅ | 6 | ❌ | ❌ | ❌ |
-| `risk.review` | ✅ | ✅ | ✅ | ✅ | ✅ | 5 | ❌ | ❌ | ❌ |
+| Use Case | current | identity | actor | channel | history | contacts | safety | full |
+|----------|---------|----------|-------|---------|---------|----------|--------|------|
+| `mediation.understand_request` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| `mediation.clarify` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `conversation.reply` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| `risk.review` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 
-**Regla fuerte**: ningún caso incluye conversación completa por defecto.
+**Nota Phase 1**: `includeConversationHistory` e `includeKnownContacts` están en `false` para todos los prompts. El `ContextBuilder` tiene capacidad de recibir `recentMessages` y `knownContacts`, pero `ExecutionPipeline.buildUserPrompt()` aún no los pasa porque no hay `ConversationStore` ni `ContactDirectory` conectados. Esas banderas se activarán cuando se conecten los stores reales.
 
 ---
 
 ## 7. OutputContract
 
 El `OutputContract` documenta en código qué campos devuelve cada prompt y qué significa cada uno. Además, **el `ExecutionPipeline` renderiza automáticamente el `OutputContract` y lo incluye en el `developerPrompt` enviado al LLM**, eliminando la dualidad entre documentación interna y lo que realmente recibe el modelo.
+
+### Validación en runtime
+
+A partir de este PR, el `ExecutionPipeline` **valida la salida del LLM contra el `OutputContract`** después de recibirla y antes de declarar success:
+
+- **Formato `text`**: verifica que el output no esté vacío.
+- **Formato `json`**: parsea JSON, valida que sea un objeto plano, verifica todos los campos requeridos, tipos (`string`, `boolean`, `number`, `string[]`, `enum`, `enum[]`, `object`, `unknown`, `null`, `string | null`) y `allowedValues` (para campos `string`, `enum`, `string[]`, `enum[]`).
+- Si la validación falla, el pipeline devuelve `status: "failed"` con un mensaje descriptivo y **no reintenta** (es un hard failure, igual que un output vacío).
+- El audit registra `success: false` y preserva el output inválido para debugging.
+
+Ver `validate-output-contract.ts` para la implementación completa.
 
 ### Renderizado automático
 
@@ -326,7 +337,6 @@ Los registros de auditoría (`AuditRecord`) también almacenan `promptId` y `pro
 ## 13. Restricciones del MVP
 
 No implementado todavía:
-- Validación JSON fuerte con Zod/JSON Schema (viene en PR posterior).
 - WhatsApp real ni `serena_device` real.
 - OpenAI/OpenRouter adapter.
 - Envío real de mensajes.
@@ -336,6 +346,7 @@ No implementado todavía:
 - Memoria semántica avanzada.
 - Summarizer.
 - Herramientas externas.
+- Conexión de `ConversationStore` y `ContactDirectory` al `ContextBuilder` (las políticas de contexto están preparadas pero las banderas `includeConversationHistory` e `includeKnownContacts` permanecen en `false` hasta que existan stores reales).
 
 ---
 

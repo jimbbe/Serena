@@ -42,8 +42,7 @@ export const riskReviewV1: PromptDefinition = {
     includeResolvedIdentity: true,
     includeActorContext: true,
     includeChannelMetadata: true,
-    includeConversationHistory: true,
-    maxRecentMessages: 5,
+    includeConversationHistory: false,
     includeKnownContacts: false,
     includeSafetyMemory: false,
     includeFullConversation: false,
@@ -51,7 +50,7 @@ export const riskReviewV1: PromptDefinition = {
   outputContract: {
     format: "json",
     description: "Clasificación estructurada de riesgo operativo para Serena.",
-    strict: false,
+    strict: true,
     fields: [
       {
         name: "riskLevel",

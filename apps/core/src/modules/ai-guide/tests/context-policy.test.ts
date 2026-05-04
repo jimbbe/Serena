@@ -10,62 +10,80 @@ function findPrompt(id: string): PromptDefinition {
   return prompt;
 }
 
-// ── REQ-4 table values ──────────────────────────────────────────────
+// ── Phase 1 policy values (no history, no contacts, no safety) ──────
 
-test("serena.conversation.reply contextPolicy matches MVP values", () => {
+test("serena.conversation.reply contextPolicy matches Phase 1 values", () => {
   const cp = findPrompt("serena.conversation.reply.v1").contextPolicy;
 
   assert.equal(cp.includeCurrentMessage, true);
   assert.equal(cp.includeResolvedIdentity, true);
   assert.equal(cp.includeActorContext, true);
   assert.equal(cp.includeChannelMetadata, true);
-  assert.equal(cp.includeConversationHistory, true);
-  assert.equal(cp.maxRecentMessages, 6);
+  assert.equal(cp.includeConversationHistory, false);
   assert.equal(cp.includeKnownContacts, false);
   assert.equal(cp.includeSafetyMemory, false);
   assert.equal(cp.includeFullConversation, false);
 });
 
-test("serena.risk.review contextPolicy matches MVP values", () => {
+test("serena.risk.review contextPolicy matches Phase 1 values", () => {
   const cp = findPrompt("serena.risk.review.v1").contextPolicy;
 
   assert.equal(cp.includeCurrentMessage, true);
   assert.equal(cp.includeResolvedIdentity, true);
   assert.equal(cp.includeActorContext, true);
   assert.equal(cp.includeChannelMetadata, true);
-  assert.equal(cp.includeConversationHistory, true);
-  assert.equal(cp.maxRecentMessages, 5);
+  assert.equal(cp.includeConversationHistory, false);
   assert.equal(cp.includeKnownContacts, false);
   assert.equal(cp.includeSafetyMemory, false);
   assert.equal(cp.includeFullConversation, false);
 });
 
-test("serena.mediation.understand_request contextPolicy matches MVP values", () => {
+test("serena.mediation.understand_request contextPolicy matches Phase 1 values", () => {
   const cp = findPrompt("serena.mediation.understand_request.v1").contextPolicy;
 
   assert.equal(cp.includeCurrentMessage, true);
   assert.equal(cp.includeResolvedIdentity, true);
   assert.equal(cp.includeActorContext, true);
   assert.equal(cp.includeChannelMetadata, true);
-  assert.equal(cp.includeConversationHistory, true);
-  assert.equal(cp.maxRecentMessages, 4);
-  assert.equal(cp.includeKnownContacts, true);
+  assert.equal(cp.includeConversationHistory, false);
+  assert.equal(cp.includeKnownContacts, false);
   assert.equal(cp.includeSafetyMemory, false);
   assert.equal(cp.includeFullConversation, false);
 });
 
-test("serena.mediation.clarify contextPolicy matches MVP values", () => {
+test("serena.mediation.clarify contextPolicy matches Phase 1 values", () => {
   const cp = findPrompt("serena.mediation.clarify.v1").contextPolicy;
 
   assert.equal(cp.includeCurrentMessage, true);
   assert.equal(cp.includeResolvedIdentity, true);
   assert.equal(cp.includeActorContext, true);
   assert.equal(cp.includeChannelMetadata, false);
-  assert.equal(cp.includeConversationHistory, true);
-  assert.equal(cp.maxRecentMessages, 3);
-  assert.equal(cp.includeKnownContacts, true);
+  assert.equal(cp.includeConversationHistory, false);
+  assert.equal(cp.includeKnownContacts, false);
   assert.equal(cp.includeSafetyMemory, false);
   assert.equal(cp.includeFullConversation, false);
+});
+
+// ── Guard tests: Phase 1 runtime cannot deliver these ────────────────
+
+test("guard: ALL prompts must have includeConversationHistory=false until stores are wired", () => {
+  for (const prompt of defaultPrompts) {
+    assert.equal(
+      prompt.contextPolicy.includeConversationHistory,
+      false,
+      `${prompt.id}: includeConversationHistory must be false in Phase 1 — ExecutionPipeline does not pass recentMessages`
+    );
+  }
+});
+
+test("guard: ALL prompts must have includeKnownContacts=false until ContactDirectory is wired", () => {
+  for (const prompt of defaultPrompts) {
+    assert.equal(
+      prompt.contextPolicy.includeKnownContacts,
+      false,
+      `${prompt.id}: includeKnownContacts must be false in Phase 1 — ExecutionPipeline does not pass knownContacts`
+    );
+  }
 });
 
 // ── Global properties ───────────────────────────────────────────────
@@ -91,9 +109,6 @@ test("all context policies have valid structure", () => {
     assert.equal(typeof cp.includeKnownContacts, "boolean");
     assert.equal(typeof cp.includeSafetyMemory, "boolean");
     assert.equal(typeof cp.includeFullConversation, "boolean");
-    // maxRecentMessages is optional, but all 4 have it defined
-    assert.ok(cp.maxRecentMessages !== undefined, `${prompt.id}: maxRecentMessages should be set`);
-    assert.equal(typeof cp.maxRecentMessages, "number");
   }
 });
 
@@ -117,6 +132,29 @@ test("risk.review, mediation.understand_request, mediation.clarify use json outp
       "json",
       `${id}: expected JSON output`
     );
+  }
+});
+
+test("all JSON prompts have strict: true", () => {
+  const jsonPrompts = [
+    "serena.risk.review.v1",
+    "serena.mediation.understand_request.v1",
+    "serena.mediation.clarify.v1",
+  ];
+  for (const id of jsonPrompts) {
+    const prompt = findPrompt(id);
+    assert.equal(
+      prompt.outputContract.format,
+      "json",
+      `${id}: expected JSON output`
+    );
+    if (prompt.outputContract.format === "json") {
+      assert.equal(
+        prompt.outputContract.strict,
+        true,
+        `${id}: strict must be true for JSON output prompts`
+      );
+    }
   }
 });
 

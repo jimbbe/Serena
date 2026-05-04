@@ -6,7 +6,7 @@
  * the person) messages along with the channel they arrived/departed on.
  */
 
-import type { InboundChannel } from "../../inbound-gate/domain/inbound-message-command.ts";
+import type { InboundChannel } from "../../shared/channel.ts";
 
 export type MessageDirection = "inbound" | "outbound";
 

@@ -6,14 +6,9 @@
  * channel-specific field names.
  */
 
-/** All channel sources that can produce an inbound message. */
-export type InboundChannel =
-  | "whatsapp"
-  | "voice"
-  | "web_chat"
-  | "telegram"
-  | "system"
-  | "simulation";
+import type { InboundChannel } from "../../shared/channel.ts";
+
+export type { InboundChannel };
 
 /** Channel-agnostic input contract for the inbound pipeline. */
 export type InboundMessageCommand = {

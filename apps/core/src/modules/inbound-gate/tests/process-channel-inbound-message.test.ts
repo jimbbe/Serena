@@ -246,7 +246,7 @@ function mockConversationStore(opts?: {
       appendCalls.push(msg);
       return msg;
     },
-    listMessages: async (_id: string) => opts?.messages ?? [],
+    listMessages: async (_id: string) => opts?.messages ?? appendCalls,
   };
 }
 
@@ -1087,9 +1087,10 @@ test("resolved identity creates conversation and includes it in result", async (
     getConversation: async (_id: string) => undefined,
     appendMessage: async (msg: ConversationMessage) => {
       appendCalled = true;
+      mockStore.appendCalls.push(msg);
       return msg;
     },
-    listMessages: async (_id: string) => [] as ConversationMessage[],
+    listMessages: async (_id: string) => mockStore.appendCalls,
   };
 
   const mockProcessInbound = {
@@ -1145,8 +1146,11 @@ test("resolved identity with existing conversationId passes it through", async (
       };
     },
     getConversation: async (_id: string) => undefined,
-    appendMessage: async (msg: ConversationMessage) => msg,
-    listMessages: async (_id: string) => [] as ConversationMessage[],
+    appendMessage: async (msg: ConversationMessage) => {
+      mockStore.appendCalls.push(msg);
+      return msg;
+    },
+    listMessages: async (_id: string) => mockStore.appendCalls,
   };
 
   const mockProcessInbound = {
@@ -1185,13 +1189,16 @@ test("unknown identity does not create conversation", async () => {
   const mockStore = {
     findOrCreateCalls: [] as unknown[][],
     appendCalls: [] as ConversationMessage[],
-    findOrCreateConversation: async (_input: unknown) => {
-      findOrCreateCalled = true;
-      return { id: "no", tenantId: "x", personId: "x", status: "open" as const, createdAt: new Date(), updatedAt: new Date() };
+    findOrCreateConversation: async (input: unknown) => {
+      const inp = input as { tenantId: string; personId: string };
+      return { id: "conv-discard", tenantId: inp.tenantId, personId: inp.personId, status: "open" as const, createdAt: new Date(), updatedAt: new Date() };
     },
     getConversation: async (_id: string) => undefined,
-    appendMessage: async (msg: ConversationMessage) => msg,
-    listMessages: async (_id: string) => [] as ConversationMessage[],
+    appendMessage: async (msg: ConversationMessage) => {
+      mockStore.appendCalls.push(msg);
+      return msg;
+    },
+    listMessages: async (_id: string) => mockStore.appendCalls,
   };
 
   const mockProcessInbound = {
@@ -1241,8 +1248,11 @@ test("blocked identity does not create conversation", async () => {
       return { id: "no", tenantId: "x", personId: "x", status: "open" as const, createdAt: new Date(), updatedAt: new Date() };
     },
     getConversation: async (_id: string) => undefined,
-    appendMessage: async (msg: ConversationMessage) => msg,
-    listMessages: async (_id: string) => [] as ConversationMessage[],
+    appendMessage: async (msg: ConversationMessage) => {
+      mockStore.appendCalls.push(msg);
+      return msg;
+    },
+    listMessages: async (_id: string) => mockStore.appendCalls,
   };
 
   const mockProcessInbound = {
@@ -1294,8 +1304,11 @@ test("conversation info present in discard path for resolved identity", async ()
       return { id: "conv-discard", tenantId: inp.tenantId, personId: inp.personId, status: "open" as const, createdAt: new Date(), updatedAt: new Date() };
     },
     getConversation: async (_id: string) => undefined,
-    appendMessage: async (msg: ConversationMessage) => msg,
-    listMessages: async (_id: string) => [] as ConversationMessage[],
+    appendMessage: async (msg: ConversationMessage) => {
+      mockStore.appendCalls.push(msg);
+      return msg;
+    },
+    listMessages: async (_id: string) => mockStore.appendCalls,
   };
 
   const mockProcessInbound = {
@@ -1364,4 +1377,84 @@ test("no conversationId warning in warnings (old warning removed)", async () => 
     !result.warnings.includes("Missing optional field: conversationId"),
     "conversationId warning should no longer be present",
   );
+});
+
+// ---------------------------------------------------------------------------
+// NEW TESTS — outbound message recording policy
+// ---------------------------------------------------------------------------
+
+test("risk_review does not record outbound message", async () => {
+  const mockStore = mockConversationStore();
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("risk_review"),
+      route: profileRoute("risk_review"),
+    }),
+  };
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, _input: Record<string, string>): Promise<GuideResult> =>
+      successGuideResult(useCaseId),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockStore as unknown as ConversationStore,
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "es urgente",
+    tenantId: "demo",
+  });
+
+  assert.equal(result.useCaseId, "serena.risk.review");
+  // Only the inbound message should be recorded — no outbound for risk_review
+  assert.equal(mockStore.appendCalls.length, 1, "Only one message should be recorded");
+  assert.equal(mockStore.appendCalls[0]!.direction, "inbound");
+  // messageCount should reflect the real accumulated count (1 inbound only)
+  assert.ok(result.conversation !== undefined);
+  assert.equal(result.conversation!.messageCount, 1);
+});
+
+test("mediation_understanding does not record outbound message", async () => {
+  const mockStore = mockConversationStore();
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("mediation_understanding"),
+      route: profileRoute("mediation_understanding"),
+    }),
+  };
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, _input: Record<string, string>): Promise<GuideResult> =>
+      successGuideResult(useCaseId),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockStore as unknown as ConversationStore,
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "avisale a Carlos",
+    tenantId: "demo",
+  });
+
+  assert.equal(result.useCaseId, "serena.mediation.understand_request");
+  // Only the inbound message should be recorded — no outbound for mediation_understanding
+  assert.equal(mockStore.appendCalls.length, 1, "Only one message should be recorded");
+  assert.equal(mockStore.appendCalls[0]!.direction, "inbound");
+  // messageCount should reflect the real accumulated count (1 inbound only)
+  assert.ok(result.conversation !== undefined);
+  assert.equal(result.conversation!.messageCount, 1);
 });

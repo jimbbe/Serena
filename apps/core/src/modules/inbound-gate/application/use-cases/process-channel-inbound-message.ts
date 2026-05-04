@@ -94,6 +94,7 @@ export class ProcessChannelInboundMessage {
 
     // 1. Conversation tracking — create conversation for resolved identities
     let conversationId: string | undefined;
+    let messageCount = 0;
     if (identity.status === "resolved") {
       const personId = identity.personId ?? cmd.externalSenderId;
       const conv = await this.conversationStore.findOrCreateConversation({
@@ -115,6 +116,10 @@ export class ProcessChannelInboundMessage {
         occurredAt: new Date(),
       };
       await this.conversationStore.appendMessage(inboundMsg);
+
+      // Use the real accumulated message count from the store
+      const messages = await this.conversationStore.listMessages(conversationId);
+      messageCount = messages.length;
     }
 
     // 2. Short-circuit: blocked identity
@@ -166,7 +171,7 @@ export class ProcessChannelInboundMessage {
           conversation: {
             id: conversationId,
             status: "open",
-            messageCount: 1,
+            messageCount,
           },
         } : {}),
         warnings,
@@ -207,24 +212,12 @@ export class ProcessChannelInboundMessage {
       }
     }
 
-    // Record outbound messages if simulatedOutput is present
-    let outboundMessageCount = 0;
-    if (guideResult !== undefined && conversationId !== undefined) {
-      const outboundText =
-        guideResult.status === "success" ? String(guideResult.output) : "(ai guide failed)";
-      const outboundMsg: ConversationMessage = {
-        id: randomUUID(),
-        conversationId,
-        tenantId: identity.tenantId,
-        personId: identity.personId ?? cmd.externalSenderId,
-        channel: cmd.channel,
-        direction: "outbound",
-        text: outboundText,
-        occurredAt: new Date(),
-      };
-      await this.conversationStore.appendMessage(outboundMsg);
-      outboundMessageCount = 1;
-    }
+    // NOTE: Outbound messages are NOT recorded here.
+    // Outbound will be registered when an explicit OutboundDraft / DecisionPolicy
+    // signals that Serena should actually send a message to the user.
+    // Risk reviews, mediation understanding, and AI clarifications are internal
+    // operations — not conversational replies that should appear in the message
+    // history.
 
     return {
       traceId,
@@ -239,7 +232,7 @@ export class ProcessChannelInboundMessage {
         conversation: {
           id: conversationId,
           status: "open",
-          messageCount: 1 + outboundMessageCount,
+          messageCount,
         },
       } : {}),
       warnings,

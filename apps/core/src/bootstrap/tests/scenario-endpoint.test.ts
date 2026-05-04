@@ -1884,4 +1884,46 @@ describe("Conversation continuity", () => {
     assert.ok(result.conversation !== undefined, "Top-level conversation should be populated");
     assert.equal(result.conversation!.id, step2Conv!.id);
   });
+
+  it("messageCount accumulates correctly across steps of the same conversation", async () => {
+    const { status, body } = await request("POST", "/dev/simulate/scenario", port, {
+      scenarioId: "message-count-test",
+      tenantId: "demo",
+      channel: "whatsapp",
+      externalSenderId: MARIA_WHATSAPP,
+      steps: [
+        { text: "primer mensaje" },
+        { text: "segundo mensaje" },
+        { text: "tercer mensaje" },
+      ],
+    });
+
+    assert.equal(status, 200);
+    const result = body as ScenarioResult;
+    assert.equal(result.steps.length, 3);
+
+    const step0Conv = result.steps[0]!.result!.conversation;
+    const step1Conv = result.steps[1]!.result!.conversation;
+    const step2Conv = result.steps[2]!.result!.conversation;
+
+    assert.ok(step0Conv !== undefined);
+    assert.ok(step1Conv !== undefined);
+    assert.ok(step2Conv !== undefined);
+
+    // All steps share the same conversation
+    assert.equal(step0Conv!.id, step1Conv!.id);
+    assert.equal(step1Conv!.id, step2Conv!.id);
+
+    // messageCount must increase because each step adds an inbound message
+    // (no outbound messages are recorded for internal AI operations)
+    assert.ok(step0Conv!.messageCount >= 1, "Step 0 should have at least 1 message");
+    assert.ok(step1Conv!.messageCount > step0Conv!.messageCount,
+      `Step 1 count (${step1Conv!.messageCount}) must exceed step 0 (${step0Conv!.messageCount})`);
+    assert.ok(step2Conv!.messageCount > step1Conv!.messageCount,
+      `Step 2 count (${step2Conv!.messageCount}) must exceed step 1 (${step1Conv!.messageCount})`);
+
+    // Top-level conversation should reflect the final count
+    assert.ok(result.conversation !== undefined);
+    assert.equal(result.conversation!.messageCount, step2Conv!.messageCount);
+  });
 });

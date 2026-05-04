@@ -5,6 +5,7 @@ import type { LlmProvider } from "../ports/llm-provider.ts";
 import type { AiInvocationAudit } from "../ports/ai-invocation-audit.ts";
 import type { PromptRegistry } from "../ports/prompt-registry.ts";
 import type { ContextBuilder } from "../prompts/context-builder.ts";
+import type { AiGuideInput } from "./ai-guide-input.ts";
 import { renderOutputContract } from "../prompts/render-output-contract.ts";
 import { validateOutputContract } from "../prompts/validate-output-contract.ts";
 import { parsePromptVersion } from "../../domain/prompt-version.ts";
@@ -13,14 +14,6 @@ type AuditOutcome = {
   auditRecorded: boolean;
   auditId: string | undefined;
 };
-
-/** Known input field keys for type safety. Not runtime validation, but aids grep and avoids magic strings. */
-type ExecutionInput = {
-  input?: string;
-  actorRole?: string;
-  channel?: string;
-  resolvedIdentity?: string;
-} & Record<string, string>;
 
 function makeMetadata(
   model: string,
@@ -63,7 +56,7 @@ export class ExecutionPipeline {
 
   async execute(
     contract: UseCaseContract,
-    input: Record<string, string>
+    input: AiGuideInput
   ): Promise<GuideResult> {
     // (1) Resolve prompt from registry — catch resolution failures gracefully
     let promptDef;
@@ -291,12 +284,21 @@ export class ExecutionPipeline {
   /** Builds the userPrompt via ContextBuilder and template interpolation. */
   private buildUserPrompt(
     promptDef: { inputTemplate?: string; contextPolicy: Parameters<ContextBuilder["build"]>[0] },
-    input: ExecutionInput
+    input: AiGuideInput
   ): string {
+    // Extract string-only values for safe template interpolation
+    const templateValues: Record<string, string> = {};
+    for (const key of ["input", "actorRole", "channel", "resolvedIdentity"] as const) {
+      const val = input[key];
+      if (typeof val === "string") {
+        templateValues[key] = val;
+      }
+    }
+
     // Template interpolation (Phase 1 — replaces old renderTemplate)
     const renderedTemplate =
       promptDef.inputTemplate !== undefined
-        ? this.contextBuilder.renderTemplate(promptDef.inputTemplate, input)
+        ? this.contextBuilder.renderTemplate(promptDef.inputTemplate, templateValues)
         : "";
 
     const currentMessage =
@@ -314,6 +316,9 @@ export class ExecutionPipeline {
       resolvedIdentity: input["resolvedIdentity"],
       actorContext,
       channelMetadata: input["channel"],
+      recentMessages: input.recentMessages,
+      knownContacts: input.knownContacts,
+      safetyMemory: input.safetyMemory,
     });
 
     return contextString;

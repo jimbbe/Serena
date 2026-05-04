@@ -95,6 +95,7 @@ export class ProcessChannelInboundMessage {
     // 1. Conversation tracking — create conversation for resolved identities
     let conversationId: string | undefined;
     let messageCount = 0;
+    let recentMessages: string[] = [];
     if (identity.status === "resolved") {
       const personId = identity.personId ?? cmd.externalSenderId;
       const conv = await this.conversationStore.findOrCreateConversation({
@@ -105,8 +106,9 @@ export class ProcessChannelInboundMessage {
       conversationId = conv.id;
 
       // Append inbound message
+      const inboundMsgId = randomUUID();
       const inboundMsg: ConversationMessage = {
-        id: randomUUID(),
+        id: inboundMsgId,
         conversationId: conv.id,
         tenantId: identity.tenantId,
         personId,
@@ -120,6 +122,11 @@ export class ProcessChannelInboundMessage {
       // Use the real accumulated message count from the store
       const messages = await this.conversationStore.listMessages(conversationId);
       messageCount = messages.length;
+
+      // Build recentMessages for AiGuide context (exclude current message)
+      recentMessages = messages
+        .filter((m) => m.id !== inboundMsgId)
+        .map((m) => `[${m.direction}] ${m.personId} via ${m.channel}: ${m.text}`);
     }
 
     // 2. Short-circuit: blocked identity
@@ -194,6 +201,7 @@ export class ProcessChannelInboundMessage {
         channel: cmd.channel,
         tenantId: cmd.tenantId ?? "demo",
         personId: identity.personId ?? "",
+        recentMessages,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

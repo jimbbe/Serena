@@ -114,16 +114,16 @@ Define exactamente qué contexto recibe el LLM para cada caso de uso.
 | `includeFullConversation` | `boolean` | Incluye la conversación completa (Phase 1: siempre false) |
 | `notes?` | `string` | Notas para documentación |
 
-### Valores por caso de uso (Phase 1)
+### Valores por caso de uso (Phase 1 — T27)
 
-| Use Case | current | identity | actor | channel | history | contacts | safety | full |
-|----------|---------|----------|-------|---------|---------|----------|--------|------|
-| `mediation.understand_request` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| `mediation.clarify` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `conversation.reply` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| `risk.review` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Use Case | current | identity | actor | channel | history | maxRecent | contacts | safety | full |
+|----------|---------|----------|-------|---------|---------|-----------|----------|--------|------|
+| `mediation.understand_request` | ✅ | ✅ | ✅ | ✅ | ✅ | 4 | ❌ | ❌ | ❌ |
+| `mediation.clarify` | ✅ | ✅ | ✅ | ❌ | ✅ | 3 | ❌ | ❌ | ❌ |
+| `conversation.reply` | ✅ | ✅ | ✅ | ✅ | ✅ | 6 | ❌ | ❌ | ❌ |
+| `risk.review` | ✅ | ✅ | ✅ | ✅ | ✅ | 5 | ❌ | ❌ | ❌ |
 
-**Nota Phase 1**: `includeConversationHistory` e `includeKnownContacts` están en `false` para todos los prompts. El `ContextBuilder` tiene capacidad de recibir `recentMessages` y `knownContacts`, pero `ExecutionPipeline.buildUserPrompt()` aún no los pasa porque no hay `ConversationStore` ni `ContactDirectory` conectados. Esas banderas se activarán cuando se conecten los stores reales.
+**Nota T27**: A partir de T27, `includeConversationHistory` está activo (`true`) para los 4 prompts. Los límites `maxRecentMessages` varían por caso de uso: `reply` permite más contexto (6), `risk_review` 5, `understand_request` 4, y `clarify` 3 (la aclaración necesita menos historial). El `ContextBuilder` recibe `recentMessages` desde `ExecutionPipeline.buildUserPrompt()`, y `ProcessChannelInboundMessage` construye el arreglo de mensajes recientes desde `ConversationStore.listMessages()`, excluyendo el mensaje actual y formateando cada uno como `[direction] personId via channel: text`. `includeKnownContacts` e `includeSafetyMemory` siguen en `false` porque `ContactDirectory` y safety memory aún no están conectados.
 
 ---
 
@@ -346,7 +346,7 @@ No implementado todavía:
 - Memoria semántica avanzada.
 - Summarizer.
 - Herramientas externas.
-- Conexión de `ConversationStore` y `ContactDirectory` al `ContextBuilder` (las políticas de contexto están preparadas pero las banderas `includeConversationHistory` e `includeKnownContacts` permanecen en `false` hasta que existan stores reales).
+- Conexión de `ConversationStore` y `ContactDirectory` al `ContextBuilder` — el historial de conversación (`includeConversationHistory`) ya está activo desde T27; `includeKnownContacts` e `includeSafetyMemory` permanecen en `false`.
 
 ---
 

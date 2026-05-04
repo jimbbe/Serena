@@ -16,6 +16,16 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - The active VPS path is `serena-core` behind the existing Caddy edge on external Docker network `proxy`, without host port publication from the app container.
 - The VPS stack includes private PostgreSQL on `serena-internal`; `serena-postgres` is not exposed on host ports or the public proxy network.
 
+## Implemented In T27: AI Guide Conversation History
+
+- `AiGuideInput` type created in `apps/core/src/modules/ai-guide/application/use-cases/ai-guide-input.ts` with typed fields for `recentMessages`, `knownContacts`, `safetyMemory`.
+- `AiGuideService.execute()` and `ExecutionPipeline.execute()` updated to use `AiGuideInput` instead of `Record<string, string>`.
+- `ExecutionPipeline.buildUserPrompt()` extracts string-only values for `renderTemplate()` and passes `recentMessages`, `knownContacts`, `safetyMemory` to `ContextBuilder.build()`.
+- All 4 prompt definitions activated `includeConversationHistory: true` with `maxRecentMessages`: reply=6, risk_review=5, understand_request=4, clarify=3.
+- `ProcessChannelInboundMessage` builds `recentMessages` from `ConversationStore.listMessages()`, excluding the current message, formatted as `[direction] personId via channel: text`.
+- Tests updated: 5 new context-policy tests (guard updated from `false`→`true`), 5 new execution-pipeline tests for recentMessages flow, 6 new process-channel-inbound-message tests for history wiring.
+- Documentation: `docs/ai-guide-prompts.md` updated to reflect active conversation history. `README.md` test count updated.
+
 ## Not Implemented Yet
 
 - WhatsApp / Evolution API real integration (`whatsapp-gateway` has only domain types and port contract).
@@ -211,7 +221,7 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 
 ## Expected Next Task
 
-Next: T20 — Evolution API adapter in controlled mode; later PostgreSQL adapters. La especificación de contrato T17A, el hardening T17B, el mock gateway T18, el módulo ai-guide T19, y la documentación ordenada (T18.1) sirven como base para la integración segura con el WhatsApp Gateway real.
+Next: T28 or subsequent task.  T27 (AI guide conversation history) is now wired — `recentMessages` flows from `ConversationStore` through `ProcessChannelInboundMessage` → `AiGuideService` → `ExecutionPipeline` → `ContextBuilder`, with prompt-level maxRecentMessages limits.
 
 ### Repository note
 Este repositorio es el centro operativo del proyecto. Contiene documentación técnica (`docs/architecture/`) y operativa (`docs/ops/`) con datos reales de VPS, deploy, rutas de Caddy y backups. Debe hacerse privado antes de uso productivo o exposición pública prolongada.

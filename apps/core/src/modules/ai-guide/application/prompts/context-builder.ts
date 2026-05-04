@@ -23,11 +23,6 @@ export type ContextData = {
  * not yet wired into the build logic.
  */
 export class ContextBuilder {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  constructor(_deps?: { conversationStore?: unknown; contactDirectory?: unknown }) {
-    // Reserved for Phase 2+ — ConversationStore and ContactDirectory injection
-  }
-
   /**
    * Builds a plain string from the given context data, respecting all
    * ContextPolicy flags. Missing optional data is omitted gracefully

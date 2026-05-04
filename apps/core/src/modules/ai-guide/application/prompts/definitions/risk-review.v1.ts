@@ -35,19 +35,7 @@ export const riskReviewV1: PromptDefinition = {
     '- Si actorRole indica que habla la persona afectada, source debe ser "direct".\n' +
     '- Si actorRole indica que habla un contacto autorizado reportando sobre otra persona, source debe ser "reported".\n' +
     '- Si no está claro quién informa, source debe ser "unknown".\n' +
-    "- Usá high o critical cuando haya caída, imposibilidad de levantarse, dificultad respiratoria, peligro inmediato, posible autodaño o situación que requiera intervención urgente.\n\n" +
-    "Devolvé SOLO JSON válido con esta forma exacta:\n" +
-    '{\n' +
-    '  "riskLevel": "low" | "medium" | "high" | "critical",\n' +
-    '  "riskType": "health" | "emotional" | "safety" | "scam" | "confusion" | "unknown",\n' +
-    '  "source": "direct" | "reported" | "system" | "unknown",\n' +
-    '  "situationSummary": "resumen breve de la situación",\n' +
-    '  "recommendedAction": "reply" | "clarify" | "notify_contact" | "human_review",\n' +
-    '  "requiresEscalation": true | false,\n' +
-    '  "missingInformation": ["dato faltante 1", "dato faltante 2"]\n' +
-    '}\n\n' +
-    "No incluyas markdown.\n" +
-    "No incluyas texto fuera del JSON.",
+    "- Usá high o critical cuando haya caída, imposibilidad de levantarse, dificultad respiratoria, peligro inmediato, posible autodaño o situación que requiera intervención urgente.",
   inputTemplate: "Mensaje a revisar: {input}",
   contextPolicy: {
     includeCurrentMessage: true,

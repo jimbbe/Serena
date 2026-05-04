@@ -45,8 +45,10 @@ function renderJsonContract(contract: JsonOutputContract): string {
   lines.push("");
   lines.push("Reglas:");
   lines.push("- Devolve solo JSON valido.");
-  lines.push("- No incluyas markdown.");
-  lines.push("- No incluyas texto fuera del JSON.");
+  if (contract.strict) {
+    lines.push("- No incluyas markdown.");
+    lines.push("- No incluyas texto fuera del JSON.");
+  }
   lines.push("- Inclui todos los campos requeridos.");
 
   const hasAllowedValues = contract.fields.some(

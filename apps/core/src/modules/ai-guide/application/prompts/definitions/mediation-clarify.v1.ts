@@ -30,14 +30,7 @@ export const mediationClarifyV1: PromptDefinition = {
     "Contexto:\n" +
     "- El actor puede estar usando simulation ahora, WhatsApp en el futuro o serena_device más adelante.\n" +
     "- No asumas que todo mensaje viene de la abuela.\n" +
-    "- Adaptá la pregunta al actorRole si está disponible.\n\n" +
-    "Devolvé SOLO JSON válido con esta forma exacta:\n" +
-    '{\n' +
-    '  "question": "pregunta breve para el usuario",\n' +
-    '  "reason": "qué dato falta o por qué se pregunta"\n' +
-    '}\n\n' +
-    "No incluyas markdown.\n" +
-    "No incluyas texto fuera del JSON.",
+    "- Adaptá la pregunta al actorRole si está disponible.",
   inputTemplate: "Contexto: {input}",
   contextPolicy: {
     includeCurrentMessage: true,

@@ -286,6 +286,31 @@ test("pipeline fails when prompt not in registry", async () => {
   );
 });
 
+// ── FIX 1: promptVersion parsed from promptId suffix on resolution failure ──
+
+test("resolution failure extracts promptVersion from contract promptId suffix (.v2)", async () => {
+  const provider = new MockLlmProvider();
+  const emptyRegistry = new InMemoryPromptRegistry([]);
+  const pipeline = new ExecutionPipeline({
+    provider,
+    registry: emptyRegistry,
+    contextBuilder: makeContextBuilder(),
+  });
+
+  // Use a contract with a .v2 promptId not registered
+  const contract = makeContract({
+    // promptId must be cast through unknown — the union type only has .v1 members,
+    // but this test validates the parser handles any valid .v{N} suffix
+    promptId: "serena.conversation.reply.v2" as PromptId,
+  });
+
+  const result = await pipeline.execute(contract, { input: "test" });
+
+  assert.equal(result.status, "failed");
+  const failed = result as GuideResultFailed;
+  assert.equal(failed.metadata.promptVersion, 2, "must extract version 2 from .v2 suffix, not hardcoded 1");
+});
+
 // ── Output contract rendering tests ──────────────────────────────
 
 test("pipeline sends output contract rendered to provider as developerPrompt", async () => {

@@ -38,18 +38,7 @@ export const mediationUnderstandRequestV1: PromptDefinition = {
     "Contexto:\n" +
     "- El actor puede ser la persona principal, un contacto autorizado, un admin o un usuario no autorizado.\n" +
     "- No asumas que todo mensaje viene de la abuela.\n" +
-    "- Usá actorRole, channel y permissions si están presentes en el contexto.\n\n" +
-    "Devolvé SOLO JSON válido con esta forma exacta:\n" +
-    '{\n' +
-    '  "isMediationRequest": true | false,\n' +
-    '  "recipientHint": "nombre o vínculo detectado" | null,\n' +
-    '  "messageDraft": "mensaje propuesto para transmitir" | null,\n' +
-    '  "requiresConfirmation": true | false,\n' +
-    '  "missingFields": ["recipient", "message", "confirmation"],\n' +
-    '  "riskSignal": true | false\n' +
-    '}\n\n' +
-    "No incluyas markdown.\n" +
-    "No incluyas texto fuera del JSON.",
+    "- Usá actorRole, channel y permissions si están presentes en el contexto.",
   inputTemplate: "Mensaje a analizar: {input}",
   contextPolicy: {
     includeCurrentMessage: true,

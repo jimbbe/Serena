@@ -27,11 +27,7 @@ export const conversationReplyV1: PromptDefinition = {
     "- No asumas que todo mensaje viene de la abuela.\n" +
     "- Usá actorRole, channel y permissions si están presentes.\n" +
     "- Si actorRole indica un contacto autorizado, respondé como asistente de coordinación, no como compañía directa de la persona mayor.\n" +
-    "- Si actorRole indica elder, respondé como compañía directa.\n\n" +
-    "Salida:\n" +
-    "- Devolvé solo el texto que Serena debería decirle al usuario.\n" +
-    "- No incluyas JSON.\n" +
-    "- No incluyas análisis interno.",
+    "- Si actorRole indica elder, respondé como compañía directa.",
   inputTemplate: "Mensaje recibido: {input}",
   contextPolicy: {
     includeCurrentMessage: true,

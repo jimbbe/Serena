@@ -12,8 +12,8 @@ export class MockLlmProvider implements LlmProvider {
     canned?: Map<PromptId, { content: string; tokensUsed?: number }>
   ) {
     this.cannedResponses = canned ?? new Map();
-    // Only seed defaults when no map is explicitly provided
-    if (!canned) this.primeDefaults();
+    // Always seed defaults — explicit canned entries win (primeDefaults skips existing keys)
+    this.primeDefaults();
   }
 
   /**

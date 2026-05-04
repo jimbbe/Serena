@@ -52,27 +52,33 @@ test("response includes content as string", async () => {
   assert.ok(result.content.length > 0, "Content should not be empty");
 });
 
-test("different input produces different response", async () => {
-  // Use empty Map to bypass default canned responses and test fallback behavior
+test("different promptIds produce different default responses", async () => {
+  // Empty Map still gets defaults primed (FIX 4) — different promptIds have different defaults
   const provider = new MockLlmProvider(new Map());
 
-  const result1 = await provider.invoke({
+  const reply = await provider.invoke({
     promptId: REPLY,
     promptVersion: 1,
-    systemPrompt: "You are helpful",
-    userPrompt: "Hello",
+    systemPrompt: "irrelevant",
+    userPrompt: "anything",
     policy: defaultPolicy,
   });
 
-  const result2 = await provider.invoke({
-    promptId: REPLY,
+  const risk = await provider.invoke({
+    promptId: "serena.risk.review.v1",
     promptVersion: 1,
-    systemPrompt: "You are helpful",
-    userPrompt: "Goodbye",
+    systemPrompt: "irrelevant",
+    userPrompt: "anything else",
     policy: defaultPolicy,
   });
 
-  assert.notEqual(result1.content, result2.content, "Different inputs should produce different outputs");
+  assert.notEqual(
+    reply.content,
+    risk.content,
+    "Different promptIds should produce different default responses"
+  );
+  // REPLY is conversational text; RISK is JSON
+  assert.ok(JSON.parse(risk.content), "risk default should be parseable JSON");
 });
 
 test("response includes optional metadata", async () => {
@@ -120,20 +126,20 @@ test("canned responses keyed by promptId, not systemPrompt text", async () => {
   assert.equal(result2.content, result1.content, "different systemPrompt, same promptId → same canned response");
 });
 
-test("mock fallback uses promptId + userPrompt hash (not systemPrompt)", async () => {
-  // Use empty Map to bypass default canned responses
+test("default canned response is meaningful content, not simpleHash fallback text", async () => {
+  // Empty Map still gets defaults primed (FIX 4) — the default should be real content, not "Mock response for:"
   const provider = new MockLlmProvider(new Map());
 
   const result = await provider.invoke({
     promptId: REPLY,
     promptVersion: 1,
-    systemPrompt: "You are helpful",
-    userPrompt: "Hi",
+    systemPrompt: "irrelevant",
+    userPrompt: "irrelevant",
     policy: defaultPolicy,
   });
 
-  assert.ok(result.content.includes("Mock response for"));
-  assert.ok(result.content.includes("hash"));
+  assert.ok(!result.content.includes("Mock response for"), "default should not be fallback hash");
+  assert.ok(result.content.includes("Entendido"), "default reply should be the conversational canned text");
 });
 
 test("backward compatibility: unconfigured mock returns deterministic response", async () => {
@@ -150,4 +156,49 @@ test("backward compatibility: unconfigured mock returns deterministic response",
   assert.ok(typeof result.content === "string");
   assert.ok(result.content.length > 0);
   assert.ok(typeof result.tokensUsed === "number");
+});
+
+// ── FIX 4: partial Map constructor still seeds defaults for unconfigured prompts ──
+
+test("constructor with partial Map — unconfigured prompts return default canned, not fallback", async () => {
+  // Only override conversation.reply, leave other 3 prompts unconfigured
+  const canned = new Map<PromptId, { content: string; tokensUsed?: number }>();
+  canned.set(REPLY, { content: "Custom reply!", tokensUsed: 99 });
+
+  const provider = new MockLlmProvider(canned);
+
+  // Custom entry wins
+  const replyResult = await provider.invoke({
+    promptId: REPLY,
+    promptVersion: 1,
+    systemPrompt: "irrelevant",
+    userPrompt: "irrelevant",
+    policy: defaultPolicy,
+  });
+  assert.equal(replyResult.content, "Custom reply!");
+  assert.equal(replyResult.tokensUsed, 99);
+
+  // Unconfigured prompts should get their default canned response, NOT the simpleHash fallback
+  const riskResult = await provider.invoke({
+    promptId: "serena.risk.review.v1",
+    promptVersion: 1,
+    systemPrompt: "irrelevant",
+    userPrompt: "irrelevant",
+    policy: defaultPolicy,
+  });
+  // Default risk review response is JSON (not a "Mock response for:" string)
+  assert.ok(!riskResult.content.includes("Mock response for"));
+  const parsed = JSON.parse(riskResult.content);
+  assert.ok(typeof parsed.riskLevel === "string", "riskLevel must be present in default response");
+
+  const mediationResult = await provider.invoke({
+    promptId: "serena.mediation.understand_request.v1",
+    promptVersion: 1,
+    systemPrompt: "irrelevant",
+    userPrompt: "irrelevant",
+    policy: defaultPolicy,
+  });
+  assert.ok(!mediationResult.content.includes("Mock response for"));
+  const mediationParsed = JSON.parse(mediationResult.content);
+  assert.ok(typeof mediationParsed.isMediationRequest === "boolean");
 });

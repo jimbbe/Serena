@@ -6,11 +6,20 @@ import type { AiInvocationAudit } from "../ports/ai-invocation-audit.ts";
 import type { PromptRegistry } from "../ports/prompt-registry.ts";
 import type { ContextBuilder } from "../prompts/context-builder.ts";
 import { renderOutputContract } from "../prompts/render-output-contract.ts";
+import { parsePromptVersion } from "../../domain/prompt-version.ts";
 
 type AuditOutcome = {
   auditRecorded: boolean;
   auditId: string | undefined;
 };
+
+/** Known input field keys for type safety. Not runtime validation, but aids grep and avoids magic strings. */
+type ExecutionInput = {
+  input?: string;
+  actorRole?: string;
+  channel?: string;
+  resolvedIdentity?: string;
+} & Record<string, string>;
 
 function makeMetadata(
   model: string,
@@ -71,7 +80,15 @@ export class ExecutionPipeline {
           attempts: 0,
           auditRecorded: false,
           promptId: contract.promptId,
-          promptVersion: 1,
+          // Extract version from promptId suffix; fallback to 0 on invalid format
+          // (0 is deliberately not a valid version — easier to spot in audits than 1)
+          promptVersion: (() => {
+            try {
+              return parsePromptVersion(contract.promptId);
+            } catch {
+              return 0;
+            }
+          })(),
         },
       };
     }
@@ -260,7 +277,7 @@ export class ExecutionPipeline {
   /** Builds the userPrompt via ContextBuilder and template interpolation. */
   private buildUserPrompt(
     promptDef: { inputTemplate?: string; contextPolicy: Parameters<ContextBuilder["build"]>[0] },
-    input: Record<string, string>
+    input: ExecutionInput
   ): string {
     // Template interpolation (Phase 1 — replaces old renderTemplate)
     const renderedTemplate =
@@ -271,12 +288,10 @@ export class ExecutionPipeline {
     const currentMessage =
       (renderedTemplate !== "" ? renderedTemplate : undefined) ?? input["input"] ?? "";
 
-    // Assemble actor context from available input fields
+    // Assemble actor context from known input fields (channel lives in channelMetadata only)
     const actorRole = input["actorRole"];
-    const actorChannel = input["channel"];
     const actorParts: string[] = [];
     if (actorRole) actorParts.push(`rol: ${actorRole}`);
-    if (actorChannel) actorParts.push(`canal: ${actorChannel}`);
     const actorContext = actorParts.length > 0 ? actorParts.join(", ") : undefined;
 
     // Build context string from policy flags

@@ -16,13 +16,6 @@ export class AiGuideService {
     useCaseId: GuideUseCaseId,
     input: Record<string, string>
   ): Promise<GuideResult> {
-    // Clarification is not yet implemented
-    if (useCaseId === "serena.mediation.clarify") {
-      throw new Error(
-        `Not implemented: ${useCaseId}. The clarification use case is not yet implemented.`
-      );
-    }
-
     const contract = this.registry.get(useCaseId);
     if (!contract) {
       throw new Error(`Use case not registered: ${useCaseId}`);

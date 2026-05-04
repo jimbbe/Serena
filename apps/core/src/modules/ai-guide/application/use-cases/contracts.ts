@@ -11,26 +11,22 @@ const defaultPolicy = {
 export const defaultContracts: UseCaseContract[] = [
   {
     id: "serena.conversation.reply",
-    systemPrompt:
-      "Eres Serena, un acompañante conversacional para una persona mayor. Responde con calidez, empatía y brevedad. Mantenés un tono respetuoso y afectuoso. No des consejos médicos ni legales.",
-    inputTemplate: "Mensaje recibido: {input}",
-    outputSchemaName: "text",
+    promptId: "serena.conversation.reply.v1",
     executionPolicy: { ...defaultPolicy },
   },
   {
     id: "serena.risk.review",
-    systemPrompt:
-      "Revisá el siguiente mensaje en busca de señales de riesgo: urgencia médica, peligro físico, abuso, abandono, o situaciones que requieran intervención inmediata. Devolvé un análisis objetivo.",
-    inputTemplate: "Mensaje a revisar: {input}",
-    outputSchemaName: "text",
+    promptId: "serena.risk.review.v1",
     executionPolicy: { ...defaultPolicy, temperature: 0.3 },
   },
   {
     id: "serena.mediation.understand_request",
-    systemPrompt:
-      "Analizá el siguiente mensaje para entender si contiene un pedido de mediación: la persona quiere que le avises algo a alguien, que contactes a un tercero, o que transmitas un recado. Identificá el destinatario, el contenido del recado, y la urgencia si existe.",
-    inputTemplate: "Mensaje a analizar: {input}",
-    outputSchemaName: "text",
+    promptId: "serena.mediation.understand_request.v1",
+    executionPolicy: { ...defaultPolicy },
+  },
+  {
+    id: "serena.mediation.clarify",
+    promptId: "serena.mediation.clarify.v1",
     executionPolicy: { ...defaultPolicy },
   },
 ];

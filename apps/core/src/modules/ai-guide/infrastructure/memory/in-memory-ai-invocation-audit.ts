@@ -1,10 +1,12 @@
 import type { AiInvocationAudit } from "../../application/ports/ai-invocation-audit.ts";
 import type { GuideUseCaseId } from "../../domain/guide-use-case-id.ts";
+import type { PromptId } from "../../domain/prompt-id.ts";
 
 export type AuditRecord = {
   auditId: string;
   useCaseId: GuideUseCaseId;
-  systemPrompt: string;
+  promptId: PromptId;
+  promptVersion: number;
   userPrompt: string;
   output: string;
   tokensUsed?: number;
@@ -18,14 +20,15 @@ export class InMemoryAiInvocationAudit implements AiInvocationAudit {
   private nextId = 1;
 
   async record(
-    input: { useCaseId: GuideUseCaseId; systemPrompt: string; userPrompt: string },
+    input: { useCaseId: GuideUseCaseId; promptId: PromptId; promptVersion: number; userPrompt: string },
     result: { output: string; tokensUsed?: number; executionTimeMs: number; success: boolean; error?: string }
   ): Promise<{ auditId: string }> {
     const auditId = `audit-${this.nextId++}`;
     this.records.push({
       auditId,
       useCaseId: input.useCaseId,
-      systemPrompt: input.systemPrompt,
+      promptId: input.promptId,
+      promptVersion: input.promptVersion,
       userPrompt: input.userPrompt,
       output: result.output,
       executionTimeMs: result.executionTimeMs,

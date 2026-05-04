@@ -47,6 +47,9 @@ import { ExecutionPipeline } from "../modules/ai-guide/application/use-cases/exe
 import { defaultContracts } from "../modules/ai-guide/application/use-cases/contracts.ts";
 import { MockLlmProvider } from "../modules/ai-guide/infrastructure/memory/mock-llm-provider.ts";
 import { InMemoryAiInvocationAudit } from "../modules/ai-guide/infrastructure/memory/in-memory-ai-invocation-audit.ts";
+import { InMemoryPromptRegistry } from "../modules/ai-guide/application/prompts/in-memory-prompt-registry.ts";
+import { ContextBuilder } from "../modules/ai-guide/application/prompts/context-builder.ts";
+import { defaultPrompts } from "../modules/ai-guide/application/prompts/default-prompts.ts";
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -149,7 +152,14 @@ export async function createInMemoryPipeline(): Promise<{
   }
   const llmProvider = new MockLlmProvider();
   const aiAudit = new InMemoryAiInvocationAudit();
-  const executionPipeline = new ExecutionPipeline({ provider: llmProvider, audit: aiAudit });
+  const promptRegistry = new InMemoryPromptRegistry(defaultPrompts);
+  const contextBuilder = new ContextBuilder();
+  const executionPipeline = new ExecutionPipeline({
+    provider: llmProvider,
+    audit: aiAudit,
+    registry: promptRegistry,
+    contextBuilder,
+  });
   const aiGuideService = new AiGuideService({ registry: aiRegistry, pipeline: executionPipeline });
 
   // Conversation store — shared in-memory store for conversation tracking

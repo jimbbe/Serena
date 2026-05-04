@@ -320,3 +320,304 @@ curl -X POST http://localhost:3000/dev/simulate/inbound-message \
 - **Clarification not implemented** — the `clarification` LLM profile is mapped but `AiGuideService` throws a controlled error that appears as a structured `guideError` in the response (200, not 500).
 - **Empty simulatedOutbound** — mediation drafts are not generated yet. The field is reserved for Phase 2.
 - **Identity resolution runs first** — the `ExternalIdentityResolver` translates external channel IDs to internal `personId` BEFORE gate evaluation. Blocked identities short-circuit the entire pipeline. Unknown identities continue to the gate (which will likely block them as unknown senders).
+
+---
+
+# Scenario Simulation (`POST /dev/simulate/scenario`)
+
+## Overview
+
+The scenario endpoint runs **multi-step conversations** through the full Serena
+inbound pipeline sequentially. Each step builds an `InboundMessageCommand` from
+scenario-level defaults plus optional per-step overrides and executes it through
+the same `ProcessChannelInboundMessage` use case. The response includes per-step
+results and an aggregated summary.
+
+The runner lives in the bootstrap layer — it orchestrates existing use cases
+without duplicating any domain logic. All steps share the same in-memory
+pipeline state, allowing sessions to persist across steps (e.g., María starts
+a mediation → bridge session is active for Carlos to reply).
+
+## Prerequisites
+
+Same as single-step simulation:
+
+```bash
+ENABLE_SIMULATION_ENDPOINTS=true npm start
+```
+
+## Endpoint
+
+```
+POST /dev/simulate/scenario
+Content-Type: application/json
+```
+
+No authentication token is required — this is a **development-only** route
+guarded by the environment variable.
+
+### Request
+
+```jsonc
+{
+  // REQUIRED
+  "scenarioId":       "greeting-001",    // unique scenario identifier
+  "tenantId":         "demo",            // multi-tenant identifier
+  "channel":          "whatsapp",        // default channel for all steps
+  "externalSenderId": "+5492600000000",  // default sender for all steps (or provide per-step)
+  "steps": [                             // ordered list of steps
+    {
+      "text": "hola Serena, cómo estás?" // required per step — message text
+    },
+    {
+      "text": "avisale a Carlos que voy a llegar tarde" // mediation step
+    }
+  ],
+
+  // OPTIONAL
+  "conversationId":   "conv-abc",        // default conversation identifier
+  "stopOnError":      false,             // break on first failure (default false)
+  "metadata":         {}                 // scenario-level extras (must be object if present)
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `scenarioId` | `string` | **Yes** | Unique scenario identifier, non-empty |
+| `tenantId` | `string` | **Yes** | Multi-tenant identifier, non-empty |
+| `channel` | `string` | **Yes** | One of: `whatsapp`, `voice`, `web_chat`, `telegram`, `system`, `simulation` |
+| `externalSenderId` | `string` | **Conditional** | Default sender identifier, non-empty. Required unless every step provides its own `externalSenderId`. |
+| `steps` | `array` | **Yes** | Non-empty array of step objects |
+| `steps[].text` | `string` | **Yes** | Message text per step, non-empty |
+| `steps[].channel` | `string` | No | Override channel for this step |
+| `steps[].externalSenderId` | `string` | No | Override sender for this step |
+| `steps[].personId` | `string` | No | Resolved person identifier |
+| `steps[].conversationId` | `string` | No | Override conversation identifier |
+| `steps[].occurredAt` | `string` | No | ISO 8601 timestamp (step-level) |
+| `steps[].metadata` | `object` | No | Step-level extras |
+| `conversationId` | `string` | No | Default conversation identifier |
+| `stopOnError` | `boolean` | No | Break on first step failure (default `false`) |
+| `metadata` | `object` | No | Scenario-level extras merged into every step (step-level keys override scenario-level) |
+
+### Response (200 OK)
+
+```jsonc
+{
+  "scenarioId": "greeting-001",
+  "traceId":    "a3f8b2c1-...",   // UUID for the entire scenario run
+  "steps": [
+    {
+      "index": 0,
+      "input": {
+        "channel": "whatsapp",
+        "externalSenderId": "+5492600000000",
+        "text": "hola Serena, cómo estás?"
+      },
+      "result": { /* full ChannelInboundResult */ },
+      "error": null
+    }
+  ],
+  "summary": {
+    "totalSteps": 2,
+    "successfulSteps": 2,
+    "failedSteps": 0,
+    "riskEvents": 0,
+    "mediationEvents": 1,
+    "unknownSenders": 0,
+    "blockedSenders": 0
+  }
+}
+```
+
+### Summary Fields
+
+| Field | Description |
+|-------|-------------|
+| `totalSteps` | Number of steps in the request |
+| `successfulSteps` | Steps without errors, AI failures, or guide errors |
+| `failedSteps` | Steps with thrown error, `errors[]` non-empty, AI failure, or guide error |
+| `riskEvents` | Steps where `inboundDecision.reason === "urgent_or_risk_content"` |
+| `mediationEvents` | Steps where reason is `"third_party_mediation_request"` or status is `"needs_mediation"` |
+| `unknownSenders` | Steps where `identity.status === "unknown"` |
+| `blockedSenders` | Steps where identity is `"blocked"` or decision is `"blocked"` |
+
+**Invariant**: `successfulSteps + failedSteps === totalSteps`.
+
+### Error Responses
+
+| Status | Condition | Body |
+|--------|-----------|------|
+| 405 | Wrong HTTP method | `{ "error": "method_not_allowed" }` |
+| 404 | `ENABLE_SIMULATION_ENDPOINTS` not set to `true` | `{ "error": "simulation_not_enabled" }` |
+| 400 | Body is not valid JSON | `{ "error": "invalid_json" }` |
+| 400 | Missing/invalid fields | `{ "error": "invalid_payload", "fields": [...] }` |
+| 500 | Unexpected runner failure | `{ "error": "scenario_execution_failed" }` |
+
+## Examples
+
+### Simple conversational scenario (3 steps)
+
+```bash
+curl -X POST http://localhost:3000/dev/simulate/scenario \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scenarioId": "casual-chat",
+    "tenantId": "demo",
+    "channel": "whatsapp",
+    "externalSenderId": "5491111111111",
+    "steps": [
+      { "text": "hola Serena, cómo estás?" },
+      { "text": "qué lindo día hace" },
+      { "text": "bueno, me voy, chau" }
+    ]
+  }'
+```
+
+**Response**: 200 — all 3 steps succeed, `summary.totalSteps === 3`, `summary.successfulSteps === 3`, all decisions are `"known_sender_conversational"`.
+
+### Mediation scenario with risk step
+
+```bash
+curl -X POST http://localhost:3000/dev/simulate/scenario \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scenarioId": "mixed-flow",
+    "tenantId": "demo",
+    "channel": "whatsapp",
+    "externalSenderId": "5491111111111",
+    "steps": [
+      { "text": "hola Serena" },
+      { "text": "avisale a Carlos que voy a llegar 15 minutos tarde" },
+      { "text": "necesito ayuda urgente" },
+      { "text": "gracias" }
+    ]
+  }'
+```
+
+**Response**: 200 — `summary.mediationEvents === 1`, `summary.riskEvents === 1`, `summary.successfulSteps === 4`.
+
+### Multi-actor scenario (step overrides)
+
+```bash
+curl -X POST http://localhost:3000/dev/simulate/scenario \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scenarioId": "multi-actor",
+    "tenantId": "demo",
+    "channel": "whatsapp",
+    "externalSenderId": "+5492600000000",
+    "steps": [
+      { "text": "hola Serena, soy Marta",
+        "externalSenderId": "+5492600000000" },
+      { "text": "Hola Marta, soy María",
+        "externalSenderId": "5491111111111" },
+      { "text": "avisale a Juan",
+        "externalSenderId": "5491111111111" }
+    ]
+  }'
+```
+
+Each step uses its own `externalSenderId`, allowing different actors
+in the same scenario. Marta connects via WhatsApp (+5492600000000), María uses
+a different phone (5491111111111). A global `externalSenderId` is optional when
+every step provides its own.
+
+### Multi-actor without global sender (per-step senders only)
+
+```bash
+curl -X POST http://localhost:3000/dev/simulate/scenario \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scenarioId": "per-step-senders",
+    "tenantId": "demo",
+    "channel": "whatsapp",
+    "steps": [
+      { "text": "hola Serena, soy Marta",
+        "externalSenderId": "+5492600000000" },
+      { "text": "Hola Marta, soy María",
+        "externalSenderId": "5491111111111" },
+      { "text": "avisale a Juan",
+        "externalSenderId": "5491111111111" }
+    ]
+  }'
+```
+
+The `externalSenderId` at scenario level is omitted entirely — each step must
+provide its own. Validation rejects the request with a clear per-step error
+message if any step is missing its sender.
+
+### Scenario-level metadata merge
+
+```bash
+curl -X POST http://localhost:3000/dev/simulate/scenario \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scenarioId": "metadata-merge",
+    "tenantId": "demo",
+    "channel": "whatsapp",
+    "externalSenderId": "5491111111111",
+    "metadata": { "env": "staging", "source": "scenario" },
+    "steps": [
+      { "text": "uses scenario metadata only" },
+      { "text": "overrides source key",
+        "metadata": { "source": "step-override" } }
+    ]
+  }'
+```
+
+Scenario-level `metadata` is merged into every step. Step-level keys override
+scenario-level keys. In the example above, step 0 receives
+`{ env: "staging", source: "scenario" }` and step 1 receives
+`{ env: "staging", source: "step-override" }`.
+
+### stopOnError=true (breaks on first failure)
+
+```bash
+curl -X POST http://localhost:3000/dev/simulate/scenario \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scenarioId": "stop-on-error",
+    "tenantId": "demo",
+    "channel": "whatsapp",
+    "externalSenderId": "5491111111111",
+    "stopOnError": true,
+    "steps": [
+      { "text": "hola" },
+      { "text": "avisale a Carlos" },
+      { "text": "gracias" }
+    ]
+  }'
+```
+
+With `stopOnError: true`, if step 2 throws an error, step 3 is **never executed**.
+The response only includes results for steps 0 and 1.
+
+### stopOnError=false (default — continues past errors)
+
+```bash
+curl -X POST http://localhost:3000/dev/simulate/scenario \
+  -H "Content-Type: application/json" \
+  -d '{
+    "scenarioId": "continue-on-error",
+    "tenantId": "demo",
+    "channel": "whatsapp",
+    "externalSenderId": "5491111111111",
+    "stopOnError": false,
+    "steps": [
+      { "text": "hola" },
+      { "text": "avisale a Carlos" },
+      { "text": "gracias" }
+    ]
+  }'
+```
+
+All 3 steps are executed regardless of individual failures.
+
+## Limitations (Phase 1)
+
+- **Mock LLM only** — AI responses are deterministic (hash-based). No real AI.
+- **No real message sending** — the runner executes the pipeline and returns traces. Real WhatsApp/message sending is the responsibility of channel adapters.
+- **No auth guard** — the endpoint is disabled by default. Only enable in development.
+- **Shared in-memory state** — sessions persist across steps within the same HTTP request but are lost on server restart.
+- **Sequential execution only** — steps run one at a time in order. No parallel execution.
+- **No inter-step waiting** — there is no simulated delay between steps. Real mediation flows involve waiting for replies, which must be handled by separate requests in a real integration.

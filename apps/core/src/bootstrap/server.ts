@@ -38,6 +38,7 @@ export function createHttpServer(
   pipelineHandler?: PipelineRequestHandler,
   internalToken?: string,
   simulationHandler?: PipelineRequestHandler,
+  scenarioHandler?: PipelineRequestHandler,
 ) {
   return createServer(async (req, res) => {
     const url = new URL(
@@ -114,6 +115,26 @@ export function createHttpServer(
       if (simulationHandler) {
         try {
           await simulationHandler(req, res);
+        } catch {
+          if (!res.writableEnded) {
+            sendJson(res, 500, { error: "internal_server_error" });
+          }
+        }
+        return;
+      }
+
+      sendJson(res, 404, {
+        error: "simulation_not_enabled",
+        detail: "Set ENABLE_SIMULATION_ENDPOINTS=true to enable dev simulation endpoints",
+      });
+      return;
+    }
+
+    // POST /dev/simulate/scenario — dev-only multi-step scenario endpoint
+    if (url.pathname === "/dev/simulate/scenario") {
+      if (scenarioHandler) {
+        try {
+          await scenarioHandler(req, res);
         } catch {
           if (!res.writableEnded) {
             sendJson(res, 500, { error: "internal_server_error" });

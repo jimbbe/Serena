@@ -129,12 +129,101 @@ Define exactamente qué contexto recibe el LLM para cada caso de uso.
 
 ## 7. OutputContract
 
-| Prompt | Formato | Esquema |
-|--------|---------|---------|
-| `serena.mediation.understand_request.v1` | `json` | `{ isMediationRequest, recipientHint, messageDraft, requiresConfirmation, missingFields[], riskSignal }` |
-| `serena.mediation.clarify.v1` | `json` | `{ question, reason }` |
-| `serena.conversation.reply.v1` | `text` | Texto libre breve |
-| `serena.risk.review.v1` | `json` | `{ riskLevel, riskType, source, situationSummary, recommendedAction, requiresEscalation, missingInformation[] }` |
+El `OutputContract` documenta en código qué campos devuelve cada prompt y qué significa cada uno. Esto le permite a Serena (y a futuro a un validador) saber qué esperar sin depender exclusivamente del prompt.
+
+### Forma del contrato
+
+```typescript
+// Para salida de texto
+type OutputContract = {
+  format: "text";
+  description: string;
+};
+
+// Para salida JSON con campos estructurados
+type OutputContract = {
+  format: "json";
+  description: string;
+  fields: OutputFieldDefinition[];
+  strict: boolean;
+};
+
+type OutputFieldDefinition = {
+  name: string;
+  type: "string" | "boolean" | "string[]" | "enum" | "enum[]" | "number" | "object" | "unknown" | "null" | "string | null";
+  required: boolean;
+  description: string;
+  allowedValues?: string[];
+};
+```
+
+### Contratos por caso de uso
+
+#### serena.mediation.understand_request.v1
+
+```json
+{
+  "isMediationRequest": true | false,
+  "recipientHint": "nombre" | null,
+  "messageDraft": "mensaje" | null,
+  "requiresConfirmation": true | false,
+  "missingFields": ["recipient", "message", "confirmation"],
+  "riskSignal": true | false
+}
+```
+
+| Campo | Tipo | Requerido | Descripción |
+|-------|------|-----------|-------------|
+| `isMediationRequest` | `boolean` | true | true si el actor quiere que Serena transmita, pregunte o avise algo a otra persona. |
+| `recipientHint` | `string \| null` | true | nombre, vínculo o identificador del destinatario mencionado. null si no está claro. |
+| `messageDraft` | `string \| null` | true | versión breve, fiel y neutral del mensaje que se quiere transmitir. null si no hay mensaje claro. |
+| `requiresConfirmation` | `boolean` | true | true si Serena debe pedir confirmación antes de enviar o continuar. |
+| `missingFields` | `string[]` | true | datos faltantes que Serena necesita antes de continuar. Valores permitidos: `["recipient", "message", "confirmation"]`. |
+| `riskSignal` | `boolean` | true | true si el pedido contiene señales de salud, caída, urgencia, angustia fuerte, estafa, abuso o peligro. |
+
+#### serena.mediation.clarify.v1
+
+```json
+{
+  "question": "pregunta breve",
+  "reason": "explicación del dato faltante"
+}
+```
+
+| Campo | Tipo | Requerido | Descripción |
+|-------|------|-----------|-------------|
+| `question` | `string` | true | pregunta breve y clara que Serena puede usar para pedir el dato faltante. |
+| `reason` | `string` | true | explicación interna breve de qué dato falta o por qué se pregunta. |
+
+#### serena.conversation.reply.v1
+
+Formato: `text`
+
+Texto breve user-facing que Serena puede mostrar o decir al actor. No incluye JSON ni análisis interno.
+
+#### serena.risk.review.v1
+
+```json
+{
+  "riskLevel": "low" | "medium" | "high" | "critical",
+  "riskType": "health" | "emotional" | "safety" | "scam" | "confusion" | "unknown",
+  "source": "direct" | "reported" | "system" | "unknown",
+  "situationSummary": "resumen breve",
+  "recommendedAction": "reply" | "clarify" | "notify_contact" | "human_review",
+  "requiresEscalation": true | false,
+  "missingInformation": ["dato faltante"]
+}
+```
+
+| Campo | Tipo | Requerido | Descripción |
+|-------|------|-----------|-------------|
+| `riskLevel` | `enum` | true | gravedad operativa del riesgo. Valores: `["low", "medium", "high", "critical"]`. |
+| `riskType` | `enum` | true | categoría principal del riesgo detectado. Valores: `["health", "emotional", "safety", "scam", "confusion", "unknown"]`. |
+| `source` | `enum` | true | origen de la información. Valores: `["direct", "reported", "system", "unknown"]`. |
+| `situationSummary` | `string` | true | resumen breve de la situación sin diagnóstico. |
+| `recommendedAction` | `enum` | true | próxima acción sugerida para Serena. Valores: `["reply", "clarify", "notify_contact", "human_review"]`. |
+| `requiresEscalation` | `boolean` | true | true si Serena debería involucrar a una persona autorizada o revisión humana. |
+| `missingInformation` | `string[]` | true | datos relevantes que faltan para decidir mejor. |
 
 ---
 

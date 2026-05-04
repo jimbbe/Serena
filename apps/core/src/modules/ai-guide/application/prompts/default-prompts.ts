@@ -75,7 +75,50 @@ export const defaultPrompts: PromptDefinition[] = [
       includeSafetyMemory: false,
       includeFullConversation: false,
     },
-    outputContract: { format: "json" },
+    outputContract: {
+      format: "json",
+      description: "Análisis estructurado del pedido de mediación.",
+      strict: false,
+      fields: [
+        {
+          name: "isMediationRequest",
+          type: "boolean",
+          required: true,
+          description: "true si el actor quiere que Serena transmita, pregunte o avise algo a otra persona.",
+        },
+        {
+          name: "recipientHint",
+          type: "string | null",
+          required: true,
+          description: "nombre, vínculo o identificador del destinatario mencionado. null si no está claro.",
+        },
+        {
+          name: "messageDraft",
+          type: "string | null",
+          required: true,
+          description: "versión breve, fiel y neutral del mensaje que se quiere transmitir. null si no hay mensaje claro.",
+        },
+        {
+          name: "requiresConfirmation",
+          type: "boolean",
+          required: true,
+          description: "true si Serena debe pedir confirmación antes de enviar o continuar.",
+        },
+        {
+          name: "missingFields",
+          type: "string[]",
+          required: true,
+          description: "datos faltantes que Serena necesita antes de continuar.",
+          allowedValues: ["recipient", "message", "confirmation"],
+        },
+        {
+          name: "riskSignal",
+          type: "boolean",
+          required: true,
+          description: "true si el pedido contiene señales de salud, caída, urgencia, angustia fuerte, estafa, abuso o peligro.",
+        },
+      ],
+    },
     safetyNotes: [
       "Nunca inventar destinatarios ni contenido.",
       "No enviar mensajes — solo analizar.",
@@ -130,7 +173,25 @@ export const defaultPrompts: PromptDefinition[] = [
       includeSafetyMemory: false,
       includeFullConversation: false,
     },
-    outputContract: { format: "json" },
+    outputContract: {
+      format: "json",
+      description: "Pregunta de aclaración para el flujo de mediación.",
+      strict: false,
+      fields: [
+        {
+          name: "question",
+          type: "string",
+          required: true,
+          description: "pregunta breve y clara que Serena puede usar para pedir el dato faltante.",
+        },
+        {
+          name: "reason",
+          type: "string",
+          required: true,
+          description: "explicación interna breve de qué dato falta o por qué se pregunta.",
+        },
+      ],
+    },
   },
 
   // ── serena.conversation.reply.v1 ──────────────────────────────────
@@ -173,7 +234,10 @@ export const defaultPrompts: PromptDefinition[] = [
       includeSafetyMemory: false,
       includeFullConversation: false,
     },
-    outputContract: { format: "text" },
+    outputContract: {
+      format: "text",
+      description: "Texto breve user-facing que Serena puede mostrar o decir al actor.",
+    },
     safetyNotes: [
       "No dar consejos médicos ni legales.",
       "No prometer acciones que Serena no ejecutó.",
@@ -238,7 +302,59 @@ export const defaultPrompts: PromptDefinition[] = [
       includeSafetyMemory: false,
       includeFullConversation: false,
     },
-    outputContract: { format: "json" },
+    outputContract: {
+      format: "json",
+      description: "Clasificación estructurada de riesgo operativo para Serena.",
+      strict: false,
+      fields: [
+        {
+          name: "riskLevel",
+          type: "enum",
+          required: true,
+          description: "gravedad operativa del riesgo.",
+          allowedValues: ["low", "medium", "high", "critical"],
+        },
+        {
+          name: "riskType",
+          type: "enum",
+          required: true,
+          description: "categoría principal del riesgo detectado.",
+          allowedValues: ["health", "emotional", "safety", "scam", "confusion", "unknown"],
+        },
+        {
+          name: "source",
+          type: "enum",
+          required: true,
+          description: "origen de la información.",
+          allowedValues: ["direct", "reported", "system", "unknown"],
+        },
+        {
+          name: "situationSummary",
+          type: "string",
+          required: true,
+          description: "resumen breve de la situación sin diagnóstico.",
+        },
+        {
+          name: "recommendedAction",
+          type: "enum",
+          required: true,
+          description: "próxima acción sugerida para Serena.",
+          allowedValues: ["reply", "clarify", "notify_contact", "human_review"],
+        },
+        {
+          name: "requiresEscalation",
+          type: "boolean",
+          required: true,
+          description: "true si Serena debería involucrar a una persona autorizada o revisión humana.",
+        },
+        {
+          name: "missingInformation",
+          type: "string[]",
+          required: true,
+          description: "datos relevantes que faltan para decidir mejor.",
+        },
+      ],
+    },
     safetyNotes: [
       "No diagnosticar ni responder al usuario final.",
       "Escalar high/critical inmediatamente.",

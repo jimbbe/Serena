@@ -19,6 +19,9 @@ import type { GuideResult } from "../../ai-guide/domain/guide-result.ts";
 import type { ExternalIdentityResolver } from "../application/ports/external-identity-resolver.ts";
 import type { ResolvedInboundActor } from "../application/results/resolved-inbound-actor.ts";
 import type { InboundMessageCommand as InboundCmd } from "../domain/inbound-message-command.ts";
+import type { ConversationStore } from "../../conversation-store/port/conversation-store.ts";
+import type { Conversation } from "../../conversation-store/domain/conversation.ts";
+import type { ConversationMessage } from "../../conversation-store/domain/conversation-message.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers — mock factories
@@ -214,8 +217,41 @@ function mockResolverBySender(
   };
 }
 
+/**
+ * Creates a mock ConversationStore that records calls and returns
+ * deterministic values for testing.
+ */
+function mockConversationStore(opts?: {
+  findOrCreateResult?: Conversation;
+  messages?: ConversationMessage[];
+}): ConversationStore & { findOrCreateCalls: unknown[][]; appendCalls: ConversationMessage[] } {
+  const findOrCreateCalls: unknown[][] = [];
+  const appendCalls: ConversationMessage[] = [];
+  return {
+    findOrCreateCalls,
+    appendCalls,
+    findOrCreateConversation: async (input) => {
+      findOrCreateCalls.push([input]);
+      return opts?.findOrCreateResult ?? {
+        id: "conv-test-1",
+        tenantId: input.tenantId,
+        personId: input.personId,
+        status: "open",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    },
+    getConversation: async (_id: string) => undefined,
+    appendMessage: async (msg) => {
+      appendCalls.push(msg);
+      return msg;
+    },
+    listMessages: async (_id: string) => opts?.messages ?? appendCalls,
+  };
+}
+
 // ---------------------------------------------------------------------------
-// Tests — existing scenarios (updated with resolver mock)
+// Tests — existing scenarios (updated with conversationStore mock)
 // ---------------------------------------------------------------------------
 
 test("blocked sender (unknown_sender) returns without AI execution", async () => {
@@ -238,6 +274,7 @@ test("blocked sender (unknown_sender) returns without AI execution", async () =>
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   const command: InboundMessageCommand = {
@@ -272,6 +309,7 @@ test("invalid sender (blank) is blocked", async () => {
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: { execute: async () => successGuideResult("serena.conversation.reply") } as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   const result = await useCase.execute({
@@ -298,6 +336,7 @@ test("invalid text (blank) is blocked", async () => {
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: { execute: async () => successGuideResult("serena.conversation.reply") } as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   const result = await useCase.execute({
@@ -332,6 +371,7 @@ test("conversation flow calls AI guide with correct use case", async () => {
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   const result = await useCase.execute({
@@ -370,6 +410,7 @@ test("risk review flow calls AI guide with correct use case", async () => {
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   const result = await useCase.execute({
@@ -406,6 +447,7 @@ test("mediation understanding flow calls AI guide with correct use case", async 
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   const result = await useCase.execute({
@@ -439,6 +481,7 @@ test("clarification not implemented returns structured error", async () => {
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   const result = await useCase.execute({
@@ -478,6 +521,7 @@ test("unexpected AI guide failure returns guideError with code", async () => {
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   const result = await useCase.execute({
@@ -510,6 +554,7 @@ test("trace ID is a non-empty string", async () => {
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   const result = await useCase.execute({
@@ -539,6 +584,7 @@ test("custom trace ID generator is used when provided", async () => {
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
     generateTraceId: () => "custom-trace-123",
   });
 
@@ -568,6 +614,7 @@ test("trace IDs are unique across executions", async () => {
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   const result1 = await useCase.execute({ channel: "simulation", externalSenderId: "maria", text: "a" });
@@ -597,6 +644,7 @@ test("occurredAt is parsed correctly from ISO string", async () => {
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   await useCase.execute({
@@ -633,6 +681,7 @@ test("missing occurredAt defaults to current time", async () => {
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   await useCase.execute({
@@ -664,6 +713,7 @@ test("result echoes the input channel", async () => {
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   const channels: InboundChannel[] = ["whatsapp", "voice", "web_chat", "telegram", "system", "simulation"];
@@ -690,6 +740,7 @@ test("warnings for missing optional fields", async () => {
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   const result = await useCase.execute({
@@ -701,7 +752,6 @@ test("warnings for missing optional fields", async () => {
 
   assert.ok(result.warnings.includes("Missing optional field: tenantId"));
   assert.ok(result.warnings.includes("Missing optional field: personId"));
-  assert.ok(result.warnings.includes("Missing optional field: conversationId"));
 });
 
 test("invalid occurredAt defaults to current time", async () => {
@@ -725,6 +775,7 @@ test("invalid occurredAt defaults to current time", async () => {
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   await useCase.execute({
@@ -758,6 +809,7 @@ test("non-Error thrown by AiGuideService is caught", async () => {
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   const result = await useCase.execute({
@@ -808,6 +860,7 @@ test("blocked identity short-circuits without calling ProcessInboundMessage", as
       authorized: false,
       reason: "sender_blocked",
     }),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   const result = await useCase.execute({
@@ -862,6 +915,7 @@ test("unknown identity continues to gate evaluation", async () => {
       authorized: false,
       reason: "unknown_sender",
     }),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   const result = await useCase.execute({
@@ -914,6 +968,7 @@ test("resolved identity passes personId (not externalSenderId) to ProcessInbound
       displayName: "Marta",
       authorized: true,
     }),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   const result = await useCase.execute({
@@ -942,6 +997,7 @@ test("identity field is present in discard result path", async () => {
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: { execute: async () => successGuideResult("serena.conversation.reply") } as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   const result = await useCase.execute({
@@ -983,6 +1039,7 @@ test("resolver error caught, treated as unknown, no crash", async () => {
     processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
     aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
     identityResolver: throwingResolver,
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
   });
 
   const result = await useCase.execute({
@@ -1000,4 +1057,404 @@ test("resolver error caught, treated as unknown, no crash", async () => {
   );
   // Gate still called for unknown identity
   assert.equal(processCalled, true);
+});
+
+// ---------------------------------------------------------------------------
+// NEW TESTS — conversation store integration
+// ---------------------------------------------------------------------------
+
+test("resolved identity creates conversation and includes it in result", async () => {
+  let findOrCreateCalled = false;
+  let appendCalled = false;
+  let savedConversationId: string | undefined;
+
+  const mockStore = {
+    findOrCreateCalls: [] as unknown[][],
+    appendCalls: [] as ConversationMessage[],
+    findOrCreateConversation: async (input: unknown) => {
+      findOrCreateCalled = true;
+      const inp = input as { tenantId: string; personId: string };
+      savedConversationId = "conv-test-1";
+      return {
+        id: savedConversationId,
+        tenantId: inp.tenantId,
+        personId: inp.personId,
+        status: "open" as const,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    },
+    getConversation: async (_id: string) => undefined,
+    appendMessage: async (msg: ConversationMessage) => {
+      appendCalled = true;
+      mockStore.appendCalls.push(msg);
+      return msg;
+    },
+    listMessages: async (_id: string) => mockStore.appendCalls,
+  };
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("conversation"),
+      route: profileRoute("conversation"),
+    }),
+  };
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, _input: Record<string, string>): Promise<GuideResult> =>
+      successGuideResult(useCaseId),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockStore as unknown as ConversationStore,
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "hola",
+    tenantId: "demo",
+  });
+
+  assert.equal(findOrCreateCalled, true, "findOrCreateConversation should be called for resolved identity");
+  assert.equal(appendCalled, true, "appendMessage should be called for resolved identity");
+  assert.ok(result.conversation !== undefined, "conversation should be in result");
+  assert.equal(result.conversation!.id, savedConversationId);
+  assert.equal(result.conversation!.status, "open");
+  assert.ok(result.conversation!.messageCount >= 1);
+});
+
+test("resolved identity with existing conversationId passes it through", async () => {
+  let receivedConversationId: string | undefined;
+
+  const mockStore = {
+    findOrCreateCalls: [] as unknown[][],
+    appendCalls: [] as ConversationMessage[],
+    findOrCreateConversation: async (input: unknown) => {
+      const inp = input as { tenantId: string; personId: string; conversationId?: string };
+      receivedConversationId = inp.conversationId;
+      return {
+        id: inp.conversationId ?? "conv-new",
+        tenantId: inp.tenantId,
+        personId: inp.personId,
+        status: "open" as const,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+    },
+    getConversation: async (_id: string) => undefined,
+    appendMessage: async (msg: ConversationMessage) => {
+      mockStore.appendCalls.push(msg);
+      return msg;
+    },
+    listMessages: async (_id: string) => mockStore.appendCalls,
+  };
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("conversation"),
+      route: profileRoute("conversation"),
+    }),
+  };
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, _input: Record<string, string>): Promise<GuideResult> =>
+      successGuideResult(useCaseId),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockStore as unknown as ConversationStore,
+  });
+
+  await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "hola",
+    tenantId: "demo",
+    conversationId: "existing-conv-123",
+  });
+
+  assert.equal(receivedConversationId, "existing-conv-123", "provided conversationId should be passed to store");
+});
+
+test("unknown identity does not create conversation", async () => {
+  let findOrCreateCalled = false;
+
+  const mockStore = {
+    findOrCreateCalls: [] as unknown[][],
+    appendCalls: [] as ConversationMessage[],
+    findOrCreateConversation: async (input: unknown) => {
+      const inp = input as { tenantId: string; personId: string };
+      return { id: "conv-discard", tenantId: inp.tenantId, personId: inp.personId, status: "open" as const, createdAt: new Date(), updatedAt: new Date() };
+    },
+    getConversation: async (_id: string) => undefined,
+    appendMessage: async (msg: ConversationMessage) => {
+      mockStore.appendCalls.push(msg);
+      return msg;
+    },
+    listMessages: async (_id: string) => mockStore.appendCalls,
+  };
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: blockedDecision(),
+      route: discardRoute("unknown_sender"),
+    }),
+  };
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, _input: Record<string, string>): Promise<GuideResult> =>
+      successGuideResult(useCaseId),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver({
+      status: "unknown",
+      tenantId: "demo",
+      channel: "whatsapp",
+      externalSenderId: "stranger",
+      authorized: false,
+      reason: "unknown_sender",
+    }),
+    conversationStore: mockStore as unknown as ConversationStore,
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "stranger",
+    text: "hello",
+  });
+
+  assert.equal(findOrCreateCalled, false, "findOrCreateConversation should NOT be called for unknown identity");
+  assert.equal(result.conversation, undefined, "conversation should NOT be in result for unknown identity");
+});
+
+test("blocked identity does not create conversation", async () => {
+  let findOrCreateCalled = false;
+
+  const mockStore = {
+    findOrCreateCalls: [] as unknown[][],
+    appendCalls: [] as ConversationMessage[],
+    findOrCreateConversation: async (_input: unknown) => {
+      findOrCreateCalled = true;
+      return { id: "no", tenantId: "x", personId: "x", status: "open" as const, createdAt: new Date(), updatedAt: new Date() };
+    },
+    getConversation: async (_id: string) => undefined,
+    appendMessage: async (msg: ConversationMessage) => {
+      mockStore.appendCalls.push(msg);
+      return msg;
+    },
+    listMessages: async (_id: string) => mockStore.appendCalls,
+  };
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("conversation"),
+      route: profileRoute("conversation"),
+    }),
+  };
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, _input: Record<string, string>): Promise<GuideResult> =>
+      successGuideResult(useCaseId),
+  };
+
+  const blockedIdentity = mockResolver({
+    status: "blocked",
+    tenantId: "demo",
+    channel: "whatsapp",
+    externalSenderId: "spammer",
+    authorized: false,
+    reason: "sender_blocked",
+  });
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: blockedIdentity,
+    conversationStore: mockStore as unknown as ConversationStore,
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "spammer",
+    text: "hello",
+  });
+
+  assert.equal(findOrCreateCalled, false, "findOrCreateConversation should NOT be called for blocked identity");
+  assert.equal(result.conversation, undefined, "conversation should NOT be in result for blocked identity");
+  assert.equal(result.identity!.status, "blocked");
+});
+
+test("conversation info present in discard path for resolved identity", async () => {
+  // Resolved identity but gate decides to discard (e.g., unknown_sender after resolution)
+  const mockStore = {
+    findOrCreateCalls: [] as unknown[][],
+    appendCalls: [] as ConversationMessage[],
+    findOrCreateConversation: async (input: unknown) => {
+      const inp = input as { tenantId: string; personId: string };
+      return { id: "conv-discard", tenantId: inp.tenantId, personId: inp.personId, status: "open" as const, createdAt: new Date(), updatedAt: new Date() };
+    },
+    getConversation: async (_id: string) => undefined,
+    appendMessage: async (msg: ConversationMessage) => {
+      mockStore.appendCalls.push(msg);
+      return msg;
+    },
+    listMessages: async (_id: string) => mockStore.appendCalls,
+  };
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: blockedDecision(),
+      route: discardRoute("unknown_sender"),
+    }),
+  };
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, _input: Record<string, string>): Promise<GuideResult> =>
+      successGuideResult(useCaseId),
+  };
+
+  // Despite identity being resolved, the gate discards
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockStore as unknown as ConversationStore,
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "hello",
+  });
+
+  // Even on discard, resolved identity should have conversation info
+  assert.ok(result.conversation !== undefined, "conversation should be present even on discard for resolved identity");
+  assert.equal(result.conversation!.id, "conv-discard");
+  assert.equal(result.conversation!.status, "open");
+  assert.equal(result.conversation!.messageCount, 1);
+});
+
+test("no conversationId warning in warnings (old warning removed)", async () => {
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("conversation"),
+      route: profileRoute("conversation"),
+    }),
+  };
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, _input: Record<string, string>): Promise<GuideResult> =>
+      successGuideResult(useCaseId),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "hello",
+    // No conversationId provided — old code warned, new code should not
+  });
+
+  assert.ok(result.warnings.includes("Missing optional field: tenantId"));
+  assert.ok(result.warnings.includes("Missing optional field: personId"));
+  assert.ok(
+    !result.warnings.includes("Missing optional field: conversationId"),
+    "conversationId warning should no longer be present",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// NEW TESTS — outbound message recording policy
+// ---------------------------------------------------------------------------
+
+test("risk_review does not record outbound message", async () => {
+  const mockStore = mockConversationStore();
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("risk_review"),
+      route: profileRoute("risk_review"),
+    }),
+  };
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, _input: Record<string, string>): Promise<GuideResult> =>
+      successGuideResult(useCaseId),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockStore as unknown as ConversationStore,
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "es urgente",
+    tenantId: "demo",
+  });
+
+  assert.equal(result.useCaseId, "serena.risk.review");
+  // Only the inbound message should be recorded — no outbound for risk_review
+  assert.equal(mockStore.appendCalls.length, 1, "Only one message should be recorded");
+  assert.equal(mockStore.appendCalls[0]!.direction, "inbound");
+  // messageCount should reflect the real accumulated count (1 inbound only)
+  assert.ok(result.conversation !== undefined);
+  assert.equal(result.conversation!.messageCount, 1);
+});
+
+test("mediation_understanding does not record outbound message", async () => {
+  const mockStore = mockConversationStore();
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("mediation_understanding"),
+      route: profileRoute("mediation_understanding"),
+    }),
+  };
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, _input: Record<string, string>): Promise<GuideResult> =>
+      successGuideResult(useCaseId),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockStore as unknown as ConversationStore,
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "avisale a Carlos",
+    tenantId: "demo",
+  });
+
+  assert.equal(result.useCaseId, "serena.mediation.understand_request");
+  // Only the inbound message should be recorded — no outbound for mediation_understanding
+  assert.equal(mockStore.appendCalls.length, 1, "Only one message should be recorded");
+  assert.equal(mockStore.appendCalls[0]!.direction, "inbound");
+  // messageCount should reflect the real accumulated count (1 inbound only)
+  assert.ok(result.conversation !== undefined);
+  assert.equal(result.conversation!.messageCount, 1);
 });

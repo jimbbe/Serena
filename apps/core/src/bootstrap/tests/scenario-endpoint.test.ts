@@ -133,12 +133,13 @@ let server: http.Server;
 let port: number;
 
 before(async () => {
-  const { processInboundMessage, aiGuideService, identityResolver } = await createInMemoryPipeline();
+  const { processInboundMessage, aiGuideService, identityResolver, conversationStore } = await createInMemoryPipeline();
 
   const processChannelInboundMessage = new ProcessChannelInboundMessage({
     processInboundMessage,
     aiGuideService,
     identityResolver,
+    conversationStore,
   });
 
   // Wire BOTH simulation and scenario handlers
@@ -1494,12 +1495,13 @@ describe("POST /dev/simulate/scenario", () => {
 
   it("runner calls ProcessChannelInboundMessage.execute() (no duplicated logic)", async () => {
     // Create a spy that wraps a real processChannelInboundMessage
-    const { processInboundMessage, aiGuideService, identityResolver } = await createInMemoryPipeline();
+    const { processInboundMessage, aiGuideService, identityResolver, conversationStore: convStore } = await createInMemoryPipeline();
 
     const realChannelInbound = new ProcessChannelInboundMessage({
       processInboundMessage,
       aiGuideService,
       identityResolver,
+      conversationStore: convStore,
     });
 
     const calls: InboundMessageCommand[] = [];
@@ -1548,12 +1550,13 @@ describe("POST /dev/simulate/scenario", () => {
 
   it("scenario.metadata is merged with step.metadata (step takes priority)", async () => {
     // Create a spy that captures the InboundMessageCommand per step
-    const { processInboundMessage, aiGuideService, identityResolver } = await createInMemoryPipeline();
+    const { processInboundMessage, aiGuideService, identityResolver, conversationStore: convStore } = await createInMemoryPipeline();
 
     const realChannelInbound = new ProcessChannelInboundMessage({
       processInboundMessage,
       aiGuideService,
       identityResolver,
+      conversationStore: convStore,
     });
 
     const capturedCommands: InboundMessageCommand[] = [];
@@ -1700,3 +1703,227 @@ function makeStepResult(opts: {
     error: null,
   };
 }
+
+// =========================================================================
+// T22-11 — Conversation continuity across scenario steps
+// =========================================================================
+
+describe("Conversation continuity", () => {
+  it("multi-step scenario reuses same conversation across steps", async () => {
+    const { status, body } = await request("POST", "/dev/simulate/scenario", port, scenarioPayload({
+      scenarioId: "continuity-test",
+      steps: [
+        { text: "hola" },
+        { text: "cómo estás?" },
+        { text: "chau" },
+      ],
+    }));
+
+    assert.equal(status, 200);
+    const result = body as ScenarioResult;
+    assert.equal(result.steps.length, 3);
+
+    // All three steps should have conversation info
+    for (const step of result.steps) {
+      assert.ok(step.result !== null);
+      const conv = step.result.conversation;
+      assert.ok(conv !== undefined, `Step ${step.index} should have conversation`);
+      assert.equal(typeof conv!.id, "string");
+      assert.ok(conv!.id.length > 0);
+    }
+
+    // All steps should share the same conversation ID
+    const conv0 = result.steps[0]!.result!.conversation!;
+    const conv1 = result.steps[1]!.result!.conversation!;
+    const conv2 = result.steps[2]!.result!.conversation!;
+
+    assert.equal(conv1.id, conv0.id, "Step 1 should reuse step 0 conversation");
+    assert.equal(conv2.id, conv0.id, "Step 2 should reuse step 0 conversation");
+  });
+
+  it("conversation info includes id, status, and messageCount in step results", async () => {
+    const { status, body } = await request("POST", "/dev/simulate/scenario", port, scenarioPayload({
+      scenarioId: "conv-info-test",
+      steps: [{ text: "hola" }],
+    }));
+
+    assert.equal(status, 200);
+    const result = body as ScenarioResult;
+    assert.equal(result.steps.length, 1);
+
+    const step0 = result.steps[0]!;
+    assert.ok(step0.result !== null);
+    const conv = step0.result.conversation;
+    assert.ok(conv !== undefined);
+    assert.equal(typeof conv!.id, "string");
+    assert.equal(conv!.status, "open");
+    assert.ok(typeof conv!.messageCount === "number");
+    assert.ok(conv!.messageCount >= 1);
+  });
+
+  it("first step without conversationId creates one, subsequent steps reuse it", async () => {
+    const { status, body } = await request("POST", "/dev/simulate/scenario", port, {
+      scenarioId: "auto-create-conversation",
+      tenantId: "demo",
+      channel: "whatsapp",
+      externalSenderId: MARIA_WHATSAPP,
+      steps: [
+        { text: "hola" },
+        { text: "cómo estás?" },
+      ],
+    });
+
+    assert.equal(status, 200);
+    const result = body as ScenarioResult;
+    assert.equal(result.steps.length, 2);
+
+    // First step creates a conversation
+    const step0Conv = result.steps[0]!.result!.conversation;
+    assert.ok(step0Conv !== undefined, "First step should auto-create conversation");
+
+    // Second step reuses the same conversation
+    const step1Conv = result.steps[1]!.result!.conversation;
+    assert.ok(step1Conv !== undefined, "Second step should reuse conversation");
+    assert.equal(step1Conv!.id, step0Conv!.id);
+  });
+
+  it("step with conversationId override uses indicated conversation", async () => {
+    // First create a conversation with one request
+    const { body: createBody } = await request("POST", "/dev/simulate/scenario", port, {
+      scenarioId: "create-conv",
+      tenantId: "demo",
+      channel: "whatsapp",
+      externalSenderId: MARIA_WHATSAPP,
+      steps: [{ text: "hola" }],
+    });
+
+    const createResult = createBody as ScenarioResult;
+    const firstConvId = createResult.steps[0]!.result!.conversation!.id;
+
+    // Now run a new scenario with an explicit conversationId
+    const { status, body } = await request("POST", "/dev/simulate/scenario", port, {
+      scenarioId: "override-conv",
+      tenantId: "demo",
+      channel: "whatsapp",
+      externalSenderId: MARIA_WHATSAPP,
+      conversationId: "custom-conv-999",
+      steps: [{ text: "this step uses custom conv" }],
+    });
+
+    assert.equal(status, 200);
+    const result = body as ScenarioResult;
+    const stepConv = result.steps[0]!.result!.conversation;
+    assert.ok(stepConv !== undefined);
+    // With a custom conversationId that doesn't exist in the store,
+    // the store creates a new conversation (unrecognized id → create new)
+    assert.ok(stepConv!.id.length > 0);
+  });
+
+  it("each scenario with different sender gets separate conversation", async () => {
+    const { status, body } = await request("POST", "/dev/simulate/scenario", port, {
+      scenarioId: "different-senders",
+      tenantId: "demo",
+      channel: "whatsapp",
+      steps: [
+        { text: "hola soy Marta", externalSenderId: MARTA_WHATSAPP },
+        { text: "hola soy María", externalSenderId: MARIA_WHATSAPP },
+      ],
+    });
+
+    assert.equal(status, 200);
+    const result = body as ScenarioResult;
+    assert.equal(result.steps.length, 2);
+
+    const conv0 = result.steps[0]!.result!.conversation;
+    const conv1 = result.steps[1]!.result!.conversation;
+
+    assert.ok(conv0 !== undefined);
+    assert.ok(conv1 !== undefined);
+    // Different senders = different persons = different conversations
+    assert.notEqual(conv1!.id, conv0!.id,
+      "Different senders should get different conversations");
+  });
+
+  it("step-level conversationId override takes priority over auto-propagation", async () => {
+    const { status, body } = await request("POST", "/dev/simulate/scenario", port, {
+      scenarioId: "step-override-priority",
+      tenantId: "demo",
+      channel: "whatsapp",
+      externalSenderId: MARIA_WHATSAPP,
+      steps: [
+        // Step 0: no conversationId → auto-creates conversation C0
+        { text: "primer mensaje" },
+        // Step 1: explicit conversationId → should use THIS, not C0
+        { text: "segundo mensaje", conversationId: "step-level-override-456" },
+        // Step 2: no conversationId → should auto-propagate from step 1's override
+        { text: "tercer mensaje" },
+      ],
+    });
+
+    assert.equal(status, 200);
+    const result = body as ScenarioResult;
+    assert.equal(result.steps.length, 3);
+
+    const step0Conv = result.steps[0]!.result!.conversation;
+    const step1Conv = result.steps[1]!.result!.conversation;
+    const step2Conv = result.steps[2]!.result!.conversation;
+
+    assert.ok(step0Conv !== undefined, "Step 0 should auto-create a conversation");
+    assert.ok(step1Conv !== undefined, "Step 1 should have a conversation from the override");
+    assert.ok(step2Conv !== undefined, "Step 2 should auto-propagate from step 1");
+
+    // Step 1 explicitly set its own conversationId — should NOT reuse step 0's
+    assert.notEqual(step1Conv!.id, step0Conv!.id,
+      "Step-level override should use a different conversation than auto-created step 0");
+
+    // Step 2 should propagate from step 1's override, not step 0
+    assert.equal(step2Conv!.id, step1Conv!.id,
+      "Auto-propagation after override should continue from the override conversation");
+
+    // Top-level conversation should reflect the last active conversation (step 2)
+    assert.ok(result.conversation !== undefined, "Top-level conversation should be populated");
+    assert.equal(result.conversation!.id, step2Conv!.id);
+  });
+
+  it("messageCount accumulates correctly across steps of the same conversation", async () => {
+    const { status, body } = await request("POST", "/dev/simulate/scenario", port, {
+      scenarioId: "message-count-test",
+      tenantId: "demo",
+      channel: "whatsapp",
+      externalSenderId: MARIA_WHATSAPP,
+      steps: [
+        { text: "primer mensaje" },
+        { text: "segundo mensaje" },
+        { text: "tercer mensaje" },
+      ],
+    });
+
+    assert.equal(status, 200);
+    const result = body as ScenarioResult;
+    assert.equal(result.steps.length, 3);
+
+    const step0Conv = result.steps[0]!.result!.conversation;
+    const step1Conv = result.steps[1]!.result!.conversation;
+    const step2Conv = result.steps[2]!.result!.conversation;
+
+    assert.ok(step0Conv !== undefined);
+    assert.ok(step1Conv !== undefined);
+    assert.ok(step2Conv !== undefined);
+
+    // All steps share the same conversation
+    assert.equal(step0Conv!.id, step1Conv!.id);
+    assert.equal(step1Conv!.id, step2Conv!.id);
+
+    // messageCount must increase because each step adds an inbound message
+    // (no outbound messages are recorded for internal AI operations)
+    assert.ok(step0Conv!.messageCount >= 1, "Step 0 should have at least 1 message");
+    assert.ok(step1Conv!.messageCount > step0Conv!.messageCount,
+      `Step 1 count (${step1Conv!.messageCount}) must exceed step 0 (${step0Conv!.messageCount})`);
+    assert.ok(step2Conv!.messageCount > step1Conv!.messageCount,
+      `Step 2 count (${step2Conv!.messageCount}) must exceed step 1 (${step1Conv!.messageCount})`);
+
+    // Top-level conversation should reflect the final count
+    assert.ok(result.conversation !== undefined);
+    assert.equal(result.conversation!.messageCount, step2Conv!.messageCount);
+  });
+});

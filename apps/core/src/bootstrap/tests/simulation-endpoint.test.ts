@@ -86,12 +86,13 @@ let server: http.Server;
 let port: number;
 
 before(async () => {
-  const { processInboundMessage, aiGuideService, identityResolver } = await createInMemoryPipeline();
+  const { processInboundMessage, aiGuideService, identityResolver, conversationStore } = await createInMemoryPipeline();
 
   const processChannelInboundMessage = new ProcessChannelInboundMessage({
     processInboundMessage,
     aiGuideService,
     identityResolver,
+    conversationStore,
   });
 
   const simulationHandler = createSimulationHandler(processChannelInboundMessage);
@@ -528,11 +529,12 @@ describe("POST /dev/simulate/inbound-message", () => {
       }),
     };
 
-    const { aiGuideService, identityResolver } = await createInMemoryPipeline();
+    const { aiGuideService, identityResolver, conversationStore } = await createInMemoryPipeline();
     const useCase = new ProcessChannelInboundMessage({
       processInboundMessage: mockProcessInbound as unknown as ProcessInboundMessage,
       aiGuideService,
       identityResolver,
+      conversationStore,
     });
 
     const handler = createSimulationHandler(useCase);

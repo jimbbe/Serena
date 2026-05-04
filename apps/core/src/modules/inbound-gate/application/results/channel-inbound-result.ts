@@ -60,6 +60,12 @@ export type ChannelInboundResult = {
   simulatedOutbound?: SimulatedOutbound;
   /** Resolved identity from external identity resolution (optional for backward compatibility). */
   identity?: ResolvedInboundActor;
+  /** Conversation info — set when identity is resolved and a conversation exists. */
+  conversation?: {
+    readonly id: string;
+    readonly status: string;
+    readonly messageCount: number;
+  };
   /** Non-fatal issues encountered during execution. */
   warnings: string[];
   /** Fatal errors encountered during execution. */

@@ -39,6 +39,8 @@ import { RewordMessage } from "../modules/prudent-rewording/application/use-case
 import { InMemoryProcessedMessageStore } from "../modules/internal-pipeline/infrastructure/memory/in-memory-processed-message-store.ts";
 import type { ProcessedMessageStore } from "../modules/internal-pipeline/domain/processed-message-store.ts";
 
+import { InMemoryConversationStore } from "../modules/conversation-store/adapter/in-memory-conversation-store.ts";
+
 import { AiGuideService } from "../modules/ai-guide/application/use-cases/ai-guide-service.ts";
 import { UseCaseRegistry } from "../modules/ai-guide/application/use-cases/use-case-registry.ts";
 import { ExecutionPipeline } from "../modules/ai-guide/application/use-cases/execution-pipeline.ts";
@@ -57,6 +59,7 @@ export async function createInMemoryPipeline(): Promise<{
   aiGuideService: AiGuideService;
   processInboundMessage: ProcessInboundMessage;
   identityResolver: InMemoryExternalIdentityResolver;
+  conversationStore: InMemoryConversationStore;
 }> {
   const contacts = await loadContactsFromSeed();
 
@@ -149,5 +152,8 @@ export async function createInMemoryPipeline(): Promise<{
   const executionPipeline = new ExecutionPipeline({ provider: llmProvider, audit: aiAudit });
   const aiGuideService = new AiGuideService({ registry: aiRegistry, pipeline: executionPipeline });
 
-  return { orchestrator, bridgeStore, processedMessageStore, aiGuideService, processInboundMessage, identityResolver };
+  // Conversation store — shared in-memory store for conversation tracking
+  const conversationStore = new InMemoryConversationStore();
+
+  return { orchestrator, bridgeStore, processedMessageStore, aiGuideService, processInboundMessage, identityResolver, conversationStore };
 }

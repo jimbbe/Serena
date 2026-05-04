@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { UseCaseRegistry } from "../application/use-cases/use-case-registry.ts";
 import type { UseCaseContract } from "../domain/use-case-contract.ts";
 import type { GuideUseCaseId } from "../domain/guide-use-case-id.ts";
+import type { PromptId } from "../domain/prompt-id.ts";
 
 function makeContract(
   id: GuideUseCaseId,
@@ -11,9 +12,7 @@ function makeContract(
 ): UseCaseContract {
   return {
     id,
-    systemPrompt: `System prompt for ${id}`,
-    inputTemplate: `Template: {input}`,
-    outputSchemaName: "text",
+    promptId: `${id}.v1` as PromptId,
     executionPolicy: {
       maxTokens: 256,
       temperature: 0.7,
@@ -35,9 +34,7 @@ test("register and retrieve a contract", () => {
   assert.ok(retrieved !== undefined, "Expected contract to be retrieved");
   if (retrieved) {
     assert.equal(retrieved.id, "serena.conversation.reply");
-    assert.equal(retrieved.systemPrompt, contract.systemPrompt);
-    assert.equal(retrieved.inputTemplate, contract.inputTemplate);
-    assert.equal(retrieved.outputSchemaName, contract.outputSchemaName);
+    assert.equal(retrieved.promptId, "serena.conversation.reply.v1");
     assert.equal(retrieved.executionPolicy.maxTokens, 256);
   }
 });

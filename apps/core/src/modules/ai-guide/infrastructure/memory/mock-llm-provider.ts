@@ -1,23 +1,28 @@
+import type { PromptId } from "../../domain/prompt-id.ts";
 import type { LlmProvider } from "../../application/ports/llm-provider.ts";
+import type { ExecutionPolicy } from "../../domain/execution-policy.ts";
 
 export class MockLlmProvider implements LlmProvider {
   private readonly cannedResponses: Map<
-    string,
+    PromptId,
     { content: string; tokensUsed?: number }
   >;
 
   constructor(
-    canned?: Map<string, { content: string; tokensUsed?: number }>
+    canned?: Map<PromptId, { content: string; tokensUsed?: number }>
   ) {
     this.cannedResponses = canned ?? new Map();
   }
 
   async invoke(input: {
+    promptId: PromptId;
+    promptVersion: number;
     systemPrompt: string;
     userPrompt: string;
-    policy: import("../../domain/execution-policy.ts").ExecutionPolicy;
+    developerPrompt?: string;
+    policy: ExecutionPolicy;
   }): Promise<{ content: string; tokensUsed?: number; modelUsed?: string }> {
-    const key = input.systemPrompt;
+    const key = input.promptId;
 
     if (this.cannedResponses.has(key)) {
       const canned = this.cannedResponses.get(key)!;
@@ -28,8 +33,8 @@ export class MockLlmProvider implements LlmProvider {
       };
     }
 
-    // Deterministic response based on combined prompt
-    const hash = this.simpleHash(input.systemPrompt + "::" + input.userPrompt);
+    // Deterministic fallback using promptId + userPrompt
+    const hash = this.simpleHash(input.promptId + "::" + input.userPrompt);
     return {
       content: `Mock response for: ${input.userPrompt} (hash: ${hash})`,
       tokensUsed: 20,

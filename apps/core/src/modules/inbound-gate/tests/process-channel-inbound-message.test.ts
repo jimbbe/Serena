@@ -161,6 +161,8 @@ function successGuideResult(useCaseId: GuideUseCaseId): GuideResult {
       model: "mock-model-v1",
       attempts: 1,
       auditRecorded: false,
+      promptId: "serena.conversation.reply.v1",
+      promptVersion: 1,
     },
   };
 }

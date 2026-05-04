@@ -1,4 +1,5 @@
 import type { GuideUseCaseId } from "./guide-use-case-id.ts";
+import type { PromptId } from "./prompt-id.ts";
 
 /** Discriminated union: a technical failure must never appear as a successful output. */
 export type GuideResult = GuideResultSuccess | GuideResultFailed;
@@ -13,6 +14,8 @@ export type GuideResultSuccess = {
     attempts: number;
     auditId?: string;
     auditRecorded: boolean;
+    promptId: PromptId;
+    promptVersion: number;
   };
 };
 
@@ -30,5 +33,7 @@ export type GuideResultFailed = {
     attempts: number;
     auditId?: string;
     auditRecorded: boolean;
+    promptId: PromptId;
+    promptVersion: number;
   };
 };

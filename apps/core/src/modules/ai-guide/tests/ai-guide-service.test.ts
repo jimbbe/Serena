@@ -6,6 +6,10 @@ import { UseCaseRegistry } from "../application/use-cases/use-case-registry.ts";
 import { ExecutionPipeline } from "../application/use-cases/execution-pipeline.ts";
 import { MockLlmProvider } from "../infrastructure/memory/mock-llm-provider.ts";
 import { InMemoryAiInvocationAudit } from "../infrastructure/memory/in-memory-ai-invocation-audit.ts";
+import { InMemoryPromptRegistry } from "../application/prompts/in-memory-prompt-registry.ts";
+import { ContextBuilder } from "../application/prompts/context-builder.ts";
+import { defaultPrompts } from "../application/prompts/default-prompts.ts";
+import type { PromptId } from "../domain/prompt-id.ts";
 import type { GuideResultSuccess } from "../domain/guide-result.ts";
 import type { UseCaseContract } from "../domain/use-case-contract.ts";
 import type { ExecutionPolicy } from "../domain/execution-policy.ts";
@@ -18,12 +22,15 @@ const defaultPolicy: ExecutionPolicy = {
   timeoutMs: 10000,
 };
 
+const REPLY: PromptId = "serena.conversation.reply.v1";
+const RISK: PromptId = "serena.risk.review.v1";
+const UNDERSTAND: PromptId = "serena.mediation.understand_request.v1";
+const CLARIFY: PromptId = "serena.mediation.clarify.v1";
+
 function makeContract(overrides?: Partial<UseCaseContract>): UseCaseContract {
   return {
     id: "serena.conversation.reply",
-    systemPrompt: "You are Serena.",
-    inputTemplate: "User: {text}",
-    outputSchemaName: "text",
+    promptId: REPLY,
     executionPolicy: { ...defaultPolicy },
     ...overrides,
   };
@@ -33,7 +40,14 @@ function setupService() {
   const registry = new UseCaseRegistry();
   const provider = new MockLlmProvider();
   const audit = new InMemoryAiInvocationAudit();
-  const pipeline = new ExecutionPipeline({ provider, audit });
+  const promptRegistry = new InMemoryPromptRegistry(defaultPrompts);
+  const contextBuilder = new ContextBuilder();
+  const pipeline = new ExecutionPipeline({
+    provider,
+    audit,
+    registry: promptRegistry,
+    contextBuilder,
+  });
   const service = new AiGuideService({ registry, pipeline });
   return { registry, provider, audit, pipeline, service };
 }
@@ -43,7 +57,7 @@ test("execute returns success GuideResult for registered use case", async () => 
   registry.register(makeContract({ id: "serena.conversation.reply" }));
 
   const result = await service.execute("serena.conversation.reply", {
-    text: "Hello!",
+    input: "Hello!",
   });
 
   assert.equal(result.status, "success");
@@ -53,6 +67,8 @@ test("execute returns success GuideResult for registered use case", async () => 
   assert.ok(success.output.length > 0);
   assert.equal(success.metadata.attempts, 1);
   assert.equal(success.metadata.auditRecorded, true);
+  assert.equal(success.metadata.promptId, REPLY);
+  assert.equal(success.metadata.promptVersion, 1);
 });
 
 test("execute returns success GuideResult for risk review", async () => {
@@ -60,17 +76,18 @@ test("execute returns success GuideResult for risk review", async () => {
   registry.register(
     makeContract({
       id: "serena.risk.review",
-      systemPrompt: "Assess risk.",
+      promptId: RISK,
       executionPolicy: { ...defaultPolicy, temperature: 0.3 },
     })
   );
 
-  const result = await service.execute("serena.risk.review", { text: "I need help" });
+  const result = await service.execute("serena.risk.review", { input: "I need help" });
 
   assert.equal(result.status, "success");
   assert.equal(result.useCaseId, "serena.risk.review");
   const success = result as GuideResultSuccess;
   assert.ok(typeof success.output === "string");
+  assert.equal(success.metadata.promptId, RISK);
 });
 
 test("execute returns success GuideResult for mediation understanding", async () => {
@@ -78,26 +95,27 @@ test("execute returns success GuideResult for mediation understanding", async ()
   registry.register(
     makeContract({
       id: "serena.mediation.understand_request",
-      systemPrompt: "Understand the mediation request.",
+      promptId: UNDERSTAND,
     })
   );
 
   const result = await service.execute(
     "serena.mediation.understand_request",
-    { text: "Tell John to call me" }
+    { input: "Tell John to call me" }
   );
 
   assert.equal(result.status, "success");
   assert.equal(result.useCaseId, "serena.mediation.understand_request");
   const success = result as GuideResultSuccess;
   assert.ok(typeof success.output === "string");
+  assert.equal(success.metadata.promptId, UNDERSTAND);
 });
 
 test("execute throws for unregistered use case", async () => {
   const { service } = setupService();
 
   await assert.rejects(
-    () => service.execute("serena.risk.review", { text: "test" }),
+    () => service.execute("serena.risk.review", { input: "test" }),
     /not registered/
   );
 });
@@ -107,12 +125,12 @@ test("execute throws NotImplementedError for clarification", async () => {
   registry.register(
     makeContract({
       id: "serena.mediation.clarify",
-      systemPrompt: "Clarify the request.",
+      promptId: CLARIFY,
     })
   );
 
   await assert.rejects(
-    () => service.execute("serena.mediation.clarify", { text: "test" }),
+    () => service.execute("serena.mediation.clarify", { input: "test" }),
     /not implemented/i
   );
 });
@@ -121,7 +139,7 @@ test("execute throws for clarification even without a registered contract", asyn
   const { service } = setupService();
 
   await assert.rejects(
-    () => service.execute("serena.mediation.clarify", { text: "test" }),
+    () => service.execute("serena.mediation.clarify", { input: "test" }),
     /not implemented/i
   );
 });

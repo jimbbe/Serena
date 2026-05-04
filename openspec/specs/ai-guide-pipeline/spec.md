@@ -2,31 +2,57 @@
 
 ## Purpose
 
-Define the ExecutionPipeline that orchestrates AI use case execution: building requests, invoking providers, validating results, and recording audit entries.
+Define the ExecutionPipeline that orchestrates AI use case execution: resolving prompts from registry, building context via ContextBuilder, invoking providers, validating results, and recording audit entries.
 
 ## Requirements
 
 ### Requirement: Execute Pipeline
 
-The system SHALL define `ExecutionPipeline` that accepts a `UseCaseContract` and input data, then produces a `GuideResult`. The pipeline SHALL: (1) build an abstract request from the contract's systemPrompt, the rendered input, the contract's executionPolicy, and the outputSchemaName, (2) invoke the LlmProvider with that request, (3) validate the result is not empty, (4) record an audit entry, and (5) return a GuideResult with all required fields.
+The system SHALL define `ExecutionPipeline` that depends on a `PromptRegistry` and `ContextBuilder`. The pipeline SHALL accept a `UseCaseContract` and input data, then produce a `GuideResult`. The pipeline SHALL: (1) load the prompt from `PromptRegistry` using `contract.promptId`, (2) build the user prompt via `ContextBuilder.build()` using the prompt's `contextPolicy`, (3) invoke the LlmProvider with promptId, promptVersion, systemPrompt, userPrompt, optional developerPrompt, and executionPolicy, (4) validate the result is not empty, (5) record an audit entry with promptId and promptVersion, and (6) return a GuideResult with promptId and promptVersion in metadata.
+
+The pipeline SHALL NOT call `renderTemplate` — template rendering is replaced by `ContextBuilder.build()`.
 
 #### Scenario: Successful pipeline execution
 
-- GIVEN a UseCaseRegistry with a valid contract and a working LlmProvider
-- WHEN the pipeline executes with valid input data
-- THEN it returns a GuideResult with useCaseId, output, metadata, and audited=true
+- GIVEN a PromptRegistry, ContextBuilder, and a working LlmProvider
+- WHEN the pipeline executes with a valid contract and input data
+- THEN it resolves the promptId from the registry, builds context via ContextBuilder, and returns a GuideResult with promptId and promptVersion in metadata
+
+#### Scenario: Pipeline uses ContextBuilder instead of template
+
+- GIVEN an ExecutionPipeline with a ContextBuilder
+- WHEN execute() is called with input data
+- THEN the userPrompt is built by ContextBuilder.build() using the contract's ContextPolicy, NOT by renderTemplate
+
+#### Scenario: Pipeline includes promptId in metadata
+
+- GIVEN an ExecutionPipeline executes successfully
+- WHEN the GuideResult is returned
+- THEN the metadata includes promptId and promptVersion
+
+#### Scenario: Pipeline uses developer prompt when available
+
+- GIVEN a PromptDefinition with a developerPrompt field
+- WHEN the pipeline constructs the provider request
+- THEN the developer prompt is included alongside the system prompt
+
+#### Scenario: Pipeline fails gracefully when prompt not in registry
+
+- GIVEN a contract with promptId that is not in the registry
+- WHEN execute() is called
+- THEN the pipeline returns a failed GuideResult with a clear error about the missing prompt
 
 #### Scenario: Empty result rejected
 
 - GIVEN a pipeline with an LlmProvider that returns empty content
 - WHEN the pipeline executes
-- THEN it SHALL throw an error indicating the result is empty
+- THEN it returns a GuideResult indicating failure
 
-#### Scenario: Audit recorded after execution
+#### Scenario: Audit recorded with prompt metadata
 
 - GIVEN a pipeline with an AiInvocationAudit port configured
 - WHEN the pipeline executes successfully
-- THEN the audit record method is called with the invocation details and result
+- THEN the audit record includes promptId and promptVersion
 
 ### Requirement: Error Handling
 

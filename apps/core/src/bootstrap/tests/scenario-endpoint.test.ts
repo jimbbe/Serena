@@ -938,6 +938,8 @@ describe("POST /dev/simulate/scenario", () => {
                 model: "mock",
                 attempts: 1,
                 auditRecorded: false,
+                promptId: "serena.conversation.reply.v1" as const,
+                promptVersion: 1,
               },
             },
             warnings: [],
@@ -1148,6 +1150,8 @@ describe("POST /dev/simulate/scenario", () => {
                 model: "mock",
                 attempts: 1,
                 auditRecorded: false,
+                promptId: "serena.conversation.reply.v1" as const,
+                promptVersion: 1,
               },
             },
             warnings: [],
@@ -1667,6 +1671,8 @@ function makeStepResult(opts: {
               model: "mock",
               attempts: 1,
               auditRecorded: false,
+              promptId: "serena.conversation.reply.v1" as const,
+              promptVersion: 1,
             },
           } as const)
         : ({
@@ -1678,6 +1684,8 @@ function makeStepResult(opts: {
               model: "mock",
               attempts: 1,
               auditRecorded: false,
+              promptId: "serena.conversation.reply.v1" as const,
+              promptVersion: 1,
             },
           } as const)
       : undefined,

@@ -33,11 +33,11 @@ test("text format instructs to return only final text", () => {
   const rendered = toText(contract);
 
   assert.ok(
-    rendered.includes("Devolvé solo el texto final"),
+    rendered.includes("Devolve solo el texto final"),
     "must instruct to return only final text"
   );
   assert.ok(
-    rendered.includes("No incluyas análisis interno"),
+    rendered.includes("No incluyas analisis interno"),
     "must forbid internal analysis"
   );
 });
@@ -101,8 +101,8 @@ test("json format includes required flag per field", () => {
   const rendered = toText(contract);
 
   assert.ok(
-    rendered.includes("Requerido: sí"),
-    "required field must show sí"
+    rendered.includes("Requerido: si"),
+    "required field must show si"
   );
   assert.ok(
     rendered.includes("Requerido: no"),
@@ -179,7 +179,7 @@ test("json format instructs to return only valid JSON", () => {
   const rendered = toText(contract);
 
   assert.ok(
-    rendered.includes("Devolvé solo JSON válido"),
+    rendered.includes("Devolve solo JSON valido"),
     "must instruct JSON validity"
   );
 });
@@ -213,12 +213,12 @@ test("json format instructs to include all required fields", () => {
   const rendered = toText(contract);
 
   assert.ok(
-    rendered.includes("Incluí todos los campos requeridos"),
+    rendered.includes("Inclui todos los campos requeridos"),
     "must instruct to include required fields"
   );
 });
 
-test("json format with strict=false omits strict-only rules", () => {
+test("json format with strict=false still includes all rules", () => {
   const contract: OutputContract = {
     format: "json",
     description: "Test",
@@ -229,18 +229,22 @@ test("json format with strict=false omits strict-only rules", () => {
   };
   const rendered = toText(contract);
 
+  // All format rules are always included (not conditional on strict)
   assert.ok(
-    !rendered.includes("No incluyas markdown"),
-    "must NOT forbid markdown when strict=false"
+    rendered.includes("Devolve solo JSON valido"),
+    "must include valid JSON rule"
   );
   assert.ok(
-    !rendered.includes("No incluyas texto fuera del JSON"),
-    "must NOT forbid extra text when strict=false"
+    rendered.includes("No incluyas markdown"),
+    "must include no markdown rule"
   );
-  // Still includes the valid JSON instruction when strict fields exist
   assert.ok(
-    rendered.includes("Incluí todos los campos requeridos"),
-    "must still require all required fields"
+    rendered.includes("No incluyas texto fuera del JSON"),
+    "must include no extra text rule"
+  );
+  assert.ok(
+    rendered.includes("Inclui todos los campos requeridos"),
+    "must include required fields rule"
   );
 });
 
@@ -262,7 +266,7 @@ test("json format with allowedValues fields instructs to use permitted values", 
   const rendered = toText(contract);
 
   assert.ok(
-    rendered.includes("Usá solo valores permitidos cuando el campo declare allowedValues"),
+    rendered.includes("Usa solo valores permitidos cuando el campo declare allowedValues"),
     "must instruct to use allowedValues"
   );
 });

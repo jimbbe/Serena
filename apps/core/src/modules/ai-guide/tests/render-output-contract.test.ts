@@ -218,6 +218,32 @@ test("json format instructs to include all required fields", () => {
   );
 });
 
+test("json format with strict=false omits strict-only rules", () => {
+  const contract: OutputContract = {
+    format: "json",
+    description: "Test",
+    strict: false,
+    fields: [
+      { name: "x", type: "string", required: true, description: "x" },
+    ],
+  };
+  const rendered = toText(contract);
+
+  assert.ok(
+    !rendered.includes("No incluyas markdown"),
+    "must NOT forbid markdown when strict=false"
+  );
+  assert.ok(
+    !rendered.includes("No incluyas texto fuera del JSON"),
+    "must NOT forbid extra text when strict=false"
+  );
+  // Still includes the valid JSON instruction when strict fields exist
+  assert.ok(
+    rendered.includes("Incluí todos los campos requeridos"),
+    "must still require all required fields"
+  );
+});
+
 test("json format with allowedValues fields instructs to use permitted values", () => {
   const contract: OutputContract = {
     format: "json",

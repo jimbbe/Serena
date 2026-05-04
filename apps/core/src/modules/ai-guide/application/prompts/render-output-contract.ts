@@ -33,6 +33,7 @@ function renderTextContract(contract: { description: string }): string {
 function renderJsonContract(
   contract: {
     description: string;
+    strict: boolean;
     fields: Array<{
       name: string;
       type: string;
@@ -40,9 +41,9 @@ function renderJsonContract(
       description: string;
       allowedValues?: string[];
     }>;
-  },
-  strict = true
+  }
 ): string {
+  const { strict } = contract;
   const lines: string[] = [
     "Contrato de salida:",
     "- Formato esperado: JSON.",

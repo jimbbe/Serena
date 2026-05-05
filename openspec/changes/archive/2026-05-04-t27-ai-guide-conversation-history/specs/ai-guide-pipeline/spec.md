@@ -1,16 +1,16 @@
-# AI Guide Pipeline Specification
+# Delta for AI Guide Pipeline
 
-## Purpose
-
-Define the ExecutionPipeline that orchestrates AI use case execution: resolving prompts from registry, building context via ContextBuilder, invoking providers, validating results, and recording audit entries.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Execute Pipeline
 
 The system SHALL define `ExecutionPipeline` that depends on a `PromptRegistry` and `ContextBuilder`. The pipeline SHALL accept a `UseCaseContract` and `AiGuideInput` data, then produce a `GuideResult`. The pipeline SHALL: (1) load the prompt from `PromptRegistry` using `contract.promptId`, (2) build the user prompt via `ContextBuilder.build()` using the prompt's `contextPolicy`, (3) invoke the LlmProvider with promptId, promptVersion, systemPrompt, userPrompt, optional developerPrompt, and executionPolicy, (4) validate the result is not empty, (5) record an audit entry with promptId and promptVersion, and (6) return a GuideResult with promptId and promptVersion in metadata.
 
-The pipeline SHALL NOT call `renderTemplate` — template rendering is replaced by `ContextBuilder.build()`. The `buildUserPrompt()` method SHALL extract only string-valued fields from `AiGuideInput` for template rendering (via `renderTemplate()`). Array fields (`recentMessages`, `knownContacts`) SHALL bypass template rendering and be passed directly to `ContextBuilder.build()`.
+The pipeline SHALL NOT call `renderTemplate` — template rendering is replaced by `ContextBuilder.build()`.
+
+The `buildUserPrompt()` method SHALL extract only string-valued fields from `AiGuideInput` for template rendering (via `renderTemplate()`). Array fields (`recentMessages`, `knownContacts`) SHALL bypass template rendering and be passed directly to `ContextBuilder.build()`.
+
+(Previously: input was `Record<string, string>` with no array fields)
 
 #### Scenario: Successful pipeline execution
 
@@ -81,6 +81,8 @@ The system SHALL handle provider errors without crashing the pipeline. When the 
 - GIVEN a pipeline where the AiInvocationAudit port throws on record
 - WHEN the pipeline executes
 - THEN the pipeline catches the audit error and still returns the GuideResult
+
+## ADDED Requirements
 
 ### Requirement: ExecutionPipeline Flows recentMessages to ContextBuilder
 

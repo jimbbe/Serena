@@ -1,14 +1,14 @@
-# AI Guide Service Specification
+# Delta for AI Guide Service
 
-## Purpose
-
-Define the AiGuideService as the public facade that accepts a `GuideUseCaseId` directly and executes the pipeline. Internal profile ID mapping is a future concern (post-T19).
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Execute by Use Case ID
 
-The system SHALL define `AiGuideService.execute(useCaseId, input)` where `useCaseId` is a `GuideUseCaseId` and `input` is an `AiGuideInput`. `AiGuideInput` SHALL extend `Record<string, string>` with the following optional typed fields: `input?: string`, `actorRole?: string`, `channel?: string`, `resolvedIdentity?: string`, `recentMessages?: string[]`, `knownContacts?: string[]`, `safetyMemory?: string`. The method SHALL: (1) retrieve the corresponding `UseCaseContract` from the registry, (2) throw if no contract is registered for the given ID, (3) execute the pipeline with the contract and input, and (4) return a `GuideResult`.
+The system SHALL define `AiGuideService.execute(useCaseId, input)` where `useCaseId` is a `GuideUseCaseId` and `input` is an `AiGuideInput`. The method SHALL: (1) retrieve the corresponding `UseCaseContract` from the registry, (2) throw if no contract is registered for the given ID, (3) execute the pipeline with the contract and input, and (4) return a `GuideResult`.
+
+`AiGuideInput` SHALL be a type extending `Record<string, string>` with the following optional typed fields: `actorRole?: string`, `channel?: string`, `resolvedIdentity?: string`, `recentMessages?: string[]`, `knownContacts?: string[]`, `safetyMemory?: string`. The `input` field (string) SHALL remain the primary text input for template rendering.
+
+(Previously: input was `Record<string, string>` with no typed fields)
 
 #### Scenario: Conversation use case executed
 
@@ -47,6 +47,8 @@ The system SHALL treat the `serena.mediation.clarify` use case as not yet implem
 - GIVEN AiGuideService with no contract registered for "serena.mediation.clarify"
 - WHEN execute is called with useCaseId="serena.mediation.clarify"
 - THEN a NotImplementedError is thrown
+
+## ADDED Requirements
 
 ### Requirement: AiGuideInput Type
 

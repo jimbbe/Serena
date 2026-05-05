@@ -1480,3 +1480,322 @@ test("mediation_understanding does not record outbound message", async () => {
   assert.ok(result.conversation !== undefined);
   assert.equal(result.conversation!.messageCount, 1);
 });
+
+// ---------------------------------------------------------------------------
+// T27 — Conversation history wiring tests
+// ---------------------------------------------------------------------------
+
+test("first message in conversation → AiGuide receives recentMessages: []", async () => {
+  let capturedInput: Record<string, unknown> | undefined;
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, input: Record<string, unknown>): Promise<GuideResult> => {
+      capturedInput = input;
+      return successGuideResult(useCaseId);
+    },
+  };
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("conversation"),
+      route: profileRoute("conversation"),
+    }),
+  };
+
+  const mockStore = mockConversationStore();
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockStore as unknown as ConversationStore,
+  });
+
+  await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "first message",
+    tenantId: "demo",
+  });
+
+  assert.ok(capturedInput !== undefined, "AiGuide should have been called");
+  const recentMessages = capturedInput!.recentMessages as string[] | undefined;
+  assert.ok(
+    recentMessages === undefined || recentMessages.length === 0,
+    "first message should have empty or undefined recentMessages"
+  );
+});
+
+test("second message → AiGuide receives first message in recentMessages", async () => {
+  let capturedInput: Record<string, unknown> | undefined;
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, input: Record<string, unknown>): Promise<GuideResult> => {
+      capturedInput = input;
+      return successGuideResult(useCaseId);
+    },
+  };
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("conversation"),
+      route: profileRoute("conversation"),
+    }),
+  };
+
+  // Pre-seed the store with one existing message
+  const existingMsg: ConversationMessage = {
+    id: "msg-prev-1",
+    conversationId: "conv-test-1",
+    tenantId: "demo",
+    personId: "maria",
+    channel: "whatsapp",
+    direction: "inbound",
+    text: "previous message",
+    occurredAt: new Date(),
+  };
+
+  const mockStore = mockConversationStore({ messages: [existingMsg] });
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockStore as unknown as ConversationStore,
+  });
+
+  await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "second message",
+    tenantId: "demo",
+  });
+
+  assert.ok(capturedInput !== undefined, "AiGuide should have been called");
+  const recentMessages = capturedInput!.recentMessages as string[];
+  assert.ok(Array.isArray(recentMessages), "recentMessages should be an array");
+  assert.equal(recentMessages.length, 1, "should have 1 recent message (the previous one)");
+  assert.ok(
+    recentMessages[0]!.includes("previous message"),
+    "recentMessages should contain the previous message text"
+  );
+  assert.ok(
+    recentMessages[0]!.includes("[inbound]"),
+    "recentMessages should contain direction prefix"
+  );
+  assert.ok(
+    recentMessages[0]!.includes("maria"),
+    "recentMessages should contain personId"
+  );
+  assert.ok(
+    recentMessages[0]!.includes("whatsapp"),
+    "recentMessages should contain channel"
+  );
+});
+
+test("current message not duplicated in recentMessages", async () => {
+  let capturedInput: Record<string, unknown> | undefined;
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, input: Record<string, unknown>): Promise<GuideResult> => {
+      capturedInput = input;
+      return successGuideResult(useCaseId);
+    },
+  };
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("conversation"),
+      route: profileRoute("conversation"),
+    }),
+  };
+
+  const existingMsg: ConversationMessage = {
+    id: "msg-1",
+    conversationId: "conv-test-1",
+    tenantId: "demo",
+    personId: "maria",
+    channel: "whatsapp",
+    direction: "inbound",
+    text: "old message",
+    occurredAt: new Date(),
+  };
+
+  const mockStore = mockConversationStore({ messages: [existingMsg] });
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockStore as unknown as ConversationStore,
+  });
+
+  await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "NEW MESSAGE TEXT",
+    tenantId: "demo",
+  });
+
+  assert.ok(capturedInput !== undefined);
+  const recentMessages = capturedInput!.recentMessages as string[];
+  // The new message "NEW MESSAGE TEXT" should NOT appear in recentMessages
+  const hasNewMessage = recentMessages.some((m) => m.includes("NEW MESSAGE TEXT"));
+  assert.equal(hasNewMessage, false, "current message must NOT appear in recentMessages");
+  // But the old message should be there
+  const hasOldMessage = recentMessages.some((m) => m.includes("old message"));
+  assert.equal(hasOldMessage, true, "old message should appear in recentMessages");
+});
+
+test("recentMessages preserves chronological order", async () => {
+  let capturedInput: Record<string, unknown> | undefined;
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, input: Record<string, unknown>): Promise<GuideResult> => {
+      capturedInput = input;
+      return successGuideResult(useCaseId);
+    },
+  };
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("conversation"),
+      route: profileRoute("conversation"),
+    }),
+  };
+
+  // Pre-seed with 3 messages in chronological order
+  const existingMessages: ConversationMessage[] = [
+    {
+      id: "msg-1",
+      conversationId: "conv-test-1",
+      tenantId: "demo",
+      personId: "maria",
+      channel: "whatsapp",
+      direction: "inbound",
+      text: "first",
+      occurredAt: new Date("2025-01-01T10:00:00Z"),
+    },
+    {
+      id: "msg-2",
+      conversationId: "conv-test-1",
+      tenantId: "demo",
+      personId: "maria",
+      channel: "whatsapp",
+      direction: "inbound",
+      text: "second",
+      occurredAt: new Date("2025-01-01T10:01:00Z"),
+    },
+    {
+      id: "msg-3",
+      conversationId: "conv-test-1",
+      tenantId: "demo",
+      personId: "maria",
+      channel: "whatsapp",
+      direction: "inbound",
+      text: "third",
+      occurredAt: new Date("2025-01-01T10:02:00Z"),
+    },
+  ];
+
+  const mockStore = mockConversationStore({ messages: existingMessages });
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockStore as unknown as ConversationStore,
+  });
+
+  await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "fourth message",
+    tenantId: "demo",
+  });
+
+  assert.ok(capturedInput !== undefined);
+  const recentMessages = capturedInput!.recentMessages as string[];
+  assert.equal(recentMessages.length, 3, "should have 3 recent messages");
+  // Chronological order: first → second → third
+  assert.ok(recentMessages[0]!.includes("first"), "first message should be at index 0");
+  assert.ok(recentMessages[1]!.includes("second"), "second message should be at index 1");
+  assert.ok(recentMessages[2]!.includes("third"), "third message should be at index 2");
+});
+
+test("actorRole, channel, resolvedIdentity passed to AiGuide when identity resolved", async () => {
+  let capturedInput: Record<string, unknown> | undefined;
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, input: Record<string, unknown>): Promise<GuideResult> => {
+      capturedInput = input;
+      return successGuideResult(useCaseId);
+    },
+  };
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("conversation"),
+      route: profileRoute("conversation"),
+    }),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity({ role: "contact", displayName: "Maria" })),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
+  });
+
+  await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "hola",
+    tenantId: "demo",
+  });
+
+  assert.ok(capturedInput !== undefined);
+  assert.equal(capturedInput!.actorRole, "contact", "actorRole should be passed");
+  assert.equal(capturedInput!.channel, "whatsapp", "channel should be passed");
+  assert.equal(capturedInput!.resolvedIdentity, "Maria", "resolvedIdentity should be passed");
+});
+
+test("blocked identity → AiGuide not executed (existing behavior confirmed)", async () => {
+  let aiCalled = false;
+
+  const mockAiService = {
+    execute: async (_useCaseId: GuideUseCaseId, _input: Record<string, string>): Promise<GuideResult> => {
+      aiCalled = true;
+      return successGuideResult(_useCaseId);
+    },
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: {
+      execute: async () => ({
+        decision: allowedDecision("conversation"),
+        route: profileRoute("conversation"),
+      }),
+    } as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver({
+      status: "blocked",
+      tenantId: "demo",
+      channel: "whatsapp",
+      externalSenderId: "spammer",
+      authorized: false,
+      reason: "sender_blocked",
+    }),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "spammer",
+    text: "buy now!",
+  });
+
+  assert.equal(aiCalled, false, "AiGuide must NOT be called for blocked identity");
+  assert.equal(result.identity!.status, "blocked");
+  assert.equal(result.guideResult, undefined);
+});

@@ -6,7 +6,7 @@ La Fase 1 apunta a mediacion prudente por WhatsApp: Serena recibe un pedido, ide
 
 ## Estado Actual
 
-El repositorio tiene stack base desplegado en VPS (T04), arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), hardening interno completado (T17B), mock WhatsApp Gateway / dry-run adapter (T18), documentacion reorganizada (T18.1), modulo ai-guide con pipeline de ejecucion agnostico de LLM (T19), canal inbound channel-agnostic con resolucion de identidad externa (T20), y Simulation API con single-step y scenario runner multi-step. **345 tests pasando** (307 core + 38 gateway-wa).
+El repositorio tiene stack base desplegado en VPS (T04), arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), hardening interno completado (T17B), mock WhatsApp Gateway / dry-run adapter (T18), documentacion reorganizada (T18.1), modulo ai-guide con pipeline de ejecucion agnostico de LLM (T19), canal inbound channel-agnostic con resolucion de identidad externa (T20), Simulation API con single-step y scenario runner multi-step, e historial de conversacion activo en AI guide (T27). **485 tests pasando** (447 core + 38 gateway-wa).
 
 ## 🔒 Centro Operativo del Proyecto
 
@@ -52,7 +52,7 @@ Este repositorio funciona como centro operativo del proyecto Serena. Contiene do
 
 - **orchestrator** (T15): caso de uso `ProcessIncomingWhatsAppMessage` que conecta inbound-gate → mediation-understanding → contact-directory → session-manager → mediation-bridge → prudent-rewording. Devuelve `PipelineResult` con variantes explicitas. 11 tests end-to-end in-memory.
 - **internal-pipeline-http** (T16): endpoint `POST /internal/pipeline/process` que valida JSON, ejecuta el pipeline orchestrator y devuelve `PipelineResult`. Factory in-memory con dependencias compartidas para continuidad de sesiones entre requests. Con hardening (auth token + idempotencia). Ver `docs/architecture/t16-internal-pipeline-http.md`.
-- **ai-guide** (T19): modulo Clean/Hexagonal completamente agnostico de cualquier LLM provider. Incluye `UseCaseRegistry`, `ExecutionPipeline` con retry loop, `AiGuideService`, y contratos pre-definidos (`conversation.reply`, `risk.review`, `mediation.understand_request`). 28 tests con `MockLlmProvider` deterministico. Sin dependencia de otros modulos Serena.
+- **ai-guide** (T19, T23, T27): modulo Clean/Hexagonal completamente agnostico de cualquier LLM provider. Incluye `PromptRegistry`, prompts versionados, `ContextPolicy`, `OutputContract`, runtime validation con `validateOutputContract`, `ExecutionPipeline` con retry loop, `AiGuideService`, e historial de conversacion activo via `recentMessages` desde T27. `MockLlmProvider` deterministico. Sin LLM real todavia. Sin dependencia de otros modulos Serena.
 - **channel-agnostic inbound** (T20): `InboundMessageCommand` normaliza mensajes de cualquier canal (whatsapp, voice, web_chat, telegram, system, simulation) en un solo contrato. `ProcessChannelInboundMessage` ejecuta el pipeline completo con resolucion de identidad → inbound gate → AI guide → `ChannelInboundResult`. La resolucion de identidad corre ANTES del gate.
 - **external identity resolution** (T20): `ExternalIdentityResolver` traduce identificadores externos de canal a identidad interna (`personId`, `role`, `authorized`). Bloquea actores bloqueados antes del gate. Soporta multi-canal: mismo `personId` puede llegar por WhatsApp, voz o web_chat. Adapter in-memory con seed data (Marta en 3 canales).
 
@@ -249,7 +249,7 @@ Runbook operativo: `docs/ops/deployment-t04.md`.
 
 ## Proximos Pasos
 
-Fase completada: **logica de negocio con pipeline channel-agnostic** (T06-T20). Pipeline end-to-end funciona con 345 tests (307 core + 38 gateway-wa). Endpoint HTTP interno con hardening (T17B), AI guide agnostico (T19), canal inbound multi-channel con resolucion de identidad (T20), y Simulation API con single-step y scenario runner.
+Fase completada: **logica de negocio con pipeline channel-agnostic** (T06-T27). Pipeline end-to-end funciona con 485 tests (447 core + 38 gateway-wa). Endpoint HTTP interno con hardening (T17B), AI guide agnostico (T19), canal inbound multi-channel con resolucion de identidad (T20), Simulation API con single-step y scenario runner, e historial de conversacion activo en AI guide (T27).
 
 **Proximo paso inmediato**: **scenario runner multi-step para simulaciones conversacionales** — el endpoint `POST /dev/simulate/scenario` ya existe. El foco inmediato es robustecerlo con mas escenarios de prueba y cobertura de edge cases.
 

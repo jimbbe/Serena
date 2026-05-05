@@ -11,6 +11,8 @@ import type { PromptId } from "../domain/prompt-id.ts";
 import type { GuideResultSuccess, GuideResultFailed } from "../domain/guide-result.ts";
 import type { UseCaseContract } from "../domain/use-case-contract.ts";
 import type { ExecutionPolicy } from "../domain/execution-policy.ts";
+import type { PromptDefinition } from "../domain/prompt-definition.ts";
+import type { AiGuideInput } from "../application/use-cases/ai-guide-input.ts";
 
 const REPLY: PromptId = "serena.conversation.reply.v1";
 
@@ -608,4 +610,189 @@ test("validation failure does NOT retry even with retryOnFailure=true", async ()
 
   assert.equal(result.status, "failed");
   assert.equal(callCount, 1, "validation failure must not retry");
+});
+
+// ── T27 — Conversation history wiring tests ──────────────────────────
+
+function makeCustomRegistry(prompts: PromptDefinition[]) {
+  return new InMemoryPromptRegistry(prompts);
+}
+
+test("recentMessages flows to ContextBuilder when includeConversationHistory is true", async () => {
+  let receivedUserPrompt: string | undefined;
+  const mockProvider = new MockLlmProvider();
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke(req) {
+        receivedUserPrompt = req.userPrompt;
+        return mockProvider.invoke(req);
+      },
+    },
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+
+  const input: AiGuideInput = {
+    input: "current message",
+    recentMessages: ["msg1", "msg2", "msg3", "msg4", "msg5"],
+  };
+
+  // conversation-reply.v1 has maxRecentMessages=6, so all 5 should appear
+  await pipeline.execute(makeContract(), input);
+
+  assert.ok(receivedUserPrompt !== undefined);
+  assert.ok(
+    receivedUserPrompt!.includes("Historial reciente"),
+    "userPrompt must contain history section when recentMessages provided"
+  );
+  assert.ok(receivedUserPrompt!.includes("msg1"), "must include msg1");
+  assert.ok(receivedUserPrompt!.includes("msg5"), "must include msg5");
+});
+
+test("recentMessages respects maxRecentMessages limit", async () => {
+  let receivedUserPrompt: string | undefined;
+  const mockProvider = new MockLlmProvider();
+
+  // Create a custom prompt with maxRecentMessages=3
+  const customPrompts: PromptDefinition[] = [
+    {
+      id: "serena.conversation.reply.v1",
+      version: 1,
+      useCaseId: "serena.conversation.reply",
+      description: "test prompt",
+      systemPrompt: "test",
+      inputTemplate: "Mensaje: {input}",
+      contextPolicy: {
+        includeCurrentMessage: true,
+        includeResolvedIdentity: false,
+        includeActorContext: false,
+        includeChannelMetadata: false,
+        includeConversationHistory: true,
+        maxRecentMessages: 3,
+        includeKnownContacts: false,
+        includeSafetyMemory: false,
+        includeFullConversation: false,
+      },
+      outputContract: { format: "text", description: "text" },
+    },
+  ];
+
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke(req) {
+        receivedUserPrompt = req.userPrompt;
+        return mockProvider.invoke(req);
+      },
+    },
+    registry: makeCustomRegistry(customPrompts),
+    contextBuilder: makeContextBuilder(),
+  });
+
+  const input: AiGuideInput = {
+    input: "current msg",
+    recentMessages: ["msg1", "msg2", "msg3", "msg4", "msg5"],
+  };
+
+  await pipeline.execute(makeContract(), input);
+
+  assert.ok(receivedUserPrompt !== undefined);
+  // maxRecentMessages=3 → only the last 3 should appear
+  assert.ok(receivedUserPrompt!.includes("msg3"), "must include msg3 (3rd from end)");
+  assert.ok(receivedUserPrompt!.includes("msg4"), "must include msg4");
+  assert.ok(receivedUserPrompt!.includes("msg5"), "must include msg5");
+  assert.ok(!receivedUserPrompt!.includes("msg1"), "must NOT include msg1 (beyond limit)");
+  assert.ok(!receivedUserPrompt!.includes("msg2"), "must NOT include msg2 (beyond limit)");
+});
+
+test("empty recentMessages does not add history section", async () => {
+  let receivedUserPrompt: string | undefined;
+  const mockProvider = new MockLlmProvider();
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke(req) {
+        receivedUserPrompt = req.userPrompt;
+        return mockProvider.invoke(req);
+      },
+    },
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+
+  const input: AiGuideInput = {
+    input: "hello",
+    recentMessages: [],
+  };
+
+  await pipeline.execute(makeContract(), input);
+
+  assert.ok(receivedUserPrompt !== undefined);
+  assert.ok(
+    !receivedUserPrompt!.includes("Historial reciente"),
+    "userPrompt must NOT contain history section when recentMessages is empty"
+  );
+});
+
+test("currentMessage appears even with recentMessages present", async () => {
+  let receivedUserPrompt: string | undefined;
+  const mockProvider = new MockLlmProvider();
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke(req) {
+        receivedUserPrompt = req.userPrompt;
+        return mockProvider.invoke(req);
+      },
+    },
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+
+  const input: AiGuideInput = {
+    input: "current msg",
+    recentMessages: ["history msg"],
+  };
+
+  await pipeline.execute(makeContract(), input);
+
+  assert.ok(receivedUserPrompt !== undefined);
+  assert.ok(
+    receivedUserPrompt!.includes("current msg"),
+    "userPrompt must contain the current message"
+  );
+  assert.ok(
+    receivedUserPrompt!.includes("history msg"),
+    "userPrompt must contain history messages"
+  );
+});
+
+test("renderTemplate does not break with array fields in input", async () => {
+  let receivedUserPrompt: string | undefined;
+  const mockProvider = new MockLlmProvider();
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke(req) {
+        receivedUserPrompt = req.userPrompt;
+        return mockProvider.invoke(req);
+      },
+    },
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+
+  const input: AiGuideInput = {
+    input: "hello world",
+    recentMessages: ["test"],
+  };
+
+  await pipeline.execute(makeContract(), input);
+
+  assert.ok(receivedUserPrompt !== undefined);
+  assert.ok(
+    receivedUserPrompt!.includes("hello world"),
+    "template must render correctly even with array fields present"
+  );
+  // Template uses {input} placeholder — the rendered output should contain the input value
+  assert.ok(
+    !receivedUserPrompt!.includes("recentMessages"),
+    "array field names must not leak into template output"
+  );
 });

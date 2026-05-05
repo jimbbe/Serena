@@ -15,6 +15,9 @@ generated.
 WhatsApp will be integrated as a separate **real adapter** — this endpoint is
 purely for development and testing.
 
+In Phase 1/T27, AI Guide receives `recentMessages` from `ConversationStore` via
+`ProcessChannelInboundMessage`, enabling conversation history in prompt context.
+
 ## Prerequisites
 
 Set the environment variable before starting the server:
@@ -85,7 +88,7 @@ guarded by the environment variable.
   "conversation":    {                 // conversation tracking (when identity is resolved)
     "id":            "a1b2c3d4-...",   // auto-generated conversation UUID
     "status":        "open",           // conversation status (always "open" in Phase 1)
-    "messageCount":  2                 // number of messages in this conversation (inbound + outbound)
+    "messageCount":  1                 // number of messages currently in ConversationStore (Phase 1/T27: inbound only)
   },
   "warnings":         [],             // non-fatal issues (e.g. missing optional fields)
   "errors":           []              // fatal issues (empty = success)
@@ -160,21 +163,11 @@ curl -X POST http://localhost:3000/dev/simulate/inbound-message \
 
 **Response**: 200 — `profileId === "risk_review"`, `useCaseId === "serena.risk.review"`.
 
-### Clarification (not yet implemented — returns structured error, not 500)
+### Clarification profile
 
-```bash
-curl -X POST http://localhost:3000/dev/simulate/inbound-message \
-  -H "Content-Type: application/json" \
-  -d '{
-    "channel": "whatsapp",
-    "externalSenderId": "5491111111111",
-    "text": "qué querés decir con eso?"
-  }'
-```
-
-Note: the real pipeline never routes to `clarification` with current inbound
-policy. When it does in a future version, the response will be 200 with
-`guideError.code === "not_implemented"` instead of a 500 crash.
+The `clarification` LLM profile is supported by AI Guide (`serena.mediation.clarify.v1`), but
+the real inbound policy may not route to clarification in normal flows yet.
+When it does, the response will be 200 with a standard `guideResult`.
 
 ### Using other channels
 
@@ -322,7 +315,7 @@ curl -X POST http://localhost:3000/dev/simulate/inbound-message \
 - **Mock LLM only** — responses are deterministic (hash-based). No real AI.
 - **No real message sending** — the endpoint only EXECUTES the pipeline and returns the trace. Real WhatsApp/message sending is the responsibility of channel-specific adapters.
 - **No auth guard** — the endpoint is disabled by default and has no token check when enabled. Only enable it in development.
-- **Clarification not implemented** — the `clarification` LLM profile is mapped but `AiGuideService` throws a controlled error that appears as a structured `guideError` in the response (200, not 500).
+- **Clarification profile** — supported by AI Guide (`serena.mediation.clarify.v1`); real inbound policy may not route to it in normal flows yet.
 - **Empty simulatedOutbound** — mediation drafts are not generated yet. The field is reserved for Phase 2.
 - **Identity resolution runs first** — the `ExternalIdentityResolver` translates external channel IDs to internal `personId` BEFORE gate evaluation. Blocked identities short-circuit the entire pipeline. Unknown identities continue to the gate (which will likely block them as unknown senders).
 
@@ -332,8 +325,11 @@ Every resolved identity automatically gets conversation tracking. When the ident
 
 1. **Finds or creates** a conversation scoped to the tenant + person pair
 2. **Appends** the inbound message to the conversation
-3. **Appends** the AI guide output as an outbound message
-4. **Returns** conversation info in the response
+3. **Returns** conversation info in the response
+
+**Note**: AI guide output is not recorded as an outbound conversation message yet.
+Outbound will be recorded only when an explicit `OutboundDraft`/`DecisionPolicy`
+sends or decides to send. In Phase 1/T27, `messageCount` reflects inbound messages only.
 
 ### Auto-created conversationId
 
@@ -354,7 +350,7 @@ curl -X POST http://localhost:3000/dev/simulate/inbound-message \
   "conversation": {
     "id": "d4e5f6a7-b8c9-...",  // auto-generated UUID
     "status": "open",
-    "messageCount": 2             // inbound "hola" + AI response
+    "messageCount": 1             // inbound "hola" only (AI output not recorded as outbound yet)
   }
 }
 ```

@@ -118,12 +118,14 @@ Define exactamente qué contexto recibe el LLM para cada caso de uso.
 
 | Use Case | current | identity | actor | channel | history | maxRecent | contacts | safety | full |
 |----------|---------|----------|-------|---------|---------|-----------|----------|--------|------|
-| `mediation.understand_request` | ✅ | ✅ | ✅ | ✅ | ✅ | 4 | ❌ | ❌ | ❌ |
-| `mediation.clarify` | ✅ | ✅ | ✅ | ❌ | ✅ | 3 | ❌ | ❌ | ❌ |
+| `mediation.understand_request` | ✅ | ✅ | ✅ | ✅ | ✅ | 4 | ✅ | ❌ | ❌ |
+| `mediation.clarify` | ✅ | ✅ | ✅ | ❌ | ✅ | 3 | ✅ | ❌ | ❌ |
 | `conversation.reply` | ✅ | ✅ | ✅ | ✅ | ✅ | 6 | ❌ | ❌ | ❌ |
 | `risk.review` | ✅ | ✅ | ✅ | ✅ | ✅ | 5 | ❌ | ❌ | ❌ |
 
-**Nota T27**: A partir de T27, `includeConversationHistory` está activo (`true`) para los 4 prompts. Los límites `maxRecentMessages` varían por caso de uso: `reply` permite más contexto (6), `risk_review` 5, `understand_request` 4, y `clarify` 3 (la aclaración necesita menos historial). El `ContextBuilder` recibe `recentMessages` desde `ExecutionPipeline.buildUserPrompt()`, y `ProcessChannelInboundMessage` construye el arreglo de mensajes recientes desde `ConversationStore.listMessages()`, excluyendo el mensaje actual y formateando cada uno como `[direction] personId via channel: text`. `includeKnownContacts` e `includeSafetyMemory` siguen en `false` porque `ContactDirectory` y safety memory aún no están conectados.
+**Nota T27**: A partir de T27, `includeConversationHistory` está activo (`true`) para los 4 prompts. Los límites `maxRecentMessages` varían por caso de uso: `reply` permite más contexto (6), `risk_review` 5, `understand_request` 4, y `clarify` 3 (la aclaración necesita menos historial). El `ContextBuilder` recibe `recentMessages` desde `ExecutionPipeline.buildUserPrompt()`, y `ProcessChannelInboundMessage` construye el arreglo de mensajes recientes desde `ConversationStore.listMessages()`, excluyendo el mensaje actual y formateando cada uno como `[direction] personId via channel: text`.
+
+**Nota T28**: A partir de T28, `includeKnownContacts` está activo (`true`) para los prompts de mediación (`mediation.understand_request` y `mediation.clarify`). `knownContacts` proviene de `ContactDirectory.findAll()` y se formatea como `"Name (id: cid)"`. Se usa exclusivamente en contexto de mediación; NO resuelve automáticamente ambigüedad de contactos. Los prompts `conversation.reply` y `risk.review` NO reciben contactos por principio de minimización de datos y privacidad.
 
 ---
 
@@ -346,7 +348,7 @@ No implementado todavía:
 - Memoria semántica avanzada.
 - Summarizer.
 - Herramientas externas.
-- Conexión de `ConversationStore` y `ContactDirectory` al `ContextBuilder` — el historial de conversación (`includeConversationHistory`) ya está activo desde T27 porque `ProcessChannelInboundMessage` alimenta `recentMessages`; `includeKnownContacts` e `includeSafetyMemory` permanecen en `false` hasta conectar `ContactDirectory` en una tarea futura.
+- Conexión de `ConversationStore` y `ContactDirectory` al `ContextBuilder` — el historial de conversación (`includeConversationHistory`) está activo desde T27 porque `ProcessChannelInboundMessage` alimenta `recentMessages`; `includeKnownContacts` está activo desde T28 para prompts de mediación (`mediation.understand_request` y `mediation.clarify`), con contactos formateados como `"Name (id: cid)"` desde `ContactDirectory.findAll()`. `includeSafetyMemory` permanece en `false` hasta conectar safety memory en una tarea futura.
 
 ---
 

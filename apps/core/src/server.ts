@@ -11,19 +11,20 @@ const env = loadAppEnv();
 
 // Create orchestrator with shared in-memory dependencies.
 // Sessions survive across HTTP requests within the same process.
-const { orchestrator, processedMessageStore, aiGuideService, processInboundMessage, identityResolver, conversationStore } = await createInMemoryPipeline();
+const { orchestrator, processedMessageStore, aiGuideService, processInboundMessage, identityResolver, conversationStore, contactDirectory } = await createInMemoryPipeline();
 const pipelineHandler = createPipelineHandler(orchestrator, processedMessageStore);
 
 // Conditionally wire simulation and scenario handlers (dev-only, disabled by default)
 let simulationHandler: ReturnType<typeof createSimulationHandler> | undefined;
 let scenarioHandler: ReturnType<typeof createScenarioHandler> | undefined;
 if (env.enableSimulationEndpoints) {
-  const processChannelInboundMessage = new ProcessChannelInboundMessage({
-    processInboundMessage,
-    aiGuideService,
-    identityResolver,
-    conversationStore,
-  });
+    const processChannelInboundMessage = new ProcessChannelInboundMessage({
+      processInboundMessage,
+      aiGuideService,
+      identityResolver,
+      conversationStore,
+      contactDirectory,
+    });
   simulationHandler = createSimulationHandler(processChannelInboundMessage);
 
   const scenarioRunner = new SimulationScenarioRunner({

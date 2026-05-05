@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), mock WhatsApp Gateway with dry-run adapter (T18), documentation reorganized (T18.1), AI guide module with deterministic mock provider (T19), channel-agnostic inbound with external identity resolution (T20), conversation store (T22), prompt registry with output contracts and runtime validation (T23), and conversation history wired into AI guide context (T27). 485 tests passing (447 core + 38 gateway-wa).
+Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), mock WhatsApp Gateway with dry-run adapter (T18), documentation reorganized (T18.1), AI guide module with deterministic mock provider (T19), channel-agnostic inbound with external identity resolution (T20), conversation store (T22), prompt registry with output contracts and runtime validation (T23), conversation history wired into AI guide context (T27), and known contacts wired into AI guide mediation context (T28). 496 tests passing (458 core + 38 gateway-wa).
 
 ## Decided
 
@@ -220,9 +220,20 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - TypeScript: zero type errors, clean `tsc --noEmit` across all projects.
 - All 231 tests pass (193 core + 38 gateway-wa).
 
+## Implemented In T28: Known Contacts In AI Guide Context
+
+- `includeKnownContacts: true` activado en los prompts de mediación: `mediation.understand_request` y `mediation.clarify`.
+- `ProcessChannelInboundMessage` obtiene contactos desde `ContactDirectory.findAll()`, formateados como `"Name (id: cid)"`, y los pasa en el `AiGuideInput` al `AiGuideService`.
+- `ContextBuilder` renderiza sección "Contactos conocidos" en el `userPrompt` cuando `includeKnownContacts: true` y `knownContacts` no está vacío.
+- Solo prompts de mediación reciben contactos. `conversation.reply` y `risk.review` los excluyen por minimización de datos y privacidad.
+- Los contactos NO resuelven automáticamente ambigüedad de destinatario en mediación — esa responsabilidad sigue en `ContactDirectory` / `ResolveContact`.
+- Graceful degradation: si `ContactDirectory` no está disponible, la mediación funciona sin contactos (sin errores).
+- Tests actualizados: context-policy (3 tests modificados), execution-pipeline (4 tests nuevos), process-channel-inbound-message (7 tests nuevos).
+- Documentación: `docs/ai-guide-prompts.md` actualizado con tabla ContextPolicy y nota T28.
+
 ## Expected Next Task
 
-Next: T28 or subsequent task.  T27 (AI guide conversation history) is now wired — `recentMessages` flows from `ConversationStore` through `ProcessChannelInboundMessage` → `AiGuideService` → `ExecutionPipeline` → `ContextBuilder`, with prompt-level maxRecentMessages limits.
+Next: T29 or subsequent task. Both T27 (AI guide conversation history) and T28 (known contacts in mediation context) are now wired.
 
 ### Repository note
 Este repositorio es el centro operativo del proyecto. Contiene documentación técnica (`docs/architecture/`) y operativa (`docs/ops/`) con datos reales de VPS, deploy, rutas de Caddy y backups. Debe hacerse privado antes de uso productivo o exposición pública prolongada.

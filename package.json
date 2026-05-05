@@ -14,9 +14,10 @@
     "test:gateway-wa": "npm run -w @serena/gateway-wa test",
     "check": "npm run check:structure && npm run typecheck",
     "check:structure": "node --experimental-strip-types scripts/check-structure.ts",
-    "typecheck": "npm run typecheck:core && npm run typecheck:gateway-wa && npm run typecheck:scripts",
+    "typecheck": "npm run typecheck:core && npm run typecheck:gateway-wa && npm run typecheck:contracts && npm run typecheck:scripts",
     "typecheck:core": "npm run -w @serena/core typecheck",
     "typecheck:gateway-wa": "npm run -w @serena/gateway-wa typecheck",
+    "typecheck:contracts": "npm run -w @serena/contracts typecheck",
     "typecheck:scripts": "tsc -p scripts/tsconfig.json"
   },
   "devDependencies": {

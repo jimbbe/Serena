@@ -6,7 +6,7 @@ La Fase 1 apunta a mediacion prudente por WhatsApp: Serena recibe un pedido, ide
 
 ## Estado Actual
 
-El repositorio tiene stack base desplegado en VPS (T04), arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), hardening interno completado (T17B), mock WhatsApp Gateway / dry-run adapter (T18), documentacion reorganizada (T18.1), modulo ai-guide con pipeline de ejecucion agnostico de LLM (T19), canal inbound channel-agnostic con resolucion de identidad externa (T20), Simulation API con single-step y scenario runner multi-step, historial de conversacion activo en AI guide (T27), contactos conocidos wireados en contexto de mediacion de AI guide (T28), LLM provider OpenAI-compatible configurable por variables de entorno (T29), y readiness local post-T29 con validacion estricta de timestamps, timeout/validacion fuerte en gateway-wa y specs sincronizadas (T30A). **578 tests pasando** (519 core + 59 gateway-wa).
+El repositorio tiene stack base desplegado en VPS (T04), arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), hardening interno completado (T17B), mock WhatsApp Gateway / dry-run adapter (T18), documentacion reorganizada (T18.1), modulo ai-guide con pipeline de ejecucion agnostico de LLM (T19), canal inbound channel-agnostic con resolucion de identidad externa (T20), Simulation API con single-step y scenario runner multi-step, historial de conversacion activo en AI guide (T27), contactos conocidos wireados en contexto de mediacion de AI guide (T28), LLM provider OpenAI-compatible configurable por variables de entorno (T29), readiness local post-T29 con validacion estricta de timestamps, timeout/validacion fuerte en gateway-wa y specs sincronizadas (T30A), y structural cleanup con contratos compartidos via `@serena/contracts` y modulo `channel-inbound` movido (T30B). **578 tests pasando** (519 core + 59 gateway-wa).
 
 ## 🔒 Centro Operativo del Proyecto
 
@@ -133,10 +133,11 @@ Todavia no esta decidido que modulo va en Node.js/TypeScript y cual va en Go. Es
 
 ```text
 apps/
-  core/          # nucleo de producto: inbound-gate, mediation-bridge, contact-directory, mediation-understanding, prudent-rewording, session-manager, ai-guide, orchestrator, internal-pipeline, whatsapp-gateway (contrato)
+  core/          # nucleo de producto: inbound-gate, channel-inbound, mediation-bridge, contact-directory, mediation-understanding, prudent-rewording, session-manager, ai-guide, orchestrator, internal-pipeline, whatsapp-gateway (contrato)
   gateway-wa/    # mock WhatsApp gateway / dry-run adapter (T18)
   panel/         # placeholder para futuro panel, si corresponde
 packages/
+  contracts/     # contratos de tipo compartidos (PipelineResult, PipelineInput) entre core y gateway-wa (T30B)
   shared/        # tipos, contratos y utilidades compartidas no acopladas a infraestructura
 infra/           # infraestructura local (T02) y VPS (T03-T04)
 docs/            # documentacion: estado (project-status), preguntas abiertas (open-questions), arquitectura (architecture/) y operaciones (ops/)
@@ -249,11 +250,9 @@ Runbook operativo: `docs/ops/deployment-t04.md`.
 
 ## Proximos Pasos
 
-Fase completada: **logica de negocio con pipeline channel-agnostic y readiness local post-T29** (T06-T30A). Pipeline end-to-end funciona con 578 tests (519 core + 59 gateway-wa). Endpoint HTTP interno con hardening (T17B), AI guide agnostico (T19), canal inbound multi-channel con resolucion de identidad (T20), Simulation API con single-step y scenario runner, historial de conversacion activo en AI guide (T27), contactos conocidos en contexto de mediacion (T28), provider OpenAI-compatible configurable (T29) y validaciones locales/gateway endurecidas (T30A).
+Fase completada: **logica de negocio con pipeline channel-agnostic, structural cleanup y readiness local post-T29** (T06-T30B). Pipeline end-to-end funciona con 578 tests (519 core + 59 gateway-wa). Endpoint HTTP interno con hardening (T17B), AI guide agnostico (T19), canal inbound multi-channel con resolucion de identidad (T20), Simulation API con single-step y scenario runner, historial de conversacion activo en AI guide (T27), contactos conocidos en contexto de mediacion (T28), provider OpenAI-compatible configurable (T29), validaciones locales/gateway endurecidas (T30A) y structural cleanup con contratos compartidos (`@serena/contracts`) y modulo `channel-inbound` (T30B).
 
-**Proximo paso inmediato**: **T30B — structural cleanup**. El foco es mover `ProcessChannelInboundMessage` fuera de `inbound-gate` hacia un limite orquestador/channel-inbound mas claro y extraer contratos compartidos entre Core y `gateway-wa` para evitar drift de `PipelineResult` y mapping.
-
-**Despues**: decidir entre dos caminos:
+**Proximo paso**: decidir entre dos caminos:
 
 1. **Persistencia conversacional** — reemplazar stores in-memory con PostgreSQL adapters para que sesiones, contactos y auditoria sobrevivan restarts.
 2. **Adapter WhatsApp real** — integrar Evolution API / Baileys como adapter de canal real, respetando el contrato T17A y sin acoplar el core a WhatsApp.

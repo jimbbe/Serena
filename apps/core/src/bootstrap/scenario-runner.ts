@@ -13,7 +13,7 @@ import { randomUUID } from "node:crypto";
 
 import type { InboundChannel, InboundMessageCommand } from "../modules/inbound-gate/domain/inbound-message-command.ts";
 import type { ChannelInboundResult } from "../modules/inbound-gate/application/results/channel-inbound-result.ts";
-import type { ProcessChannelInboundMessage } from "../modules/inbound-gate/application/use-cases/process-channel-inbound-message.ts";
+import type { ProcessChannelInboundMessage } from "../modules/channel-inbound/application/use-cases/process-channel-inbound-message.ts";
 
 // ---------------------------------------------------------------------------
 // Types

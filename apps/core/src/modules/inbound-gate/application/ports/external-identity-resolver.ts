@@ -8,7 +8,7 @@
  */
 
 import type { InboundMessageCommand } from "../../domain/inbound-message-command.ts";
-import type { ResolvedInboundActor } from "../results/resolved-inbound-actor.ts";
+import type { ResolvedInboundActor } from "../../../channel-inbound/application/results/resolved-inbound-actor.ts";
 
 export interface ExternalIdentityResolver {
   resolve(command: InboundMessageCommand): Promise<ResolvedInboundActor>;

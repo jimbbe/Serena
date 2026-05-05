@@ -18,7 +18,7 @@ import { EvaluateInboundMessage } from "../modules/inbound-gate/application/use-
 import { InMemoryContactDirectory as InboundGateContactDirectory } from "../modules/inbound-gate/infrastructure/memory/in-memory-contact-directory.ts";
 import { InMemoryDecisionAudit } from "../modules/inbound-gate/infrastructure/memory/in-memory-decision-audit.ts";
 import { InMemoryExternalIdentityResolver } from "../modules/inbound-gate/infrastructure/memory/in-memory-external-identity-resolver.ts";
-import type { ResolvedInboundActor } from "../modules/inbound-gate/application/results/resolved-inbound-actor.ts";
+import type { ResolvedInboundActor } from "../modules/channel-inbound/application/results/resolved-inbound-actor.ts";
 
 import { ExtractMediationRequest } from "../modules/mediation-understanding/application/use-cases/extract-mediation-request.ts";
 import { RuleBasedMediationUnderstanding } from "../modules/mediation-understanding/infrastructure/rules/rule-based-mediation-understanding.ts";

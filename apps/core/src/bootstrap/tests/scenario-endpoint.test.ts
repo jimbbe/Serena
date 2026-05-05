@@ -25,7 +25,7 @@ import type {
 import { calculateSummary } from "../scenario-runner.ts";
 import { isScenarioStepFailure } from "../scenario-runner.ts";
 import type { ScenarioStepResult } from "../scenario-runner.ts";
-import { ProcessChannelInboundMessage } from "../../modules/inbound-gate/application/use-cases/process-channel-inbound-message.ts";
+import { ProcessChannelInboundMessage } from "../../modules/channel-inbound/application/use-cases/process-channel-inbound-message.ts";
 import type { ChannelInboundResult } from "../../modules/inbound-gate/application/results/channel-inbound-result.ts";
 import type { InboundMessageCommand } from "../../modules/inbound-gate/domain/inbound-message-command.ts";
 import type { InboundDecisionReason } from "../../modules/inbound-gate/domain/inbound-decision.ts";

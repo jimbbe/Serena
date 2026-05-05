@@ -19,6 +19,7 @@ Node.js native HTTP server (no frameworks), TypeScript 5.9+ with `--experimental
 
 | Module | Domain | Status |
 |--------|--------|--------|
+| `channel-inbound` | Procesa mensajes inbound channel-agnostic (whatsapp, voice, web_chat, etc.) con resolucion de identidad externa, ejecucion de AI guide, y store conversacional. | ✅ (integrado) |
 | `inbound-gate` | Evalua mensajes entrantes, aplica politicas de acceso, rutea a perfiles LLM. | ✅ 34 tests |
 | `mediation-bridge` | Gestiona ciclo de vida de sesiones de mediacion entre dos participantes. | ✅ 8 tests |
 | `contact-directory` | Dominio de contactos, adapter in-memory con datos semilla, busqueda case-insensitive. | ✅ 17 tests |

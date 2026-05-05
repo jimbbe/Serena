@@ -9,7 +9,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { ProcessChannelInboundMessage } from "../application/use-cases/process-channel-inbound-message.ts";
+import { ProcessChannelInboundMessage } from "../../channel-inbound/application/use-cases/process-channel-inbound-message.ts";
 import type { InboundMessageCommand, InboundChannel } from "../domain/inbound-message-command.ts";
 import type { ProcessInboundMessageInput } from "../application/use-cases/process-inbound-message.ts";
 import type { InboundDecision } from "../domain/inbound-decision.ts";
@@ -17,7 +17,7 @@ import type { InboundProcessingRoute } from "../domain/inbound-processing-route.
 import type { GuideUseCaseId } from "../../ai-guide/domain/guide-use-case-id.ts";
 import type { GuideResult } from "../../ai-guide/domain/guide-result.ts";
 import type { ExternalIdentityResolver } from "../application/ports/external-identity-resolver.ts";
-import type { ResolvedInboundActor } from "../application/results/resolved-inbound-actor.ts";
+import type { ResolvedInboundActor } from "../../channel-inbound/application/results/resolved-inbound-actor.ts";
 import type { InboundMessageCommand as InboundCmd } from "../domain/inbound-message-command.ts";
 import type { ConversationStore } from "../../conversation-store/port/conversation-store.ts";
 import type { Conversation } from "../../conversation-store/domain/conversation.ts";

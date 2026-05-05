@@ -28,7 +28,7 @@ These questions are intentionally left open until a task needs the decision.
 
 Estas preguntas surgieron durante el diseno del contrato WhatsApp Gateway (T17A) y hardening interno (T17B):
 
-- **¿Donde vivira el Gateway?** — Decidido en T10: repo separado (`whatsapp-gateway`). Pregunta abierta: ¿el codigo de mapeo (`mapPipelineResultToGatewayAction`) se duplicara en el Gateway o se compartira via un package?
+- **¿Donde vivira el Gateway?** — Decidido en T10: repo separado (`whatsapp-gateway`). Pregunta abierta: ¿el codigo de mapeo (`mapPipelineResultToGatewayAction`) se duplicara en el Gateway o se compartira via un package? (Parcialmente resuelto en T30B: los tipos `PipelineResult`/`PipelineInput` ahora viven en `@serena/contracts` como single source of truth. La funcion de mapeo sigue duplicada entre core y gateway-wa.)
 - **¿El Gateway sera multi-proyecto / multi-numero?** — La arquitectura T10 preve que si. Pregunta abierta: ¿como se configura el ruteo de webhooks por instancia?
 - **¿Como se manejaran reintentos?** — Recomendacion inicial: exponential backoff con jitter, maximo 3 intentos, circuit breaker despues de 5 fallos consecutivos. Pregunta abierta: ¿el Gateway debe reintentar o Serena Core debe exponer un endpoint de reintento?
 - **¿Habra cola de mensajes / event bus en el futuro?** — Para produccion con volumen, se podria introducir una cola entre el Gateway y Serena Core. Pregunta abierta: ¿esto es necesario para MVP o es premature optimization?

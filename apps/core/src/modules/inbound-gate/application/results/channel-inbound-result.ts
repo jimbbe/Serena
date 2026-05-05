@@ -12,7 +12,7 @@ import type { InboundDecision } from "../../domain/inbound-decision.ts";
 import type { LlmProfileId } from "../../domain/llm-profile.ts";
 import type { GuideUseCaseId } from "../../../ai-guide/domain/guide-use-case-id.ts";
 import type { GuideResult } from "../../../ai-guide/domain/guide-result.ts";
-import type { ResolvedInboundActor } from "./resolved-inbound-actor.ts";
+import type { ResolvedInboundActor } from "../../../channel-inbound/application/results/resolved-inbound-actor.ts";
 
 /**
  * Simulated outbound draft included in the simulation result when

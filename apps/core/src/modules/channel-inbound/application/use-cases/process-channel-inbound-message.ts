@@ -15,18 +15,18 @@
 
 import { randomUUID } from "node:crypto";
 
-import type { InboundMessageCommand } from "../../domain/inbound-message-command.ts";
-import type { ChannelInboundResult } from "../results/channel-inbound-result.ts";
+import type { InboundMessageCommand } from "../../../inbound-gate/domain/inbound-message-command.ts";
+import type { ChannelInboundResult } from "../../../inbound-gate/application/results/channel-inbound-result.ts";
 import type { ResolvedInboundActor } from "../results/resolved-inbound-actor.ts";
 import type { GuideUseCaseId } from "../../../ai-guide/domain/guide-use-case-id.ts";
 import type { GuideResult } from "../../../ai-guide/domain/guide-result.ts";
 import type { ConversationMessage } from "../../../conversation-store/domain/conversation-message.ts";
 
-import { profileToUseCaseId } from "../mappers/profile-to-usecase.ts";
-import type { ProcessInboundMessage } from "./process-inbound-message.ts";
-import type { ProcessInboundMessageInput } from "./process-inbound-message.ts";
+import { profileToUseCaseId } from "../../../inbound-gate/application/mappers/profile-to-usecase.ts";
+import type { ProcessInboundMessage } from "../../../inbound-gate/application/use-cases/process-inbound-message.ts";
+import type { ProcessInboundMessageInput } from "../../../inbound-gate/application/use-cases/process-inbound-message.ts";
 import type { AiGuideService } from "../../../ai-guide/application/use-cases/ai-guide-service.ts";
-import type { ExternalIdentityResolver } from "../ports/external-identity-resolver.ts";
+import type { ExternalIdentityResolver } from "../../../inbound-gate/application/ports/external-identity-resolver.ts";
 import type { ConversationStore } from "../../../conversation-store/port/conversation-store.ts";
 import type { ContactDirectory } from "../../../contact-directory/application/ports/contact-directory.ts";
 

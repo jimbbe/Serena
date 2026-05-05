@@ -6,7 +6,7 @@ import { createPipelineHandler } from "./bootstrap/internal-pipeline-handler.ts"
 import { createSimulationHandler } from "./bootstrap/simulation-handler.ts";
 import { createScenarioHandler } from "./bootstrap/scenario-handler.ts";
 import { SimulationScenarioRunner } from "./bootstrap/scenario-runner.ts";
-import { ProcessChannelInboundMessage } from "./modules/inbound-gate/application/use-cases/process-channel-inbound-message.ts";
+import { ProcessChannelInboundMessage } from "./modules/channel-inbound/application/use-cases/process-channel-inbound-message.ts";
 
 const env = loadAppEnv();
 

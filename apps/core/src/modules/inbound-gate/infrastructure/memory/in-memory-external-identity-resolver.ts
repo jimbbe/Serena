@@ -11,7 +11,7 @@
  */
 
 import type { ExternalIdentityResolver } from "../../application/ports/external-identity-resolver.ts";
-import type { ResolvedInboundActor } from "../../application/results/resolved-inbound-actor.ts";
+import type { ResolvedInboundActor } from "../../../channel-inbound/application/results/resolved-inbound-actor.ts";
 import type { InboundMessageCommand } from "../../domain/inbound-message-command.ts";
 
 // ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), mock WhatsApp Gateway with dry-run adapter (T18), documentation reorganized (T18.1), AI guide module with deterministic mock provider (T19), channel-agnostic inbound with external identity resolution (T20), conversation store (T22), prompt registry with output contracts and runtime validation (T23), conversation history wired into AI guide context (T27), known contacts wired into AI guide mediation context (T28), configurable OpenAI-compatible LLM provider with env-based selection (T29), and post-T29 local readiness/docs-spec sync completed (T30A). 578 tests passing (519 core + 59 gateway-wa).
+Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), mock WhatsApp Gateway with dry-run adapter (T18), documentation reorganized (T18.1), AI guide module with deterministic mock provider (T19), channel-agnostic inbound with external identity resolution (T20), conversation store (T22), prompt registry with output contracts and runtime validation (T23), conversation history wired into AI guide context (T27), known contacts wired into AI guide mediation context (T28), configurable OpenAI-compatible LLM provider with env-based selection (T29), post-T29 local readiness/docs-spec sync completed (T30A), and structural cleanup completed (T30B) — shared contracts package (`@serena/contracts`) and `channel-inbound` module moved. 578 tests passing (519 core + 59 gateway-wa).
 
 ## Decided
 
@@ -257,9 +257,18 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - T29 change artifacts archived under `openspec/changes/archive/t29-openai-compatible-llm-provider/` with `CLOSURE.md`.
 - Tests: 578 passing (519 core + 59 gateway-wa). `npm run check` passes.
 
-## Expected Next Task
+## Implemented In T30B: Structural Cleanup
 
-Next: T30B — Structural cleanup (move `ProcessChannelInboundMessage` to a proper orchestrator/channel-inbound boundary, extract shared contracts between Core and gateway-wa, and reduce drift around `PipelineResult`/gateway mapping).
+- `@serena/contracts` workspace package at `packages/contracts/` — single source of truth for `PipelineResult` (8 variants), `PipelineInput`, and `PipelineResult` union. Pure TypeScript types, zero dependencies, consumed by both `@serena/core` and `@serena/gateway-wa` via barrel re-exports.
+- `apps/core/src/modules/orchestrator/domain/pipeline-result.ts` now re-exports from `@serena/contracts` (preserves backward compatibility for all 5+ internal consumers).
+- `apps/gateway-wa/src/domain/pipeline-result.ts` now re-exports from `@serena/contracts` (removed "COPIED from" header and inline type definitions — was 104 lines, now 13 lines).
+- New `channel-inbound` module at `apps/core/src/modules/channel-inbound/`:
+  - `application/use-cases/process-channel-inbound-message.ts` — moved from `inbound-gate`, class body unchanged, import paths updated for new location.
+  - `application/results/resolved-inbound-actor.ts` — moved from `inbound-gate`, byte-for-byte identical copy.
+- 15 import-update files across core (server.ts, bootstrap/, inbound-gate/application, inbound-gate/infrastructure, inbound-gate/tests).
+- Zero behavior changes — all 578 tests pass identically. Typecheck passes for core, gateway-wa, and scripts.
+
+## Expected Next Task
 
 After T30B: decide between persistence (PostgreSQL adapters) and real WhatsApp adapter (Evolution API / Baileys).
 

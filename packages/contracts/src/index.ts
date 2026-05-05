@@ -9,4 +9,4 @@ export {
   MediationStartedResult,
   MediationReplyRecordedResult,
   AmbiguousActiveSessionResult,
-} from "@serena/contracts";
+} from "./pipeline-result.ts";

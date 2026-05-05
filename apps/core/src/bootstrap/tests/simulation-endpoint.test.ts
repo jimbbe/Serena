@@ -15,7 +15,7 @@ import http from "node:http";
 import { createHttpServer } from "../server.ts";
 import { createInMemoryPipeline } from "../create-in-memory-pipeline.ts";
 import { createSimulationHandler } from "../simulation-handler.ts";
-import { ProcessChannelInboundMessage } from "../../modules/inbound-gate/application/use-cases/process-channel-inbound-message.ts";
+import { ProcessChannelInboundMessage } from "../../modules/channel-inbound/application/use-cases/process-channel-inbound-message.ts";
 import { ProcessInboundMessage } from "../../modules/inbound-gate/application/use-cases/process-inbound-message.ts";
 import type { ProcessInboundMessageInput } from "../../modules/inbound-gate/application/use-cases/process-inbound-message.ts";
 

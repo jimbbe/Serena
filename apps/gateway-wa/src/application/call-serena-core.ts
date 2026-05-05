@@ -41,10 +41,10 @@ const VALID_RESULT_TYPES = [
 
 const REQUIRED_FIELDS_BY_TYPE: Record<string, readonly string[]> = {
   discard: ["reason"],
-  conversation_pending: [],
-  risk_review_required: ["matchedSignals"],
-  mediation_not_understood: [],
-  recipient_not_found: ["recipientName"],
+  conversation_pending: ["senderId"],
+  risk_review_required: ["senderId", "matchedSignals"],
+  mediation_not_understood: ["senderId"],
+  recipient_not_found: ["senderId", "recipientName"],
   mediation_started: [
     "sessionId",
     "requesterId",
@@ -61,7 +61,7 @@ const REQUIRED_FIELDS_BY_TYPE: Record<string, readonly string[]> = {
     "toDisplayName",
     "rewordedText",
   ],
-  ambiguous_active_session: ["activeSessionIds"],
+  ambiguous_active_session: ["senderId", "activeSessionIds"],
 };
 
 // ---------------------------------------------------------------------------
@@ -86,6 +86,41 @@ function resolveTimeout(): number {
 }
 
 // ---------------------------------------------------------------------------
+// Response validation helpers
+// ---------------------------------------------------------------------------
+
+function isObjectRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isStringArray(value: unknown): value is readonly string[] {
+  if (!Array.isArray(value)) return false;
+  return value.every((item) => typeof item === "string");
+}
+
+const STRING_FIELDS = new Set([
+  "senderId",
+  "reason",
+  "sessionId",
+  "requesterId",
+  "requesterDisplayName",
+  "recipientId",
+  "recipientDisplayName",
+  "rewordedText",
+  "fromParticipantId",
+  "fromDisplayName",
+  "toParticipantId",
+  "toDisplayName",
+  "recipientName",
+]);
+
+const STRING_ARRAY_FIELDS = new Set(["matchedSignals", "activeSessionIds"]);
+
+// ---------------------------------------------------------------------------
 // Response validation
 // ---------------------------------------------------------------------------
 
@@ -96,7 +131,7 @@ function resolveTimeout(): number {
 function validatePipelineResultShape(
   body: unknown
 ): { ok: true; result: PipelineResult } | { ok: false; error: string } {
-  if (body === null || body === undefined || typeof body !== "object" || Array.isArray(body)) {
+  if (!isObjectRecord(body)) {
     return { ok: false, error: "Response body is not a JSON object" };
   }
 
@@ -118,7 +153,7 @@ function validatePipelineResultShape(
     };
   }
 
-  // Required fields per type
+  // Required fields per type — check presence first
   const requiredFields = REQUIRED_FIELDS_BY_TYPE[resType];
   if (requiredFields) {
     const missing = requiredFields.filter(
@@ -129,6 +164,26 @@ function validatePipelineResultShape(
         ok: false,
         error: `PipelineResult type "${resType}" missing required field(s): ${missing.join(", ")}`,
       };
+    }
+
+    // Type checking for each required field
+    for (const field of requiredFields) {
+      const val = obj[field];
+      if (STRING_FIELDS.has(field)) {
+        if (!isNonEmptyString(val)) {
+          return {
+            ok: false,
+            error: `PipelineResult type "${resType}" field "${field}" must be a non-empty string`,
+          };
+        }
+      } else if (STRING_ARRAY_FIELDS.has(field)) {
+        if (!isStringArray(val)) {
+          return {
+            ok: false,
+            error: `PipelineResult type "${resType}" field "${field}" must be a string array`,
+          };
+        }
+      }
     }
   }
 
@@ -207,10 +262,17 @@ export async function callSerenaCore(
 
   // Parse and validate JSON response structure
   let data: unknown;
+  const rawText = await response.text();
   try {
-    data = await response.json();
+    data = JSON.parse(rawText);
   } catch {
-    throw new Error("Serena Core response was not valid JSON");
+    const snippet = rawText.length > 500 ? rawText.slice(0, 500) : rawText;
+    // Redact SERENA_INTERNAL_TOKEN from the snippet
+    const token = config.internalToken;
+    const safeSnippet = token && token.length > 0
+      ? snippet.split(token).join("[REDACTED]")
+      : snippet;
+    throw new Error(`Serena Core response was not valid JSON: ${safeSnippet}`);
   }
 
   // Validate PipelineResult structure

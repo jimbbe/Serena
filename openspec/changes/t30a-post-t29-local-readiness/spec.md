@@ -8,17 +8,17 @@ Address validation gaps, configuration gaps, and documentation hygiene discovere
 
 ## Modified Capability: internal-pipeline-http (receivedAt validation)
 
-### Requirement: receivedAt Must Be Valid ISO 8601
+### Requirement: receivedAt Must Be Valid ISO 8601 UTC Timestamp
 
-The system MUST validate that the `receivedAt` field in the pipeline input body is a valid ISO 8601 timestamp string when present. A string that is present but not parseable as a valid ISO 8601 date MUST be rejected with HTTP 400.
+The system MUST validate that the `receivedAt` field in the pipeline input body is a valid ISO 8601 UTC timestamp string with `Z` suffix when present. A string that is present but not a valid ISO 8601 UTC timestamp MUST be rejected with HTTP 400 using the existing `invalid_payload` error format.
 
 #### Validation rules
 
 - If `receivedAt` is absent → pipeline proceeds (backward compatible, uses server time downstream).
-- If `receivedAt` is present and `typeof === "string"` → MUST pass ISO 8601 validation.
-- Valid formats include: `"2026-05-02T22:00:00.000Z"`, `"2026-05-02T22:00:00Z"`, `"2026-05-02T22:00:00.000+03:00"`.
-- Invalid values like `"not-a-date"`, `"abc"`, `""`, `"2026-13-45"` MUST be rejected.
-- Validation MUST use `Number.isFinite(new Date(value).getTime())` or equivalent — not just `typeof === "string"`.
+- If `receivedAt` is present and `typeof === "string"` → MUST pass strict ISO 8601 UTC validation (regex + Date round-trip).
+- Valid formats: `"2026-05-02T22:00:00.000Z"`, `"2026-05-02T22:00:00Z"`.
+- Invalid values like `"not-a-date"`, `"abc"`, `""`, `"2026-05-02T12:34:56"` (no timezone), `"2026/05/02"`, `"May 2 2026"`, `"2026-13-45"` MUST be rejected.
+- Rejection MUST use the existing generic format: `{ error: "invalid_payload", detail: "One or more fields are invalid or missing", fields: [{ field: "receivedAt", message: "Must be a valid ISO 8601 UTC timestamp" }] }`.
 
 #### Scenario: Valid ISO 8601 timestamp passes validation
 
@@ -30,14 +30,14 @@ The system MUST validate that the `receivedAt` field in the pipeline input body 
 
 - GIVEN a POST to `/internal/pipeline/process` with `receivedAt: "not-a-date"`
 - WHEN the request is processed
-- THEN the response is 400 with `{ error: "invalid_receivedAt", message: "receivedAt must be a valid ISO 8601 timestamp" }`
+- THEN the response is 400 with `{ error: "invalid_payload", detail: "One or more fields are invalid or missing", fields: [{ field: "receivedAt", message: "Must be a valid ISO 8601 UTC timestamp" }] }`
 - AND the pipeline is NOT executed
 
 #### Scenario: Empty string in receivedAt returns 400
 
 - GIVEN a POST to `/internal/pipeline/process` with `receivedAt: ""`
 - WHEN the request is processed
-- THEN the response is 400 with an error indicating `receivedAt` is not a valid ISO 8601 timestamp
+- THEN the response is 400 with `{ error: "invalid_payload", fields: [{ field: "receivedAt", message: "Must be a valid ISO 8601 UTC timestamp" }] }`
 - AND the pipeline is NOT executed
 
 #### Scenario: Missing receivedAt is accepted (backward compatible)
@@ -46,17 +46,17 @@ The system MUST validate that the `receivedAt` field in the pipeline input body 
 - WHEN the request is processed
 - THEN validation passes and the pipeline executes (uses server time downstream)
 
-#### Scenario: ISO 8601 with timezone offset passes
+#### Scenario: ISO 8601 without timezone or with offset is rejected
 
-- GIVEN a POST with `receivedAt: "2026-05-02T22:00:00.000+03:00"`
+- GIVEN a POST with `receivedAt: "2026-05-02T22:00:00.000+03:00"` or `receivedAt: "2026-05-02T22:00:00"`
 - WHEN the request is processed
-- THEN validation passes (valid ISO 8601 with timezone)
+- THEN the response is 400 — only UTC Z-suffixed timestamps are accepted
 
 #### Scenario: Invalid date values like month 13 are rejected
 
 - GIVEN a POST with `receivedAt: "2026-13-45T00:00:00.000Z"`
 - WHEN the request is processed
-- THEN the response is 400 (Date.parse produces Invalid Date for impossible dates)
+- THEN the response is 400 — impossible dates fail the Date round-trip check
 
 ---
 
@@ -155,14 +155,15 @@ The system MUST validate that the HTTP response from Serena Core is valid JSON a
 
 ## Modified Capability: gateway-wa (timestamp validation on mock events)
 
-### Requirement: Mock Event Timestamp Must Be Valid ISO 8601
+### Requirement: Mock Event Timestamp Must Be Valid ISO 8601 UTC
 
-The system MUST validate that the `timestamp` field in a `MockWhatsAppEvent` is a non-empty, valid ISO 8601 timestamp string. Empty, whitespace-only, or non-parseable timestamps MUST be rejected BEFORE any HTTP call to Serena Core.
+The system MUST validate that the `timestamp` field in a `MockWhatsAppEvent` is a non-empty, valid ISO 8601 UTC timestamp string with `Z` suffix. Empty, whitespace-only, or non-ISO-UTC timestamps MUST be rejected BEFORE any HTTP call to Serena Core.
 
 #### Validation rules
 
 - `timestamp` MUST be a non-empty string (trimmed).
-- `timestamp` MUST pass ISO 8601 validation (same rules as `receivedAt` above).
+- `timestamp` MUST pass strict ISO 8601 UTC validation (regex + Date round-trip, same rules as `receivedAt` above).
+- Only `Z` suffix is accepted (no timezone offsets like `+03:00`).
 - Validation MUST occur in `normalize-mock-event.ts` alongside existing `messageId`, `from`, `text` validation.
 - Rejected events MUST return a clear error mentioning `timestamp`.
 
@@ -190,7 +191,7 @@ The system MUST validate that the `timestamp` field in a `MockWhatsAppEvent` is 
 
 - GIVEN a `MockWhatsAppEvent` with `timestamp: "not-a-date"`
 - WHEN the event is validated
-- THEN validation fails with an error indicating `timestamp` must be a valid ISO 8601 timestamp
+- THEN validation fails with an error indicating `timestamp` must be a valid ISO 8601 UTC timestamp
 - AND no HTTP call is made
 
 #### Scenario: Multiple validation failures report all fields
@@ -226,23 +227,24 @@ The `.env.example` file MUST include clear guidance for `SERENA_INTERNAL_TOKEN` 
 
 ### Requirement: SERENA_INTERNAL_TOKEN Mapped in docker-compose.yml
 
-The `docker-compose.yml` MUST map `SERENA_INTERNAL_TOKEN` from the host environment to the `serena-core` and `gateway-wa` services.
+The `docker-compose.yml` MUST map `SERENA_INTERNAL_TOKEN` from the host environment to the `serena-core` service. The `gateway-wa` service does not yet exist in compose — its token mapping is deferred.
 
 #### Configuration requirements
 
 - `serena-core` service MUST include `SERENA_INTERNAL_TOKEN: ${SERENA_INTERNAL_TOKEN}` in its `environment` section.
-- `gateway-wa` service (if defined in compose) MUST include `SERENA_INTERNAL_TOKEN: ${SERENA_INTERNAL_TOKEN}` in its `environment` section.
-- Both services MUST receive the SAME token value for auth to work.
+- `gateway-wa` will use the same token in runtime when it exists; its compose mapping is out of scope until the service is added to `docker-compose.yml`.
+- Both services MUST receive the SAME token value for auth to work when gateway-wa is added.
 
 #### Scenario: docker-compose maps token to core
 
 - GIVEN `docker-compose.yml` is inspected
 - THEN the `serena-core` service environment includes `SERENA_INTERNAL_TOKEN`
 
-#### Scenario: docker-compose maps token to gateway-wa
+#### Scenario: gateway-wa compose mapping is deferred
 
 - GIVEN `docker-compose.yml` is inspected
-- THEN the `gateway-wa` service environment includes `SERENA_INTERNAL_TOKEN`
+- THEN there is NO `gateway-wa` service yet
+- AND the token mapping for gateway-wa is documented as a future task
 
 ---
 

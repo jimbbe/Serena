@@ -113,7 +113,7 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 
 ## Implemented In T11: Contact Directory
 
-- Domain: `Contact` (id, displayName, whatsappId, allowed).
+- Domain: `Contact` (id, displayName, whatsappId). Allowed-sender behavior is managed by inbound-gate allowed IDs, not by a Contact field.
 - Port: `ContactDirectory` con metodos `findByWhatsAppId`, `findById`, `findByDisplayName` (exact match, case-insensitive), `findAll`, `hasAllowedSender`.
 - Adapter: `InMemoryContactDirectory` con seed data de contactos de ejemplo (Carlos, Maria, Juan, Pedro, etc.) y multiples metodos de busqueda.
 - Use case: `ResolveContact` busca contacto por displayName (case-insensitive, exact match).

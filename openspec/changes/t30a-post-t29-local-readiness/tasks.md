@@ -14,10 +14,12 @@
   - **Spec**: `local-dev-token-config` → Scenario: docker-compose maps token to core
   - **Archivo**: `docker-compose.yml`
 
-- [x] **T30A-03** — Mapear `SERENA_INTERNAL_TOKEN` en `docker-compose.yml` para `gateway-wa`
-  - Agregar servicio `gateway-wa` al compose (si no existe) o agregar `SERENA_INTERNAL_TOKEN: ${SERENA_INTERNAL_TOKEN}` a su bloque `environment`
-  - **Spec**: `local-dev-token-config` → Scenario: docker-compose maps token to gateway-wa
-  - **Archivo**: `docker-compose.yml`
+- [x] **T30A-03** — Documentar `SERENA_INTERNAL_TOKEN` para `gateway-wa`; mapeo compose diferido
+  - `gateway-wa` **no existe** como servicio en `docker-compose.yml` actualmente
+  - Documentar que gateway-wa debe usar el mismo token en runtime cuando exista
+  - El mapeo compose de gateway-wa queda fuera de alcance hasta que exista ese servicio en compose
+  - **Spec**: `local-dev-token-config` → Scenario: gateway-wa compose mapping is deferred
+  - **Archivo**: documentación en `.env.example` y spec
 
 ## Fase 2 — Validación `receivedAt` en internal-pipeline-handler
 
@@ -169,6 +171,6 @@
 ## Observaciones
 
 - **T30A-01**: `.env.example` ya tiene `SERENA_INTERNAL_TOKEN=` con comentario basico (lineas 28-31). La task solo necesita **ampliar** con instrucciones de generacion y nota de seguridad.
-- **T30A-03**: `gateway-wa` **no existe** como servicio en `docker-compose.yml` actualmente. Esta task implica crearlo o documentar que se hara cuando el servicio se agregue al compose.
+- **T30A-03**: `gateway-wa` **no existe** como servicio en `docker-compose.yml` actualmente. Esta task documenta el requerimiento; el mapeo compose real se hará cuando se agregue el servicio gateway-wa al compose (fuera de alcance de T30A).
 - **T30A-06, T30A-07, T30A-08**: Son tasks de **verificacion** mas que de implementacion — la validacion ISO 8601 con `Number.isFinite(new Date().getTime())` ya cubre estos casos por comportamiento estandar de JS. Se incluyen para trazabilidad con la spec.
 - **T30A-18**: La estructura actual de `missingFields` en `normalize-mock-event.ts` ya soporta reportar multiples campos. Solo hay que integrar `timestamp` al mismo flujo.

@@ -343,6 +343,7 @@ describe("callSerenaCore", () => {
         status: 200,
         statusText: "OK",
         json: () => Promise.resolve(expectedResult),
+        text: () => Promise.resolve(JSON.stringify(expectedResult)),
       } as Response);
     }) as typeof globalThis.fetch;
 

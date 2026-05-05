@@ -104,6 +104,7 @@ export class ExecutionPipeline {
       : 1;
 
     let lastError: Error | undefined;
+    let lastModelUsed: string | undefined;
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       let lastContent = "";
@@ -129,6 +130,7 @@ export class ExecutionPipeline {
         const content = providerResult.content;
         lastContent = content;
         lastTokensUsed = providerResult.tokensUsed;
+        lastModelUsed = providerResult.modelUsed;
 
         // Validate result is not empty (validation error — not retried)
         if (!content || content.trim().length === 0) {
@@ -196,7 +198,7 @@ export class ExecutionPipeline {
             error: { message: error.message },
             metadata: makeMetadata(
               this.providerName,
-              this.configuredModel,
+              lastModelUsed ?? this.configuredModel,
               attempt + 1,
               outcome,
               promptDef.id,

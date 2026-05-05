@@ -151,7 +151,7 @@ export async function createInMemoryPipeline(options?: {
   // Idempotency store — shared across requests within the same process
   const processedMessageStore = new InMemoryProcessedMessageStore();
 
-  // AI Guide — in-memory wiring with deterministic mock provider
+  // AI Guide — in-memory wiring with configurable LLM provider
   const aiRegistry = new UseCaseRegistry();
   for (const contract of defaultContracts) {
     aiRegistry.register(contract);

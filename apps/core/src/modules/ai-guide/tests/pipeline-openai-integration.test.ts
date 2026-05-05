@@ -168,17 +168,17 @@ test("pipeline with fake provider — failure path uses configuredModel in metad
   assert.ok(failed.error.message.includes("500"));
 });
 
-test("pipeline with fake provider — validation failure still uses configuredModel", async () => {
+test("pipeline with fake provider — validation failure preserves provider modelUsed over configuredModel", async () => {
   const fakeFetch = createFakeFetch(200, {
     choices: [{ message: { content: "not valid json" } }],
     usage: { total_tokens: 5 },
-    model: "gpt-4o",
+    model: "real-model-from-provider",
   });
 
   const provider = new OpenAICompatibleLlmProvider({
     baseUrl: "https://api.example.com/v1",
     apiKey: "sk-test",
-    model: "gpt-4o",
+    model: "real-model-from-provider",
     timeoutMs: 5000,
     fetchFn: fakeFetch as typeof fetch,
   });
@@ -190,7 +190,7 @@ test("pipeline with fake provider — validation failure still uses configuredMo
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
     providerName: "openai-compatible",
-    configuredModel: "gpt-4o",
+    configuredModel: "different-configured-model",
   });
 
   const result = await pipeline.execute(
@@ -201,7 +201,9 @@ test("pipeline with fake provider — validation failure still uses configuredMo
   assert.equal(result.status, "failed");
   const failed = result as GuideResultFailed;
   assert.equal(failed.metadata.provider, "openai-compatible");
-  assert.equal(failed.metadata.model, "gpt-4o");
+  // Provider's modelUsed ("real-model-from-provider") is preserved,
+  // not the configuredModel fallback ("different-configured-model")
+  assert.equal(failed.metadata.model, "real-model-from-provider");
   assert.ok(failed.error.message.includes("Output contract validation failed"));
 });
 

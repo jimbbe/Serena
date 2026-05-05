@@ -133,7 +133,7 @@ El `OutputContract` documenta en código qué campos devuelve cada prompt y qué
 
 ### Validación en runtime
 
-A partir de este PR, el `ExecutionPipeline` **valida la salida del LLM contra el `OutputContract`** después de recibirla y antes de declarar success:
+A partir de T23 / PR #26, el `ExecutionPipeline` **valida la salida del LLM contra el `OutputContract`** después de recibirla y antes de declarar success:
 
 - **Formato `text`**: verifica que el output no esté vacío.
 - **Formato `json`**: parsea JSON, valida que sea un objeto plano, verifica todos los campos requeridos, tipos (`string`, `boolean`, `number`, `string[]`, `enum`, `enum[]`, `object`, `unknown`, `null`, `string | null`) y `allowedValues` (para campos `string`, `enum`, `string[]`, `enum[]`).
@@ -346,7 +346,7 @@ No implementado todavía:
 - Memoria semántica avanzada.
 - Summarizer.
 - Herramientas externas.
-- Conexión de `ConversationStore` y `ContactDirectory` al `ContextBuilder` — el historial de conversación (`includeConversationHistory`) ya está activo desde T27; `includeKnownContacts` e `includeSafetyMemory` permanecen en `false`.
+- Conexión de `ConversationStore` y `ContactDirectory` al `ContextBuilder` — el historial de conversación (`includeConversationHistory`) ya está activo desde T27 porque `ProcessChannelInboundMessage` alimenta `recentMessages`; `includeKnownContacts` e `includeSafetyMemory` permanecen en `false` hasta conectar `ContactDirectory` en una tarea futura.
 
 ---
 

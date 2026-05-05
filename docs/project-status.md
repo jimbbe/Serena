@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), and a mock WhatsApp Gateway with dry-run adapter (T18). Documentation reorganized into `docs/architecture/` and `docs/ops/` (T18.1). 203 tests passing.
+Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), mock WhatsApp Gateway with dry-run adapter (T18), documentation reorganized (T18.1), AI guide module with deterministic mock provider (T19), channel-agnostic inbound with external identity resolution (T20), conversation store (T22), prompt registry with output contracts and runtime validation (T23), and conversation history wired into AI guide context (T27). 485 tests passing (447 core + 38 gateway-wa).
 
 ## Decided
 
@@ -28,11 +28,12 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 
 ## Not Implemented Yet
 
-- WhatsApp / Evolution API real integration (`whatsapp-gateway` has only domain types and port contract).
+- WhatsApp / Evolution API real integration (`whatsapp-gateway` has only domain types and port contract; mock gateway T18 simulates the flow without real sending).
 - PostgreSQL connection usage in application code (current modules use in-memory stores).
-- HTTP API beyond `/health` and `/internal/pipeline/process` (no external business endpoints exist).
+- Real LLM provider (OpenAI / OpenRouter); only `MockLlmProvider` deterministico.
+- Real outbound message sending (pipeline produces results but does not send messages).
+- HTTP API beyond `/health` and `/internal/pipeline/process` (simulation endpoints are dev-only, gated by `ENABLE_SIMULATION_ENDPOINTS`).
 - Panel UI.
-- WhatsApp / Evolution API real integration (internal HTTP pipeline produces results but does not send messages).
 
 ## Repository Conventions
 

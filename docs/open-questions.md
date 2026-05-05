@@ -50,8 +50,10 @@ Idempotencia in-memory implementada en T17B. Preguntas abiertas para T18/T19:
 
 ## Estrategia de Integracion Futura
 
-- **¿Estrategia PostgreSQL concreta?** — T19 preve PostgreSQL adapters. Preguntas abiertas: ¿schema por modulo o unico? ¿migraciones con que herramienta? ¿repo pattern con interfaces separadas de los puertos de dominio?
-- **¿Estrategia Evolution API?** — T19/T20 preve integracion con Evolution API. Preguntas: ¿instancia dedicada o compartida? ¿como manejar webhooks entrantes (autenticacion, rate limiting)? ¿el mock gateway T18 se mantiene como herramienta de testing?
+- **¿Estrategia PostgreSQL concreta?** — Sigue pendiente. Preguntas abiertas: ¿schema por modulo o unico? ¿migraciones con que herramienta? ¿repo pattern con interfaces separadas de los puertos de dominio?
+- **¿Estrategia Evolution API?** — Sigue pendiente. Preguntas: ¿instancia dedicada o compartida? ¿como manejar webhooks entrantes (autenticacion, rate limiting)? ¿el mock gateway T18 se mantiene como herramienta de testing?
+- **¿LLM provider real?** — Sigue pendiente (OpenAI / OpenRouter). Actualmente solo `MockLlmProvider` deterministico.
+- **¿knownContacts hacia AI Guide?** — `includeKnownContacts` sigue en `false`. Activar cuando `ContactDirectory` este conectado al `ContextBuilder`.
 - **¿Futuro repo separado para WhatsApp Gateway real?** — La arquitectura T17A preve un repo `whatsapp-gateway` independiente. ¿Cuando crear ese repo? ¿que codigo se mueve/duplica? ¿el mock gateway T18 migra a ese repo o queda en Serena como herramienta de desarrollo?
 - **¿Integracion futura de IA/LLM?** — El strategy actual es rules-first para mediation-understanding, LLM como fallback. ¿Cuando integrar LLM? ¿que proveedor? ¿que politicas de privacidad/costo aplican para el caso de uso de una persona mayor?
 

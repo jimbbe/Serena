@@ -47,7 +47,7 @@ export const mediationUnderstandRequestV1: PromptDefinition = {
     includeChannelMetadata: true,
     includeConversationHistory: true,
     maxRecentMessages: 4,
-    includeKnownContacts: false,
+    includeKnownContacts: true,
     includeSafetyMemory: false,
     includeFullConversation: false,
   },

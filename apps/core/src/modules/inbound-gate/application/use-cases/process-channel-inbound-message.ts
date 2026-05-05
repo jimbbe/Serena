@@ -28,10 +28,16 @@ import type { ProcessInboundMessageInput } from "./process-inbound-message.ts";
 import type { AiGuideService } from "../../../ai-guide/application/use-cases/ai-guide-service.ts";
 import type { ExternalIdentityResolver } from "../ports/external-identity-resolver.ts";
 import type { ConversationStore } from "../../../conversation-store/port/conversation-store.ts";
+import type { ContactDirectory } from "../../../contact-directory/application/ports/contact-directory.ts";
 
 // ---------------------------------------------------------------------------
 // Dependencies
 // ---------------------------------------------------------------------------
+// Mediation use cases that benefit from known-contacts context
+const MEDIATION_USE_CASES = new Set<GuideUseCaseId>([
+  "serena.mediation.understand_request",
+  "serena.mediation.clarify",
+]);
 
 export type ProcessChannelInboundMessageDependencies = {
   processInboundMessage: ProcessInboundMessage;
@@ -40,6 +46,8 @@ export type ProcessChannelInboundMessageDependencies = {
   conversationStore: ConversationStore;
   /** Optional custom trace ID generator (defaults to crypto.randomUUID). */
   generateTraceId?: () => string;
+  /** Optional — when provided, known contacts are fetched and passed to AI guide for mediation routes. */
+  contactDirectory?: ContactDirectory;
 };
 
 // ---------------------------------------------------------------------------
@@ -52,6 +60,7 @@ export class ProcessChannelInboundMessage {
   private readonly identityResolver: ExternalIdentityResolver;
   private readonly conversationStore: ConversationStore;
   private readonly generateTraceId: () => string;
+  private readonly contactDirectory: ContactDirectory | undefined;
 
   constructor(deps: ProcessChannelInboundMessageDependencies) {
     this.processInboundMessage = deps.processInboundMessage;
@@ -59,6 +68,7 @@ export class ProcessChannelInboundMessage {
     this.identityResolver = deps.identityResolver;
     this.conversationStore = deps.conversationStore;
     this.generateTraceId = deps.generateTraceId ?? (() => randomUUID());
+    this.contactDirectory = deps.contactDirectory;
   }
 
   async execute(cmd: InboundMessageCommand): Promise<ChannelInboundResult> {
@@ -190,6 +200,14 @@ export class ProcessChannelInboundMessage {
     const profileId = route.profileId;
     const useCaseId: GuideUseCaseId = profileToUseCaseId(profileId);
 
+    // Fetch known contacts for mediation routes (same pattern as recentMessages in T27)
+    let knownContacts: string[] = [];
+    if (MEDIATION_USE_CASES.has(useCaseId) && this.contactDirectory) {
+      knownContacts = (await this.contactDirectory.findAll()).map(
+        (c) => `${c.displayName} (id: ${c.id})`,
+      );
+    }
+
     let guideResult: GuideResult | undefined = undefined;
     let guideError: { message: string; code?: string } | undefined = undefined;
 
@@ -202,6 +220,7 @@ export class ProcessChannelInboundMessage {
         tenantId: cmd.tenantId ?? "demo",
         personId: identity.personId ?? "",
         recentMessages,
+        knownContacts,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

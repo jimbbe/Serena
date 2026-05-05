@@ -39,7 +39,7 @@ export const mediationClarifyV1: PromptDefinition = {
     includeChannelMetadata: false,
     includeConversationHistory: true,
     maxRecentMessages: 3,
-    includeKnownContacts: false,
+    includeKnownContacts: true,
     includeSafetyMemory: false,
     includeFullConversation: false,
   },

@@ -796,3 +796,153 @@ test("renderTemplate does not break with array fields in input", async () => {
     "array field names must not leak into template output"
   );
 });
+
+// ── T28 — Known contacts wiring tests ────────────────────────────────
+
+test("knownContacts flows to ContextBuilder and renders Contactos conocidos section", async () => {
+  let receivedUserPrompt: string | undefined;
+  const mockProvider = new MockLlmProvider();
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke(req) {
+        receivedUserPrompt = req.userPrompt;
+        return mockProvider.invoke(req);
+      },
+    },
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+
+  const input: AiGuideInput = {
+    input: "Decile a Mari que llego",
+    knownContacts: ["María (id: c1)", "Carlos (id: c2)"],
+  };
+
+  // mediation.understand_request.v1 has includeKnownContacts: true
+  const contract = makeContract({
+    id: "serena.mediation.understand_request",
+    promptId: "serena.mediation.understand_request.v1",
+  });
+
+  await pipeline.execute(contract, input);
+
+  assert.ok(receivedUserPrompt !== undefined);
+  assert.ok(
+    receivedUserPrompt!.includes("Contactos conocidos"),
+    "userPrompt must contain Contactos conocidos section when knownContacts provided"
+  );
+  assert.ok(
+    receivedUserPrompt!.includes("María (id: c1)"),
+    "must include first contact"
+  );
+  assert.ok(
+    receivedUserPrompt!.includes("Carlos (id: c2)"),
+    "must include second contact"
+  );
+});
+
+test("empty knownContacts does not add Contactos conocidos section", async () => {
+  let receivedUserPrompt: string | undefined;
+  const mockProvider = new MockLlmProvider();
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke(req) {
+        receivedUserPrompt = req.userPrompt;
+        return mockProvider.invoke(req);
+      },
+    },
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+
+  const input: AiGuideInput = {
+    input: "Decile a Mari que llego",
+    knownContacts: [],
+  };
+
+  // mediation.understand_request.v1 has includeKnownContacts: true
+  const contract = makeContract({
+    id: "serena.mediation.understand_request",
+    promptId: "serena.mediation.understand_request.v1",
+  });
+
+  await pipeline.execute(contract, input);
+
+  assert.ok(receivedUserPrompt !== undefined);
+  assert.ok(
+    !receivedUserPrompt!.includes("Contactos conocidos"),
+    "userPrompt must NOT contain Contactos conocidos section when knownContacts is empty"
+  );
+});
+
+test("includeKnownContacts=false omits section even with knownContacts populated", async () => {
+  let receivedUserPrompt: string | undefined;
+  const mockProvider = new MockLlmProvider();
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke(req) {
+        receivedUserPrompt = req.userPrompt;
+        return mockProvider.invoke(req);
+      },
+    },
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+
+  const input: AiGuideInput = {
+    input: "Hello",
+    knownContacts: ["María (id: c1)"],
+  };
+
+  // conversation-reply.v1 has includeKnownContacts: false
+  await pipeline.execute(makeContract(), input);
+
+  assert.ok(receivedUserPrompt !== undefined);
+  assert.ok(
+    !receivedUserPrompt!.includes("Contactos conocidos"),
+    "userPrompt must NOT contain Contactos conocidos when includeKnownContacts is false"
+  );
+});
+
+test("recentMessages and knownContacts coexist without breaking the prompt", async () => {
+  let receivedUserPrompt: string | undefined;
+  const mockProvider = new MockLlmProvider();
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke(req) {
+        receivedUserPrompt = req.userPrompt;
+        return mockProvider.invoke(req);
+      },
+    },
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+
+  const input: AiGuideInput = {
+    input: "Decile a Mari que llego",
+    recentMessages: ["msg1", "msg2"],
+    knownContacts: ["María (id: c1)", "Carlos (id: c2)"],
+  };
+
+  // mediation.understand_request.v1 has both includeConversationHistory: true AND includeKnownContacts: true
+  const contract = makeContract({
+    id: "serena.mediation.understand_request",
+    promptId: "serena.mediation.understand_request.v1",
+  });
+
+  await pipeline.execute(contract, input);
+
+  assert.ok(receivedUserPrompt !== undefined);
+  assert.ok(
+    receivedUserPrompt!.includes("Historial reciente"),
+    "userPrompt must contain history section"
+  );
+  assert.ok(
+    receivedUserPrompt!.includes("Contactos conocidos"),
+    "userPrompt must contain contacts section"
+  );
+  assert.ok(
+    receivedUserPrompt!.includes("María (id: c1)"),
+    "contacts section must include contact details"
+  );
+});

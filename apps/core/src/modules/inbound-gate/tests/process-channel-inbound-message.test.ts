@@ -22,6 +22,7 @@ import type { InboundMessageCommand as InboundCmd } from "../domain/inbound-mess
 import type { ConversationStore } from "../../conversation-store/port/conversation-store.ts";
 import type { Conversation } from "../../conversation-store/domain/conversation.ts";
 import type { ConversationMessage } from "../../conversation-store/domain/conversation-message.ts";
+import type { ContactDirectory } from "../../contact-directory/application/ports/contact-directory.ts";
 
 import { AiGuideService } from "../../ai-guide/application/use-cases/ai-guide-service.ts";
 import { UseCaseRegistry } from "../../ai-guide/application/use-cases/use-case-registry.ts";
@@ -1797,5 +1798,374 @@ test("blocked identity → AiGuide not executed (existing behavior confirmed)", 
 
   assert.equal(aiCalled, false, "AiGuide must NOT be called for blocked identity");
   assert.equal(result.identity!.status, "blocked");
+  assert.equal(result.guideResult, undefined);
+});
+
+// ---------------------------------------------------------------------------
+// T28 — Known contacts wiring tests
+// ---------------------------------------------------------------------------
+
+test("mediation_understanding route passes knownContacts to AiGuide", async () => {
+  let capturedInput: Record<string, unknown> | undefined;
+  let findAllCalled = false;
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, input: Record<string, unknown>): Promise<GuideResult> => {
+      capturedInput = input;
+      return successGuideResult(useCaseId);
+    },
+  };
+
+  const contactDir: ContactDirectory = {
+    findAll: async () => {
+      findAllCalled = true;
+      return [
+        { id: "c1", displayName: "María", whatsappId: "+5492600111111" },
+        { id: "c2", displayName: "Carlos", whatsappId: "+5492600222222" },
+      ];
+    },
+    findByWhatsAppId: async () => undefined,
+    findById: async () => undefined,
+    hasAllowedSender: async () => true,
+  };
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("mediation_understanding"),
+      route: profileRoute("mediation_understanding"),
+    }),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
+    contactDirectory: contactDir,
+  });
+
+  await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "avisale a Carlos",
+    tenantId: "demo",
+  });
+
+  assert.equal(findAllCalled, true, "contactDirectory.findAll() should be called for mediation_understanding");
+  assert.ok(capturedInput !== undefined, "AiGuide should have been called");
+  const knownContacts = capturedInput!.knownContacts as string[] | undefined;
+  assert.ok(Array.isArray(knownContacts), "knownContacts should be an array");
+  assert.equal(knownContacts!.length, 2, "should have 2 contacts");
+  assert.equal(knownContacts![0], "María (id: c1)");
+  assert.equal(knownContacts![1], "Carlos (id: c2)");
+  assert.equal(capturedInput!.input, "avisale a Carlos", "input text must be preserved");
+});
+
+test("clarification route passes knownContacts to AiGuide", async () => {
+  let capturedInput: Record<string, unknown> | undefined;
+  let findAllCalled = false;
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, input: Record<string, unknown>): Promise<GuideResult> => {
+      capturedInput = input;
+      return successGuideResult(useCaseId);
+    },
+  };
+
+  const contactDir: ContactDirectory = {
+    findAll: async () => {
+      findAllCalled = true;
+      return [
+        { id: "c1", displayName: "María", whatsappId: "+5492600111111" },
+        { id: "c2", displayName: "Carlos", whatsappId: "+5492600222222" },
+      ];
+    },
+    findByWhatsAppId: async () => undefined,
+    findById: async () => undefined,
+    hasAllowedSender: async () => true,
+  };
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("clarification"),
+      route: profileRoute("clarification"),
+    }),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
+    contactDirectory: contactDir,
+  });
+
+  await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "clarify this",
+    tenantId: "demo",
+  });
+
+  assert.equal(findAllCalled, true, "contactDirectory.findAll() should be called for clarification");
+  assert.ok(capturedInput !== undefined, "AiGuide should have been called");
+  const knownContacts = capturedInput!.knownContacts as string[] | undefined;
+  assert.ok(Array.isArray(knownContacts), "knownContacts should be an array");
+  assert.equal(knownContacts!.length, 2, "should have 2 contacts");
+  assert.equal(knownContacts![0], "María (id: c1)");
+  assert.equal(capturedInput!.useCaseId, undefined, "capturedInput should not have useCaseId (only passed to execute)");
+});
+
+test("conversation route does NOT pass knownContacts to AiGuide", async () => {
+  let capturedInput: Record<string, unknown> | undefined;
+  let findAllCalled = false;
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, input: Record<string, unknown>): Promise<GuideResult> => {
+      capturedInput = input;
+      return successGuideResult(useCaseId);
+    },
+  };
+
+  const contactDir: ContactDirectory = {
+    findAll: async () => {
+      findAllCalled = true;
+      return [
+        { id: "c1", displayName: "María", whatsappId: "+5492600111111" },
+      ];
+    },
+    findByWhatsAppId: async () => undefined,
+    findById: async () => undefined,
+    hasAllowedSender: async () => true,
+  };
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("conversation"),
+      route: profileRoute("conversation"),
+    }),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
+    contactDirectory: contactDir,
+  });
+
+  await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "hola",
+    tenantId: "demo",
+  });
+
+  assert.equal(findAllCalled, false, "contactDirectory.findAll() should NOT be called for conversation");
+  assert.ok(capturedInput !== undefined, "AiGuide should have been called");
+  const knownContacts = capturedInput!.knownContacts as string[] | undefined;
+  assert.ok(
+    knownContacts === undefined || knownContacts.length === 0,
+    "knownContacts must be empty or undefined for conversation route"
+  );
+});
+
+test("risk_review route does NOT pass knownContacts to AiGuide", async () => {
+  let capturedInput: Record<string, unknown> | undefined;
+  let findAllCalled = false;
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, input: Record<string, unknown>): Promise<GuideResult> => {
+      capturedInput = input;
+      return successGuideResult(useCaseId);
+    },
+  };
+
+  const contactDir: ContactDirectory = {
+    findAll: async () => {
+      findAllCalled = true;
+      return [
+        { id: "c1", displayName: "María", whatsappId: "+5492600111111" },
+      ];
+    },
+    findByWhatsAppId: async () => undefined,
+    findById: async () => undefined,
+    hasAllowedSender: async () => true,
+  };
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("risk_review"),
+      route: profileRoute("risk_review"),
+    }),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
+    contactDirectory: contactDir,
+  });
+
+  await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "es urgente",
+    tenantId: "demo",
+  });
+
+  assert.equal(findAllCalled, false, "contactDirectory.findAll() should NOT be called for risk_review");
+  assert.ok(capturedInput !== undefined, "AiGuide should have been called");
+  const knownContacts = capturedInput!.knownContacts as string[] | undefined;
+  assert.ok(
+    knownContacts === undefined || knownContacts.length === 0,
+    "knownContacts must be empty or undefined for risk_review route"
+  );
+});
+
+test("contactDirectory not provided — mediation route works gracefully without contacts", async () => {
+  let capturedInput: Record<string, unknown> | undefined;
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, input: Record<string, unknown>): Promise<GuideResult> => {
+      capturedInput = input;
+      return successGuideResult(useCaseId);
+    },
+  };
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("mediation_understanding"),
+      route: profileRoute("mediation_understanding"),
+    }),
+  };
+
+  // No contactDirectory provided
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
+    // contactDirectory intentionally omitted
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "avisale a Carlos",
+    tenantId: "demo",
+  });
+
+  assert.equal(result.profileId, "mediation_understanding");
+  assert.equal(result.useCaseId, "serena.mediation.understand_request");
+  assert.ok(result.guideResult !== undefined, "mediation should succeed even without contactDirectory");
+  assert.ok(capturedInput !== undefined, "AiGuide should have been called");
+  const knownContacts = capturedInput!.knownContacts as string[] | undefined;
+  assert.ok(
+    knownContacts === undefined || knownContacts.length === 0,
+    "knownContacts must be empty when contactDirectory not provided"
+  );
+});
+
+test("blocked identity does NOT call contactDirectory.findAll() nor AiGuide", async () => {
+  let findAllCalled = false;
+  let aiCalled = false;
+
+  const mockAiService = {
+    execute: async (_useCaseId: GuideUseCaseId, _input: Record<string, string>): Promise<GuideResult> => {
+      aiCalled = true;
+      return successGuideResult(_useCaseId);
+    },
+  };
+
+  const contactDir: ContactDirectory = {
+    findAll: async () => {
+      findAllCalled = true;
+      return [];
+    },
+    findByWhatsAppId: async () => undefined,
+    findById: async () => undefined,
+    hasAllowedSender: async () => true,
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: {
+      execute: async () => ({
+        decision: allowedDecision("conversation"),
+        route: profileRoute("conversation"),
+      }),
+    } as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver({
+      status: "blocked",
+      tenantId: "demo",
+      channel: "whatsapp",
+      externalSenderId: "spammer",
+      authorized: false,
+      reason: "sender_blocked",
+    }),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
+    contactDirectory: contactDir,
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "spammer",
+    text: "buy now!",
+  });
+
+  assert.equal(findAllCalled, false, "contactDirectory.findAll() must NOT be called for blocked identity");
+  assert.equal(aiCalled, false, "AiGuide must NOT be called for blocked identity");
+  assert.equal(result.identity!.status, "blocked");
+  assert.equal(result.guideResult, undefined);
+});
+
+test("discard route does NOT call contactDirectory.findAll() nor AiGuide", async () => {
+  let findAllCalled = false;
+  let aiCalled = false;
+
+  const mockAiService = {
+    execute: async (_useCaseId: GuideUseCaseId, _input: Record<string, string>): Promise<GuideResult> => {
+      aiCalled = true;
+      return successGuideResult(_useCaseId);
+    },
+  };
+
+  const contactDir: ContactDirectory = {
+    findAll: async () => {
+      findAllCalled = true;
+      return [];
+    },
+    findByWhatsAppId: async () => undefined,
+    findById: async () => undefined,
+    hasAllowedSender: async () => true,
+  };
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: blockedDecision(),
+      route: discardRoute("unknown_sender"),
+    }),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
+    contactDirectory: contactDir,
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "hello",
+  });
+
+  assert.equal(findAllCalled, false, "contactDirectory.findAll() must NOT be called for discard route");
+  assert.equal(aiCalled, false, "AiGuide must NOT be called for discard route");
+  assert.equal(result.profileId, undefined);
+  assert.equal(result.useCaseId, undefined);
   assert.equal(result.guideResult, undefined);
 });

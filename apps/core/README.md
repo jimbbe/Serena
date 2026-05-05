@@ -26,10 +26,10 @@ Node.js native HTTP server (no frameworks), TypeScript 5.9+ with `--experimental
 | `prudent-rewording` | Reescritura en tercera persona con templates. | ✅ 15 tests |
 | `session-manager` | Resolucion de sesiones activas con discriminacion explicita. | ✅ 16 tests |
 | `orchestrator` | Pipeline end-to-end conectando los modulos de negocio. | ✅ 11 tests |
-| `internal-pipeline-http` | Endpoint `POST /internal/pipeline/process` con hardening (auth + idempotencia). | ✅ 14 tests |
+| `internal-pipeline-http` | Endpoint `POST /internal/pipeline/process` con hardening (auth + idempotencia) y validacion estricta de `receivedAt`. | ✅ tests HTTP |
 | `whatsapp-gateway` | Contrato y tipos de dominio (T17A); mock gateway en `apps/gateway-wa/` (T18). | Sin WhatsApp real |
 | `conversation-store` | Store in-memory de conversaciones y mensajes. | ✅ 13 tests |
-| `ai-guide` | Pipeline agnostico de LLM con PromptRegistry, ContextPolicy, OutputContract, runtime validation, e historial conversacional. | Mock deterministico |
+| `ai-guide` | Pipeline agnostico de LLM con PromptRegistry, ContextPolicy, OutputContract, runtime validation, historial conversacional y provider OpenAI-compatible configurable. | Mock por defecto |
 
 ## HTTP Endpoints
 
@@ -38,7 +38,7 @@ Node.js native HTTP server (no frameworks), TypeScript 5.9+ with `--experimental
 - `POST /dev/simulate/inbound-message` — Single-step simulation (solo con `ENABLE_SIMULATION_ENDPOINTS=true`).
 - `POST /dev/simulate/scenario` — Multi-step scenario runner (solo con `ENABLE_SIMULATION_ENDPOINTS=true`).
 
-Sin frameworks externos, sin LLM real, sin WhatsApp real, sin PostgreSQL en app. Stores in-memory.
+Sin frameworks externos, sin WhatsApp real, sin PostgreSQL en app. Stores in-memory. El provider OpenAI-compatible existe, pero el default sigue siendo mock y no hay llamadas reales salvo configuracion explicita por env.
 
 ## Run
 

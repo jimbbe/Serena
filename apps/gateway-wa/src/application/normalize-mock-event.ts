@@ -1,5 +1,5 @@
 /**
- * T18 — Normalize Mock WhatsApp Event.
+ * T18 / T30A — Normalize Mock WhatsApp Event.
  *
  * Pure function: validates and normalizes a MockWhatsAppEvent into
  * a PipelineInput shape suitable for sending to Serena Core.
@@ -8,6 +8,7 @@
  * - messageId MUST be non-empty after trimming
  * - from MUST be non-empty after trimming
  * - text MUST be non-empty after trimming
+ * - timestamp MUST be a valid ISO 8601 string (T30A)
  * - Reports ALL failing fields, not just the first one found
  */
 
@@ -22,6 +23,7 @@ export function normalizeMockWhatsAppEvent(
   const trimmedMessageId = event.messageId.trim();
   const trimmedFrom = event.from.trim();
   const trimmedText = event.text.trim();
+  const trimmedTimestamp = (event.timestamp ?? "").trim();
 
   if (!trimmedMessageId) {
     missingFields.push("messageId");
@@ -33,10 +35,17 @@ export function normalizeMockWhatsAppEvent(
     missingFields.push("text");
   }
 
+  // timestamp — required, non-empty, valid ISO 8601 (T30A)
+  if (!trimmedTimestamp) {
+    missingFields.push("timestamp (required, non-empty)");
+  } else if (!isValidIso8601(trimmedTimestamp)) {
+    missingFields.push("timestamp (must be valid ISO 8601)");
+  }
+
   if (missingFields.length > 0) {
     return {
       ok: false,
-      error: `Missing or empty required fields: ${missingFields.join(", ")}`,
+      error: `Missing or invalid required fields: ${missingFields.join(", ")}`,
     };
   }
 
@@ -45,7 +54,13 @@ export function normalizeMockWhatsAppEvent(
     value: {
       senderWhatsAppId: trimmedFrom,
       messageText: trimmedText,
-      receivedAt: event.timestamp,
+      receivedAt: trimmedTimestamp,
     },
   };
+}
+
+/** Returns true if value is a parseable ISO 8601 timestamp. */
+function isValidIso8601(value: string): boolean {
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms);
 }

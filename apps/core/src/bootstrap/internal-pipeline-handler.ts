@@ -79,11 +79,11 @@ function validatePipelineInput(body: unknown): { valid: true; input: PipelineInp
     errors.push({ field: "messageText", message: "Required non-empty string" });
   }
 
-  // receivedAt — optional ISO string, defaults to now
+  // receivedAt — optional ISO 8601 string, validated when present
   let receivedAt: string;
   if (obj.receivedAt !== undefined) {
-    if (typeof obj.receivedAt !== "string") {
-      errors.push({ field: "receivedAt", message: "Must be an ISO 8601 string" });
+    if (typeof obj.receivedAt !== "string" || !isValidIso8601(obj.receivedAt)) {
+      errors.push({ field: "receivedAt", message: "Must be a valid ISO 8601 timestamp" });
     } else {
       receivedAt = obj.receivedAt;
     }
@@ -101,6 +101,18 @@ function validatePipelineInput(body: unknown): { valid: true; input: PipelineInp
       receivedAt: receivedAt! ?? new Date().toISOString(),
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Returns true if value is a parseable ISO 8601 timestamp (finite time value). */
+function isValidIso8601(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return false;
+  const ms = new Date(trimmed).getTime();
+  return Number.isFinite(ms);
 }
 
 // ---------------------------------------------------------------------------

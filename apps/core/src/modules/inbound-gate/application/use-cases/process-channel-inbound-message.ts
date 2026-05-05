@@ -7,7 +7,7 @@
  *   2. Short-circuit blocked actors
  *   3. Evaluate via ProcessInboundMessage (unknown actors continue to gate)
  *   4. Map routing decision → AI guide use case
- *   5. Execute AI guide (or handle clarification not-implemented)
+ *   5. Execute AI guide
  *   6. Return structured ChannelInboundResult with identity
  *
  * No real messages are sent — this is a read-only pipeline.

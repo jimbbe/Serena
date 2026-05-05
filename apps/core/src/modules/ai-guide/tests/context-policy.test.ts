@@ -10,7 +10,7 @@ function findPrompt(id: string): PromptDefinition {
   return prompt;
 }
 
-// ── Phase 1 policy values (history active, no contacts, no safety) ──────
+// ── Phase 1 policy values (history active, mediation contacts active, no safety) ──────
 
 test("serena.conversation.reply contextPolicy matches Phase 1 values", () => {
   const cp = findPrompt("serena.conversation.reply.v1").contextPolicy;

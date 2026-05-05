@@ -79,13 +79,13 @@ function validatePipelineInput(body: unknown): { valid: true; input: PipelineInp
     errors.push({ field: "messageText", message: "Required non-empty string" });
   }
 
-  // receivedAt — optional ISO string, defaults to now
+  // receivedAt — optional ISO 8601 string, validated when present
   let receivedAt: string;
   if (obj.receivedAt !== undefined) {
-    if (typeof obj.receivedAt !== "string") {
-      errors.push({ field: "receivedAt", message: "Must be an ISO 8601 string" });
+    if (typeof obj.receivedAt !== "string" || !isValidIso8601UtcTimestamp(obj.receivedAt)) {
+      errors.push({ field: "receivedAt", message: "Must be a valid ISO 8601 UTC timestamp" });
     } else {
-      receivedAt = obj.receivedAt;
+      receivedAt = obj.receivedAt as string;
     }
   }
 
@@ -101,6 +101,43 @@ function validatePipelineInput(body: unknown): { valid: true; input: PipelineInp
       receivedAt: receivedAt! ?? new Date().toISOString(),
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Validates that a string is a strict ISO 8601 UTC timestamp with Z suffix.
+ * Accepted formats:
+ *   - 2026-05-05T12:34:56Z
+ *   - 2026-05-05T12:34:56.789Z
+ * Rejected:
+ *   - Empty strings
+ *   - Non-ISO formats (May 2 2026, 2026/05/02)
+ *   - ISO without timezone (2026-05-05T12:34:56)
+ *   - Timezone offsets (+03:00) — only Z allowed
+ *   - Impossible dates (2026-02-31T00:00:00.000Z)
+ */
+function isValidIso8601UtcTimestamp(value: string): boolean {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return false;
+
+  // Strict regex: YYYY-MM-DDTHH:mm:ss with optional .sss, always Z
+  const isoPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
+  if (!isoPattern.test(trimmed)) return false;
+
+  // Parse and validate against JS Date
+  const parsed = new Date(trimmed);
+  if (!Number.isFinite(parsed.getTime())) return false;
+
+  // Verify round-trip: JS Date must produce the same timestamp
+  // For inputs without milliseconds, JS toISOString adds .000Z
+  const expected = trimmed.includes(".")
+    ? trimmed
+    : trimmed.replace("Z", ".000Z");
+
+  return parsed.toISOString() === expected;
 }
 
 // ---------------------------------------------------------------------------

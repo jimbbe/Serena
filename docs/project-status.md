@@ -113,7 +113,7 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 
 ## Implemented In T11: Contact Directory
 
-- Domain: `Contact` (id, displayName, whatsappId, allowed).
+- Domain: `Contact` (id, displayName, whatsappId). Allowed-sender behavior is managed by inbound-gate allowed IDs, not by a Contact field.
 - Port: `ContactDirectory` con metodos `findByWhatsAppId`, `findById`, `findByDisplayName` (exact match, case-insensitive), `findAll`, `hasAllowedSender`.
 - Adapter: `InMemoryContactDirectory` con seed data de contactos de ejemplo (Carlos, Maria, Juan, Pedro, etc.) y multiples metodos de busqueda.
 - Use case: `ResolveContact` busca contacto por displayName (case-insensitive, exact match).
@@ -248,7 +248,9 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 
 ## Expected Next Task
 
-Next: T29 or subsequent task. Both T27 (AI guide conversation history) and T28 (known contacts in mediation context) are now wired.
+Next: T30A — Post-T29 local readiness + docs/spec sync (cleanup). T29 (OpenAI-compatible LLM provider) is functionally complete and archived. This cleanup addresses validation gaps, gateway-wa hardening, and documentation hygiene before advancing to new features.
+
+After T30A: T30B — Structural cleanup (move `ProcessChannelInboundMessage` to proper module, extract shared contracts between core and gateway-wa). Then decide between persistence (PostgreSQL adapters) and real WhatsApp adapter (Evolution API / Baileys).
 
 ### Repository note
 Este repositorio es el centro operativo del proyecto. Contiene documentación técnica (`docs/architecture/`) y operativa (`docs/ops/`) con datos reales de VPS, deploy, rutas de Caddy y backups. Debe hacerse privado antes de uso productivo o exposición pública prolongada.

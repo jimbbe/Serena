@@ -70,3 +70,8 @@ Expected response:
 | `HOST` | `0.0.0.0` | Listen host |
 | `PORT` | `3000` | Listen port |
 | `DATABASE_URL` | (optional) | PostgreSQL connection string (not yet used) |
+| `AI_PROVIDER` | `mock` | LLM provider: `mock` (deterministic) or `openai-compatible` |
+| `AI_BASE_URL` | (optional) | Base URL for OpenAI-compatible API (required when `AI_PROVIDER=openai-compatible`) |
+| `AI_API_KEY` | (optional) | API key for the LLM (never commit) |
+| `AI_MODEL` | (optional) | Model name (e.g. `gpt-4o`) |
+| `AI_TIMEOUT_MS` | `30000` | Request timeout in milliseconds |

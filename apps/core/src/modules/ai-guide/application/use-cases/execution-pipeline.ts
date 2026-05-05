@@ -16,6 +16,7 @@ type AuditOutcome = {
 };
 
 function makeMetadata(
+  providerName: string,
   model: string,
   attempts: number,
   outcome: AuditOutcome,
@@ -23,7 +24,7 @@ function makeMetadata(
   promptVersion: number
 ): GuideResultSuccess["metadata"] | GuideResultFailed["metadata"] {
   const base = {
-    provider: "mock" as const,
+    provider: providerName,
     model,
     attempts,
     auditRecorded: outcome.auditRecorded,
@@ -41,17 +42,23 @@ export class ExecutionPipeline {
   private readonly audit: AiInvocationAudit | undefined;
   private readonly registry: PromptRegistry;
   private readonly contextBuilder: ContextBuilder;
+  private readonly providerName: string;
+  private readonly configuredModel: string;
 
   constructor(deps: {
     provider: LlmProvider;
     audit?: AiInvocationAudit;
     registry: PromptRegistry;
     contextBuilder: ContextBuilder;
+    providerName: string;
+    configuredModel: string;
   }) {
     this.provider = deps.provider;
     this.audit = deps.audit;
     this.registry = deps.registry;
     this.contextBuilder = deps.contextBuilder;
+    this.providerName = deps.providerName;
+    this.configuredModel = deps.configuredModel;
   }
 
   async execute(
@@ -69,8 +76,8 @@ export class ExecutionPipeline {
         useCaseId: contract.id,
         error: { message: error.message },
         metadata: {
-          provider: "mock",
-          model: "mock-model-v1",
+          provider: this.providerName,
+          model: this.configuredModel,
           attempts: 0,
           auditRecorded: false,
           promptId: contract.promptId,
@@ -151,7 +158,8 @@ export class ExecutionPipeline {
           useCaseId: contract.id,
           output: content,
           metadata: makeMetadata(
-            providerResult.modelUsed ?? "mock-model-v1",
+            this.providerName,
+            providerResult.modelUsed ?? this.configuredModel,
             attempt + 1,
             outcome,
             promptDef.id,
@@ -187,7 +195,8 @@ export class ExecutionPipeline {
             useCaseId: contract.id,
             error: { message: error.message },
             metadata: makeMetadata(
-              "mock-model-v1",
+              this.providerName,
+              this.configuredModel,
               attempt + 1,
               outcome,
               promptDef.id,
@@ -244,7 +253,8 @@ export class ExecutionPipeline {
             cause: error.cause,
           },
           metadata: makeMetadata(
-            "mock-model-v1",
+            this.providerName,
+            this.configuredModel,
             maxAttempts,
             outcome,
             promptDef.id,
@@ -262,7 +272,8 @@ export class ExecutionPipeline {
         message: lastError?.message ?? "Unknown error",
       },
       metadata: makeMetadata(
-        "mock-model-v1",
+        this.providerName,
+        this.configuredModel,
         maxAttempts,
         { auditRecorded: false, auditId: undefined },
         promptDef.id,

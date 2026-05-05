@@ -312,7 +312,7 @@ curl -X POST http://localhost:3000/dev/simulate/inbound-message \
 
 ## Limitations (Phase 1)
 
-- **Mock LLM only** — responses are deterministic (hash-based). No real AI.
+- **Mock LLM only** — responses are deterministic (hash-based). No real AI. Real AI can be configured via `AI_PROVIDER=openai-compatible` env var (see `apps/core/README.md`), but the simulation endpoints always use whichever provider is configured at startup.
 - **No real message sending** — the endpoint only EXECUTES the pipeline and returns the trace. Real WhatsApp/message sending is the responsibility of channel-specific adapters.
 - **No auth guard** — the endpoint is disabled by default and has no token check when enabled. Only enable it in development.
 - **Clarification profile** — supported by AI Guide (`serena.mediation.clarify.v1`); real inbound policy may not route to it in normal flows yet.
@@ -704,7 +704,7 @@ All 3 steps are executed regardless of individual failures.
 
 ## Limitations (Phase 1)
 
-- **Mock LLM only** — AI responses are deterministic (hash-based). No real AI.
+- **Mock LLM only** — AI responses are deterministic (hash-based). No real AI. Real AI can be configured via `AI_PROVIDER=openai-compatible` env var (see `apps/core/README.md`), but the scenario runner always uses whichever provider is configured at startup.
 - **No real message sending** — the runner executes the pipeline and returns traces. Real WhatsApp/message sending is the responsibility of channel adapters.
 - **No auth guard** — the endpoint is disabled by default. Only enable in development.
 - **Shared in-memory state** — sessions persist across steps within the same HTTP request but are lost on server restart.

@@ -45,7 +45,7 @@ function createRealAiGuideService(): { aiGuideService: AiGuideService } {
   const provider = new MockLlmProvider();
   const promptRegistry = new InMemoryPromptRegistry(defaultPrompts);
   const contextBuilder = new ContextBuilder();
-  const pipeline = new ExecutionPipeline({ provider, registry: promptRegistry, contextBuilder });
+  const pipeline = new ExecutionPipeline({ provider, registry: promptRegistry, contextBuilder, providerName: "mock", configuredModel: "mock-model-v1" });
   const aiGuideService = new AiGuideService({ registry, pipeline });
   return { aiGuideService };
 }

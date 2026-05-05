@@ -51,6 +51,8 @@ test("successful execution returns status=success with output and audit metadata
     audit,
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
   const contract = makeContract();
 
@@ -77,6 +79,8 @@ test("pipeline builds user prompt via ContextBuilder", async () => {
     provider,
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
   const contract = makeContract();
 
@@ -96,6 +100,8 @@ test("pipeline records audit with promptId and promptVersion", async () => {
     audit,
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
   const contract = makeContract();
 
@@ -123,6 +129,8 @@ test("empty provider result returns status=failed (not output in success)", asyn
     audit,
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
   const contract = makeContract();
 
@@ -150,6 +158,8 @@ test("provider error without retry returns status=failed with error.message", as
     audit,
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
   const contract = makeContract({ executionPolicy: { ...defaultPolicy, retryOnFailure: false } });
 
@@ -185,6 +195,8 @@ test("provider error with retry that succeeds returns status=success", async () 
     audit,
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
   const contract = makeContract({
     executionPolicy: { ...defaultPolicy, retryOnFailure: true, maxRetries: 2 },
@@ -215,6 +227,8 @@ test("provider error exhausts retries: returns status=failed with error, no outp
     audit,
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
   const contract = makeContract({
     executionPolicy: { ...defaultPolicy, retryOnFailure: true, maxRetries: 2 },
@@ -252,6 +266,8 @@ test("audit failure does not crash pipeline — returns auditRecorded=false", as
     audit,
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
   const contract = makeContract();
 
@@ -275,6 +291,8 @@ test("pipeline fails when prompt not in registry", async () => {
     provider,
     registry: emptyRegistry,
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
   const contract = makeContract();
 
@@ -297,6 +315,8 @@ test("resolution failure extracts promptVersion from contract promptId suffix (.
     provider,
     registry: emptyRegistry,
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
 
   // Use a contract with a .v2 promptId not registered
@@ -327,6 +347,8 @@ test("pipeline sends output contract rendered to provider as developerPrompt", a
     },
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
 
   await pipeline.execute(makeContract(), { input: "Hello" });
@@ -353,6 +375,8 @@ test("understand_request pipeline includes field names in developerPrompt", asyn
     },
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
 
   await pipeline.execute(
@@ -386,6 +410,8 @@ test("risk.review pipeline includes field names and allowedValues in developerPr
     },
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
 
   await pipeline.execute(
@@ -410,6 +436,8 @@ test("discriminated union narrows correctly via status check", async () => {
     provider,
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
   const contract = makeContract();
 
@@ -431,6 +459,8 @@ test("failed result narrows correctly", async () => {
     },
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
   const contract = makeContract();
 
@@ -457,6 +487,8 @@ test("provider returns invalid JSON for risk.review → failed", async () => {
     audit,
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
   const contract = makeContract({
     id: "serena.risk.review",
@@ -486,6 +518,8 @@ test("provider returns JSON missing required field → failed", async () => {
     audit,
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
   const contract = makeContract({
     id: "serena.risk.review",
@@ -510,6 +544,8 @@ test("provider returns invalid enum value → failed", async () => {
     audit,
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
   const contract = makeContract({
     id: "serena.risk.review",
@@ -546,6 +582,8 @@ test("provider returns valid JSON → success", async () => {
     audit,
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
   const contract = makeContract({
     id: "serena.risk.review",
@@ -570,6 +608,8 @@ test("validation failure audits success=false with provider output", async () =>
     audit,
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
   const contract = makeContract({
     id: "serena.risk.review",
@@ -599,6 +639,8 @@ test("validation failure does NOT retry even with retryOnFailure=true", async ()
     audit,
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
   const contract = makeContract({
     id: "serena.risk.review",
@@ -630,6 +672,8 @@ test("recentMessages flows to ContextBuilder when includeConversationHistory is 
     },
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
 
   const input: AiGuideInput = {
@@ -686,6 +730,8 @@ test("recentMessages respects maxRecentMessages limit", async () => {
     },
     registry: makeCustomRegistry(customPrompts),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
 
   const input: AiGuideInput = {
@@ -716,6 +762,8 @@ test("empty recentMessages does not add history section", async () => {
     },
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
 
   const input: AiGuideInput = {
@@ -744,6 +792,8 @@ test("currentMessage appears even with recentMessages present", async () => {
     },
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
 
   const input: AiGuideInput = {
@@ -776,6 +826,8 @@ test("renderTemplate does not break with array fields in input", async () => {
     },
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
 
   const input: AiGuideInput = {
@@ -811,6 +863,8 @@ test("knownContacts flows to ContextBuilder and renders Contactos conocidos sect
     },
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
 
   const input: AiGuideInput = {
@@ -853,6 +907,8 @@ test("empty knownContacts does not add Contactos conocidos section", async () =>
     },
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
 
   const input: AiGuideInput = {
@@ -887,6 +943,8 @@ test("includeKnownContacts=false omits section even with knownContacts populated
     },
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
 
   const input: AiGuideInput = {
@@ -916,6 +974,8 @@ test("recentMessages and knownContacts coexist without breaking the prompt", asy
     },
     registry: makeRegistry(),
     contextBuilder: makeContextBuilder(),
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
 
   const input: AiGuideInput = {

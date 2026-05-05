@@ -36,7 +36,7 @@ Estas preguntas surgieron durante el diseno del contrato WhatsApp Gateway (T17A)
 
 ## Idempotencia — Preguntas Pendientes (T17B+)
 
-Idempotencia in-memory implementada en T17B. Preguntas abiertas para T18/T19:
+Idempotencia in-memory implementada en T17B. Preguntas abiertas para futuras tareas de persistencia:
 
 - **¿Donde se almacena el cache durable de `messageId` procesados?** — Opciones: PostgreSQL (tabla `processed_messages`) o Redis (SET con TTL).
 - **¿Key de deduplicacion multi-proveedor/multi-instancia?** — La key actual es solo `messageId`. Para soportar multiples proveedores o instancias Evolution API, conviene una key compuesta: `provider + instanceId + messageId`.
@@ -46,7 +46,7 @@ Idempotencia in-memory implementada en T17B. Preguntas abiertas para T18/T19:
 ## Operaciones y Seguridad del Repositorio (T18.1+)
 
 - **¿Cuando pasar el repositorio a privado?** — Por ahora contiene IPs reales, hostnames, rutas de Caddy, backups y datos de VPS que OpenCode usa para operar. Debe hacerse privado antes de uso productivo o exposicion publica prolongada. ¿Cual es el disparador concreto (primer mensaje real, primer deploy productivo del gateway, etc.)?
-- **¿Persistencia durable para sesiones?** — Las sesiones de mediacion (`MediationBridgeSessionStore`) y la idempotencia (`ProcessedMessageStore`) son in-memory. Se pierden al reiniciar. ¿Cuando migrar a PostgreSQL/Redis? ¿Conviene hacerlo junto con los adapters PostgreSQL de T19?
+- **¿Persistencia durable para sesiones?** — Las sesiones de mediacion (`MediationBridgeSessionStore`) y la idempotencia (`ProcessedMessageStore`) son in-memory. Se pierden al reiniciar. ¿Cuando migrar a PostgreSQL/Redis? ¿Conviene hacerlo junto con futuros adapters PostgreSQL?
 
 ## Estrategia de Integracion Futura
 

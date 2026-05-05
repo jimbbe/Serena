@@ -6,7 +6,7 @@ La Fase 1 apunta a mediacion prudente por WhatsApp: Serena recibe un pedido, ide
 
 ## Estado Actual
 
-El repositorio tiene stack base desplegado en VPS (T04), arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), hardening interno completado (T17B), mock WhatsApp Gateway / dry-run adapter (T18), documentacion reorganizada (T18.1), modulo ai-guide con pipeline de ejecucion agnostico de LLM (T19), canal inbound channel-agnostic con resolucion de identidad externa (T20), Simulation API con single-step y scenario runner multi-step, e historial de conversacion activo en AI guide (T27), y contactos conocidos wireados en contexto de mediacion de AI guide (T28). **496 tests pasando** (458 core + 38 gateway-wa).
+El repositorio tiene stack base desplegado en VPS (T04), arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), hardening interno completado (T17B), mock WhatsApp Gateway / dry-run adapter (T18), documentacion reorganizada (T18.1), modulo ai-guide con pipeline de ejecucion agnostico de LLM (T19), canal inbound channel-agnostic con resolucion de identidad externa (T20), Simulation API con single-step y scenario runner multi-step, historial de conversacion activo en AI guide (T27), contactos conocidos wireados en contexto de mediacion de AI guide (T28), y LLM provider OpenAI-compatible configurable por variables de entorno (T29). **548 tests pasando** (510 core + 38 gateway-wa).
 
 ## 🔒 Centro Operativo del Proyecto
 
@@ -93,7 +93,7 @@ InboundMessageCommand                     # comando channel-agnostic (whatsapp, 
 ### Lo que no existe todavia
 
 - WhatsApp / Evolution API / Baileys real (solo contrato T17A y mock T18)
-- LLM provider real (OpenAI / OpenRouter); solo `MockLlmProvider` deterministico
+- **LLM provider real (OpenAI / OpenRouter)**: implementado en T29 con `OpenAICompatibleLlmProvider` que se comunica con cualquier API compatible con OpenAI via `POST /chat/completions` usando `fetch` nativo. El default sigue siendo mock (`AI_PROVIDER=mock`). Se activa con `AI_PROVIDER=openai-compatible` y variables de entorno.
 - Envio real de mensajes (el pipeline produce resultados, no envia; el mock simula `sent: false`)
 - Persistencia real de conversaciones (todo es in-memory, se pierde en restart)
 - Conexion real a PostgreSQL desde la aplicacion (stores in-memory)

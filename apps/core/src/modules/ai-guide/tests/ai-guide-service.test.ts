@@ -47,6 +47,8 @@ function setupService() {
     audit,
     registry: promptRegistry,
     contextBuilder,
+    providerName: "mock",
+    configuredModel: "mock-model-v1",
   });
   const service = new AiGuideService({ registry, pipeline });
   return { registry, provider, audit, pipeline, service };

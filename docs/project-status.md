@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), mock WhatsApp Gateway with dry-run adapter (T18), documentation reorganized (T18.1), AI guide module with deterministic mock provider (T19), channel-agnostic inbound with external identity resolution (T20), conversation store (T22), prompt registry with output contracts and runtime validation (T23), conversation history wired into AI guide context (T27), and known contacts wired into AI guide mediation context (T28). 496 tests passing (458 core + 38 gateway-wa).
+Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), mock WhatsApp Gateway with dry-run adapter (T18), documentation reorganized (T18.1), AI guide module with deterministic mock provider (T19), channel-agnostic inbound with external identity resolution (T20), conversation store (T22), prompt registry with output contracts and runtime validation (T23), conversation history wired into AI guide context (T27), known contacts wired into AI guide mediation context (T28), and configurable OpenAI-compatible LLM provider with env-based selection (T29). 548 tests passing (510 core + 38 gateway-wa).
 
 ## Decided
 
@@ -30,7 +30,7 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 
 - WhatsApp / Evolution API real integration (`whatsapp-gateway` has only domain types and port contract; mock gateway T18 simulates the flow without real sending).
 - PostgreSQL connection usage in application code (current modules use in-memory stores).
-- Real LLM provider (OpenAI / OpenRouter); only `MockLlmProvider` deterministico.
+- Real LLM provider (OpenAI / OpenRouter); OpenAI-compatible provider exists (T29) but requires env configuration. Mock remains the default.
 - Real outbound message sending (pipeline produces results but does not send messages).
 - HTTP API beyond `/health` and `/internal/pipeline/process` (simulation endpoints are dev-only, gated by `ENABLE_SIMULATION_ENDPOINTS`).
 - Panel UI.
@@ -230,6 +230,21 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - Graceful degradation: si `ContactDirectory` no está disponible, la mediación funciona sin contactos (sin errores).
 - Tests actualizados: context-policy (3 tests modificados), execution-pipeline (4 tests nuevos), process-channel-inbound-message (7 tests nuevos).
 - Documentación: `docs/ai-guide-prompts.md` actualizado con tabla ContextPolicy y nota T28.
+
+## Implemented In T29: OpenAI-Compatible LLM Provider
+
+- `AppEnv` expanded with `aiProvider`, `aiBaseUrl`, `aiApiKey`, `aiModel`, `aiTimeoutMs` fields in `apps/core/src/config/env.ts`.
+- `OpenAICompatibleLlmProvider` in `apps/core/src/modules/ai-guide/infrastructure/openai/` — implements `LlmProvider` port using native `fetch` (zero npm deps).
+- Communicates with any OpenAI-compatible chat completions API (OpenAI, OpenRouter, Ollama, LiteLLM) via `POST /chat/completions`.
+- Factory `createLlmProvider(env)` in `apps/core/src/modules/ai-guide/infrastructure/create-llm-provider.ts` selects `MockLlmProvider` or `OpenAICompatibleLlmProvider` based on `AI_PROVIDER` env var.
+- Env validation: `AI_PROVIDER=openai-compatible` requires `AI_BASE_URL`, `AI_API_KEY`, `AI_MODEL`; missing vars throw clear errors. API key never appears in error messages.
+- `ExecutionPipeline` constructor now accepts `providerName` and `configuredModel` (no hardcoded `"mock"` or `"mock-model-v1"`).
+- `createInMemoryPipeline()` accepts optional `llmProvider`, `providerName`, `configuredModel` params (backward compatible — defaults to mock).
+- `server.ts` wires provider from env via factory.
+- New tests: env config (20 tests), provider unit (19 tests), factory (5 tests), integration (6 tests). All existing tests updated for new constructor params.
+- Documentation: `.env.example`, `README.md`, `apps/core/README.md`, `docs/project-status.md`, `docs/open-questions.md`, `docs/ai-guide-prompts.md`, `docs/simulation-api.md` updated.
+- **Default stays mock** — no real API calls unless explicitly configured via env vars.
+- OutputContract validation runs regardless of provider (mock or real).
 
 ## Expected Next Task
 

@@ -43,6 +43,7 @@ import { InMemoryConversationStore } from "../modules/conversation-store/adapter
 
 import { AiGuideService } from "../modules/ai-guide/application/use-cases/ai-guide-service.ts";
 import { UseCaseRegistry } from "../modules/ai-guide/application/use-cases/use-case-registry.ts";
+import type { LlmProvider } from "../modules/ai-guide/application/ports/llm-provider.ts";
 import { ExecutionPipeline } from "../modules/ai-guide/application/use-cases/execution-pipeline.ts";
 import { defaultContracts } from "../modules/ai-guide/application/use-cases/contracts.ts";
 import { MockLlmProvider } from "../modules/ai-guide/infrastructure/memory/mock-llm-provider.ts";
@@ -55,7 +56,11 @@ import { defaultPrompts } from "../modules/ai-guide/application/prompts/default-
 // Factory
 // ---------------------------------------------------------------------------
 
-export async function createInMemoryPipeline(): Promise<{
+export async function createInMemoryPipeline(options?: {
+  llmProvider?: LlmProvider;
+  providerName?: string;
+  configuredModel?: string;
+}): Promise<{
   orchestrator: ProcessIncomingWhatsAppMessage;
   bridgeStore: InMemoryMediationBridgeSessionStore;
   processedMessageStore: ProcessedMessageStore;
@@ -146,12 +151,14 @@ export async function createInMemoryPipeline(): Promise<{
   // Idempotency store — shared across requests within the same process
   const processedMessageStore = new InMemoryProcessedMessageStore();
 
-  // AI Guide — in-memory wiring with deterministic mock provider
+  // AI Guide — in-memory wiring with configurable LLM provider
   const aiRegistry = new UseCaseRegistry();
   for (const contract of defaultContracts) {
     aiRegistry.register(contract);
   }
-  const llmProvider = new MockLlmProvider();
+  const llmProvider = options?.llmProvider ?? new MockLlmProvider();
+  const providerName = options?.providerName ?? "mock";
+  const configuredModel = options?.configuredModel ?? "mock-model-v1";
   const aiAudit = new InMemoryAiInvocationAudit();
   const promptRegistry = new InMemoryPromptRegistry(defaultPrompts);
   const contextBuilder = new ContextBuilder();
@@ -160,6 +167,8 @@ export async function createInMemoryPipeline(): Promise<{
     audit: aiAudit,
     registry: promptRegistry,
     contextBuilder,
+    providerName,
+    configuredModel,
   });
   const aiGuideService = new AiGuideService({ registry: aiRegistry, pipeline: executionPipeline });
 

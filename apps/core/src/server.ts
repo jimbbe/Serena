@@ -1,6 +1,7 @@
 import { createHttpServer } from "./bootstrap/server.ts";
 import { loadAppEnv } from "./config/env.ts";
 import { createInMemoryPipeline } from "./bootstrap/create-in-memory-pipeline.ts";
+import { createLlmProvider } from "./modules/ai-guide/infrastructure/create-llm-provider.ts";
 import { createPipelineHandler } from "./bootstrap/internal-pipeline-handler.ts";
 import { createSimulationHandler } from "./bootstrap/simulation-handler.ts";
 import { createScenarioHandler } from "./bootstrap/scenario-handler.ts";
@@ -9,9 +10,16 @@ import { ProcessChannelInboundMessage } from "./modules/inbound-gate/application
 
 const env = loadAppEnv();
 
+// Create the LLM provider based on environment config.
+const llmProvider = createLlmProvider(env);
+
 // Create orchestrator with shared in-memory dependencies.
 // Sessions survive across HTTP requests within the same process.
-const { orchestrator, processedMessageStore, aiGuideService, processInboundMessage, identityResolver, conversationStore, contactDirectory } = await createInMemoryPipeline();
+const { orchestrator, processedMessageStore, aiGuideService, processInboundMessage, identityResolver, conversationStore, contactDirectory } = await createInMemoryPipeline({
+  llmProvider,
+  providerName: env.aiProvider,
+  configuredModel: env.aiModel ?? "mock-model-v1",
+});
 const pipelineHandler = createPipelineHandler(orchestrator, processedMessageStore);
 
 // Conditionally wire simulation and scenario handlers (dev-only, disabled by default)

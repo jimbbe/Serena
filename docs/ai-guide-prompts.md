@@ -340,7 +340,7 @@ Los registros de auditoría (`AuditRecord`) también almacenan `promptId` y `pro
 
 No implementado todavía:
 - WhatsApp real ni `serena_device` real.
-- OpenAI/OpenRouter adapter.
+- OpenAI/OpenRouter adapter — provider exists (T29, `OpenAICompatibleLlmProvider`) but requires env configuration; mock remains default.
 - Envío real de mensajes.
 - Permisos/admin completos (PermissionPolicy).
 - Prompts en DB.

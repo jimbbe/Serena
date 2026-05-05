@@ -6,7 +6,7 @@ La Fase 1 apunta a mediacion prudente por WhatsApp: Serena recibe un pedido, ide
 
 ## Estado Actual
 
-El repositorio tiene stack base desplegado en VPS (T04), arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), hardening interno completado (T17B), mock WhatsApp Gateway / dry-run adapter (T18), documentacion reorganizada (T18.1), modulo ai-guide con pipeline de ejecucion agnostico de LLM (T19), canal inbound channel-agnostic con resolucion de identidad externa (T20), Simulation API con single-step y scenario runner multi-step, historial de conversacion activo en AI guide (T27), contactos conocidos wireados en contexto de mediacion de AI guide (T28), y LLM provider OpenAI-compatible configurable por variables de entorno (T29). **548 tests pasando** (510 core + 38 gateway-wa).
+El repositorio tiene stack base desplegado en VPS (T04), arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), hardening interno completado (T17B), mock WhatsApp Gateway / dry-run adapter (T18), documentacion reorganizada (T18.1), modulo ai-guide con pipeline de ejecucion agnostico de LLM (T19), canal inbound channel-agnostic con resolucion de identidad externa (T20), Simulation API con single-step y scenario runner multi-step, historial de conversacion activo en AI guide (T27), contactos conocidos wireados en contexto de mediacion de AI guide (T28), LLM provider OpenAI-compatible configurable por variables de entorno (T29), y readiness local post-T29 con validacion estricta de timestamps, timeout/validacion fuerte en gateway-wa y specs sincronizadas (T30A). **578 tests pasando** (519 core + 59 gateway-wa).
 
 ## 🔒 Centro Operativo del Proyecto
 
@@ -52,12 +52,12 @@ Este repositorio funciona como centro operativo del proyecto Serena. Contiene do
 
 - **orchestrator** (T15): caso de uso `ProcessIncomingWhatsAppMessage` que conecta inbound-gate → mediation-understanding → contact-directory → session-manager → mediation-bridge → prudent-rewording. Devuelve `PipelineResult` con variantes explicitas. 11 tests end-to-end in-memory.
 - **internal-pipeline-http** (T16): endpoint `POST /internal/pipeline/process` que valida JSON, ejecuta el pipeline orchestrator y devuelve `PipelineResult`. Factory in-memory con dependencias compartidas para continuidad de sesiones entre requests. Con hardening (auth token + idempotencia). Ver `docs/architecture/t16-internal-pipeline-http.md`.
-- **ai-guide** (T19, T23, T27): modulo Clean/Hexagonal completamente agnostico de cualquier LLM provider. Incluye `PromptRegistry`, prompts versionados, `ContextPolicy`, `OutputContract`, runtime validation con `validateOutputContract`, `ExecutionPipeline` con retry loop, `AiGuideService`, e historial de conversacion activo via `recentMessages` desde T27. `MockLlmProvider` deterministico. Sin LLM real todavia. Sin dependencia de otros modulos Serena.
+- **ai-guide** (T19, T23, T27, T29): modulo Clean/Hexagonal completamente agnostico de cualquier LLM provider. Incluye `PromptRegistry`, prompts versionados, `ContextPolicy`, `OutputContract`, runtime validation con `validateOutputContract`, `ExecutionPipeline` con retry loop, `AiGuideService`, historial de conversacion activo via `recentMessages` desde T27 y provider OpenAI-compatible configurable desde T29. El default sigue siendo `MockLlmProvider` deterministico. Sin dependencia de otros modulos Serena.
 - **channel-agnostic inbound** (T20): `InboundMessageCommand` normaliza mensajes de cualquier canal (whatsapp, voice, web_chat, telegram, system, simulation) en un solo contrato. `ProcessChannelInboundMessage` ejecuta el pipeline completo con resolucion de identidad → inbound gate → AI guide → `ChannelInboundResult`. La resolucion de identidad corre ANTES del gate.
 - **external identity resolution** (T20): `ExternalIdentityResolver` traduce identificadores externos de canal a identidad interna (`personId`, `role`, `authorized`). Bloquea actores bloqueados antes del gate. Soporta multi-canal: mismo `personId` puede llegar por WhatsApp, voz o web_chat. Adapter in-memory con seed data (Marta en 3 canales).
 
 **Mock WhatsApp Gateway (T18):**
-- `apps/gateway-wa/` workspace con mock gateway / dry-run adapter. Simula el flujo completo del WhatsApp Gateway sin enviar mensajes reales (`sent: false`). Copia tipos del contrato T17A. 38 tests con fake `fetch`. Sin dependencias npm externas. Ver `docs/architecture/t18-mock-whatsapp-gateway.md`.
+- `apps/gateway-wa/` workspace con mock gateway / dry-run adapter. Simula el flujo completo del WhatsApp Gateway sin enviar mensajes reales (`sent: false`). Copia tipos del contrato T17A. Desde T30A valida estrictamente timestamps UTC, aplica timeout configurable hacia Core y valida la forma de `PipelineResult`. 59 tests con fake `fetch`. Sin dependencias npm externas. Ver `docs/architecture/t18-mock-whatsapp-gateway.md`.
 
 **Simulation API (T20):**
 - Endpoint `POST /dev/simulate/inbound-message` — ejecuta el pipeline completo (inbound gate → AI guide) con mock LLM, sin WhatsApp real ni envio de mensajes. Devuelve traza completa: identidad resuelta, decision del gate, perfil LLM, resultado del AI guide. Solo habilitado con `ENABLE_SIMULATION_ENDPOINTS=true`.
@@ -93,7 +93,7 @@ InboundMessageCommand                     # comando channel-agnostic (whatsapp, 
 ### Lo que no existe todavia
 
 - WhatsApp / Evolution API / Baileys real (solo contrato T17A y mock T18)
-- **LLM provider real (OpenAI / OpenRouter)**: implementado en T29 con `OpenAICompatibleLlmProvider` que se comunica con cualquier API compatible con OpenAI via `POST /chat/completions` usando `fetch` nativo. El default sigue siendo mock (`AI_PROVIDER=mock`). Se activa con `AI_PROVIDER=openai-compatible` y variables de entorno.
+- **LLM real configurado en runtime**: el provider OpenAI-compatible existe desde T29, pero el default sigue siendo mock (`AI_PROVIDER=mock`). Para llamadas reales hay que configurar `AI_PROVIDER=openai-compatible`, `AI_BASE_URL`, `AI_API_KEY` y `AI_MODEL`.
 - Envio real de mensajes (el pipeline produce resultados, no envia; el mock simula `sent: false`)
 - Persistencia real de conversaciones (todo es in-memory, se pierde en restart)
 - Conexion real a PostgreSQL desde la aplicacion (stores in-memory)
@@ -249,9 +249,9 @@ Runbook operativo: `docs/ops/deployment-t04.md`.
 
 ## Proximos Pasos
 
-Fase completada: **logica de negocio con pipeline channel-agnostic** (T06-T28). Pipeline end-to-end funciona con 496 tests (458 core + 38 gateway-wa). Endpoint HTTP interno con hardening (T17B), AI guide agnostico (T19), canal inbound multi-channel con resolucion de identidad (T20), Simulation API con single-step y scenario runner, historial de conversacion activo en AI guide (T27), y contactos conocidos en contexto de mediacion (T28).
+Fase completada: **logica de negocio con pipeline channel-agnostic y readiness local post-T29** (T06-T30A). Pipeline end-to-end funciona con 578 tests (519 core + 59 gateway-wa). Endpoint HTTP interno con hardening (T17B), AI guide agnostico (T19), canal inbound multi-channel con resolucion de identidad (T20), Simulation API con single-step y scenario runner, historial de conversacion activo en AI guide (T27), contactos conocidos en contexto de mediacion (T28), provider OpenAI-compatible configurable (T29) y validaciones locales/gateway endurecidas (T30A).
 
-**Proximo paso inmediato**: **scenario runner multi-step para simulaciones conversacionales** — el endpoint `POST /dev/simulate/scenario` ya existe. El foco inmediato es robustecerlo con mas escenarios de prueba y cobertura de edge cases.
+**Proximo paso inmediato**: **T30B — structural cleanup**. El foco es mover `ProcessChannelInboundMessage` fuera de `inbound-gate` hacia un limite orquestador/channel-inbound mas claro y extraer contratos compartidos entre Core y `gateway-wa` para evitar drift de `PipelineResult` y mapping.
 
 **Despues**: decidir entre dos caminos:
 

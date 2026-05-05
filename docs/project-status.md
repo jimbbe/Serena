@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), mock WhatsApp Gateway with dry-run adapter (T18), documentation reorganized (T18.1), AI guide module with deterministic mock provider (T19), channel-agnostic inbound with external identity resolution (T20), conversation store (T22), prompt registry with output contracts and runtime validation (T23), conversation history wired into AI guide context (T27), known contacts wired into AI guide mediation context (T28), and configurable OpenAI-compatible LLM provider with env-based selection (T29). 548 tests passing (510 core + 38 gateway-wa).
+Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), mock WhatsApp Gateway with dry-run adapter (T18), documentation reorganized (T18.1), AI guide module with deterministic mock provider (T19), channel-agnostic inbound with external identity resolution (T20), conversation store (T22), prompt registry with output contracts and runtime validation (T23), conversation history wired into AI guide context (T27), known contacts wired into AI guide mediation context (T28), configurable OpenAI-compatible LLM provider with env-based selection (T29), and post-T29 local readiness/docs-spec sync completed (T30A). 578 tests passing (519 core + 59 gateway-wa).
 
 ## Decided
 
@@ -30,7 +30,7 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 
 - WhatsApp / Evolution API real integration (`whatsapp-gateway` has only domain types and port contract; mock gateway T18 simulates the flow without real sending).
 - PostgreSQL connection usage in application code (current modules use in-memory stores).
-- Real LLM provider (OpenAI / OpenRouter); OpenAI-compatible provider exists (T29) but requires env configuration. Mock remains the default.
+- Real LLM runtime configuration in deployed/local environments; OpenAI-compatible provider exists (T29) but requires env configuration. Mock remains the default.
 - Real outbound message sending (pipeline produces results but does not send messages).
 - HTTP API beyond `/health` and `/internal/pipeline/process` (simulation endpoints are dev-only, gated by `ENABLE_SIMULATION_ENDPOINTS`).
 - Panel UI.
@@ -246,11 +246,22 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - **Default stays mock** — no real API calls unless explicitly configured via env vars.
 - OutputContract validation runs regardless of provider (mock or real).
 
+## Implemented In T30A: Post-T29 Local Readiness + Docs/Spec Sync
+
+- `SERENA_INTERNAL_TOKEN` local setup documented in `.env.example` and mapped into the `serena-core` service in `docker-compose.yml`.
+- `/internal/pipeline/process` now validates `receivedAt` as a strict UTC ISO timestamp before executing the orchestrator. Invalid timestamps return 400 using the existing `invalid_payload` error format.
+- `gateway-wa` now applies a configurable timeout (`GATEWAY_CORE_TIMEOUT_MS`, default 30000ms) when calling Serena Core.
+- `gateway-wa` validates successful Core responses as known `PipelineResult` variants with required field types, instead of casting arbitrary JSON.
+- `gateway-wa` mock events now require strict UTC ISO timestamps before any HTTP call.
+- Current-state specs added for `openai-compatible-provider` and `provider-selection-config` under `openspec/specs/`.
+- T29 change artifacts archived under `openspec/changes/archive/t29-openai-compatible-llm-provider/` with `CLOSURE.md`.
+- Tests: 578 passing (519 core + 59 gateway-wa). `npm run check` passes.
+
 ## Expected Next Task
 
-Next: T30A — Post-T29 local readiness + docs/spec sync (cleanup). T29 (OpenAI-compatible LLM provider) is functionally complete and archived. This cleanup addresses validation gaps, gateway-wa hardening, and documentation hygiene before advancing to new features.
+Next: T30B — Structural cleanup (move `ProcessChannelInboundMessage` to a proper orchestrator/channel-inbound boundary, extract shared contracts between Core and gateway-wa, and reduce drift around `PipelineResult`/gateway mapping).
 
-After T30A: T30B — Structural cleanup (move `ProcessChannelInboundMessage` to proper module, extract shared contracts between core and gateway-wa). Then decide between persistence (PostgreSQL adapters) and real WhatsApp adapter (Evolution API / Baileys).
+After T30B: decide between persistence (PostgreSQL adapters) and real WhatsApp adapter (Evolution API / Baileys).
 
 ### Repository note
 Este repositorio es el centro operativo del proyecto. Contiene documentación técnica (`docs/architecture/`) y operativa (`docs/ops/`) con datos reales de VPS, deploy, rutas de Caddy y backups. Debe hacerse privado antes de uso productivo o exposición pública prolongada.

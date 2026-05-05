@@ -33,6 +33,9 @@ MockWhatsAppEvent → normalizeMockEvent() → PipelineInput
 |-------------|----------|-------------|
 | `SERENA_CORE_URL` | Yes | Base URL of Serena Core (e.g. `http://localhost:3000`) |
 | `SERENA_INTERNAL_TOKEN` | Yes | Shared secret token for internal authentication |
+| `GATEWAY_CORE_TIMEOUT_MS` | No | Timeout for Core calls in milliseconds. Defaults to `30000` |
+
+Mock events require `timestamp` to be a strict UTC ISO timestamp (`YYYY-MM-DDTHH:mm:ss(.sss)Z`). Invalid or timezone-offset timestamps are rejected before calling Serena Core.
 
 ## Usage
 
@@ -66,4 +69,4 @@ npm run -w @serena/gateway-wa test
 npm test
 ```
 
-Tests use Node 22 built-in `node:test` with fake `fetch` for deterministic HTTP simulation. Zero external dependencies.
+Tests use Node 22 built-in `node:test` with fake `fetch` for deterministic HTTP simulation. Zero external dependencies. Current gateway-wa coverage: 59 tests.

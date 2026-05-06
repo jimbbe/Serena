@@ -103,6 +103,22 @@ Payload base:
 }
 ```
 
+Ejemplo PowerShell:
+
+```powershell
+$body = @{
+  channel = "whatsapp"
+  externalSenderId = "5491111111111"
+  text = "Hola Serena"
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://127.0.0.1:3000/dev/simulate/inbound-message" `
+  -ContentType "application/json" `
+  -Body $body
+```
+
 ## Cómo interpretar la respuesta
 
 Observá especialmente:
@@ -230,6 +246,37 @@ curl -X POST http://127.0.0.1:3000/dev/simulate/inbound-message \
 ```
 
 Tomá `conversation.id` de la respuesta.
+
+Versión PowerShell:
+
+```powershell
+$firstBody = @{
+  channel = "whatsapp"
+  externalSenderId = "5491111111111"
+  text = "Decile a Carlos que llego tarde"
+} | ConvertTo-Json
+
+$first = Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://127.0.0.1:3000/dev/simulate/inbound-message" `
+  -ContentType "application/json" `
+  -Body $firstBody
+
+$conversationId = $first.conversation.id
+
+$secondBody = @{
+  channel = "whatsapp"
+  externalSenderId = "5491111111111"
+  conversationId = $conversationId
+  text = "También decile que me espere en la puerta"
+} | ConvertTo-Json
+
+$second = Invoke-RestMethod `
+  -Method Post `
+  -Uri "http://127.0.0.1:3000/dev/simulate/inbound-message" `
+  -ContentType "application/json" `
+  -Body $secondBody
+```
 
 Segundo mensaje:
 

@@ -10,9 +10,10 @@ const ALL_IDS: PromptId[] = [
   "serena.risk.review.v1",
   "serena.mediation.understand_request.v1",
   "serena.mediation.clarify.v1",
+  "serena.inbound.classify_intent.v1",
 ];
 
-test("register and retrieve each of the 4 prompts by ID", () => {
+test("register and retrieve each of the 5 prompts by ID", () => {
   const registry = new InMemoryPromptRegistry(defaultPrompts);
 
   for (const id of ALL_IDS) {
@@ -37,11 +38,11 @@ test("get unknown prompt throws with promptId in message", () => {
   );
 });
 
-test("list returns all 4 prompts", () => {
+test("list returns all 5 prompts", () => {
   const registry = new InMemoryPromptRegistry(defaultPrompts);
 
   const prompts = registry.list();
-  assert.equal(prompts.length, 4);
+  assert.equal(prompts.length, 5);
 
   const ids = prompts.map((p) => p.id);
   for (const expected of ALL_IDS) {

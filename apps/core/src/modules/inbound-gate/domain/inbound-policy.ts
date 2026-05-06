@@ -7,5 +7,18 @@ export type InboundPolicy = {
 export const defaultInboundPolicy: InboundPolicy = {
   version: "t07-v1",
   mediationHints: ["avisale", "decile", "llama", "llamá", "pedile", "escribile", "mensaje", "contactar"],
-  urgentOrRiskHints: ["urgente", "riesgo", "emergencia", "ayuda", "peligro"],
+  urgentOrRiskHints: [
+    "urgente",
+    "riesgo",
+    "emergencia",
+    "ayuda",
+    "peligro",
+    "me caí",
+    "me cai",
+    "no puedo levantarme",
+    "no me puedo levantar",
+    "estoy en el piso",
+    "no me puedo mover",
+    "no puedo moverme",
+  ],
 };

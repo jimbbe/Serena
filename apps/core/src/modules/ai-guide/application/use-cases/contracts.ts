@@ -29,4 +29,9 @@ export const defaultContracts: UseCaseContract[] = [
     promptId: "serena.mediation.clarify.v1",
     executionPolicy: { ...defaultPolicy },
   },
+  {
+    id: "serena.inbound.classify_intent",
+    promptId: "serena.inbound.classify_intent.v1",
+    executionPolicy: { ...defaultPolicy, temperature: 0.2 },
+  },
 ];

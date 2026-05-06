@@ -23,6 +23,7 @@ import type { GuideResult } from "../../../ai-guide/domain/guide-result.ts";
 import type { ConversationMessage } from "../../../conversation-store/domain/conversation-message.ts";
 
 import { profileToUseCaseId } from "../../../inbound-gate/application/mappers/profile-to-usecase.ts";
+import type { LlmProfileId } from "../../../inbound-gate/domain/llm-profile.ts";
 import type { ProcessInboundMessage } from "../../../inbound-gate/application/use-cases/process-inbound-message.ts";
 import type { ProcessInboundMessageInput } from "../../../inbound-gate/application/use-cases/process-inbound-message.ts";
 import type { AiGuideService } from "../../../ai-guide/application/use-cases/ai-guide-service.ts";
@@ -197,7 +198,35 @@ export class ProcessChannelInboundMessage {
     }
 
     // 6. LLM profile required — resolve profile and execute AI guide
-    const profileId = route.profileId;
+    let profileId = route.profileId;
+
+    // === Semantic classifier for authorized senders ===
+    try {
+      const classification = await this.aiGuideService.execute(
+        "serena.inbound.classify_intent",
+        {
+          input: cmd.text,
+          actorRole: identity.role ?? "unknown",
+          resolvedIdentity: identity.displayName ?? identity.personId ?? cmd.externalSenderId,
+          channel: cmd.channel,
+          tenantId: cmd.tenantId ?? "demo",
+          personId: identity.personId ?? "",
+        }
+      );
+
+      if (classification.status === "success") {
+        const parsed = JSON.parse(classification.output as string);
+        profileId = applyFusionPolicy(
+          profileId,
+          parsed.intent,
+          typeof parsed.confidence === "number" ? parsed.confidence : 0
+        );
+      }
+      // If classifier fails → profileId stays deterministic
+    } catch {
+      // Safe degradation: use deterministic route
+    }
+
     const useCaseId: GuideUseCaseId = profileToUseCaseId(profileId);
 
     // Fetch known contacts for mediation routes (same pattern as recentMessages in T27)
@@ -300,4 +329,43 @@ export class ProcessChannelInboundMessage {
 
     return input;
   }
+}
+
+// -----------------------------------------------------------------------
+// Fusion policy — pure function
+// -----------------------------------------------------------------------
+
+/**
+ * Fuses the deterministic gate profile with the AI classifier intent.
+ *
+ * Priority order:
+ * 1. Deterministic risk always wins — no negotiation
+ * 2. AI says risk → risk_review
+ * 3. AI says mediation → mediation_understanding
+ * 4. AI says clarification → clarification
+ * 5. AI says conversation → conversation
+ * 6. Unknown AI intent → fallback deterministic
+ */
+export function applyFusionPolicy(
+  deterministicProfile: LlmProfileId,
+  aiIntent: string,
+  _aiConfidence: number
+): LlmProfileId {
+  // 1. Deterministic risk always wins — no negotiation
+  if (deterministicProfile === "risk_review") return "risk_review";
+
+  // 2. AI says risk → risk_review
+  if (aiIntent === "risk_review") return "risk_review";
+
+  // 3. AI says mediation → mediation_understanding
+  if (aiIntent === "mediation_understanding") return "mediation_understanding";
+
+  // 4. AI says clarification → clarification
+  if (aiIntent === "clarification") return "clarification";
+
+  // 5. AI says conversation → conversation
+  if (aiIntent === "conversation") return "conversation";
+
+  // 6. Unknown AI intent → fallback deterministic
+  return deterministicProfile;
 }

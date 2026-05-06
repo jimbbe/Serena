@@ -70,6 +70,17 @@ test("known sender + urgent signal routes to needs_mediation with urgent reason"
   assert.deepEqual(decision.metadata.matchedSignals, ["urgente", "ayuda"]);
 });
 
+test("known sender + fall and immobility signal routes to risk review", async () => {
+  const useCase = new EvaluateInboundMessage({ contactDirectory: new InMemoryContactDirectory(["maria"]) });
+
+  const decision = await useCase.execute({ senderId: "maria", text: "Me caí y no puedo levantarme" });
+
+  assert.equal(decision.status, "needs_mediation");
+  assert.equal(decision.reason, "urgent_or_risk_content");
+  assert.equal(decision.metadata.precedence, "urgent_or_risk_over_mediation");
+  assert.deepEqual(decision.metadata.matchedSignals, ["me caí", "no puedo levantarme"]);
+});
+
 test("known sender + mediation and risk prefers urgent reason", async () => {
   const useCase = new EvaluateInboundMessage({ contactDirectory: new InMemoryContactDirectory(["maria"]) });
 

@@ -3,10 +3,12 @@
 ## Overview
 
 The simulation endpoint lets developers test the full Serena inbound pipeline
-(inbound gate → AI guide) **without** real WhatsApp, real LLM calls, or real
-message sending. It accepts a channel-agnostic JSON payload and returns a
-structured trace of every pipeline decision — who the sender is, whether they
-are blocked, which AI profile was selected, and what the mock AI responded.
+(inbound gate → AI guide) **without** real WhatsApp or real message sending.
+By default it uses the `mock` provider, but it can also use a real
+`openai-compatible` provider if that env configuration is present at startup.
+It accepts a channel-agnostic JSON payload and returns a structured trace of
+every pipeline decision — who the sender is, whether they are blocked, which
+AI profile was selected, and what the configured provider responded.
 
 In Phase 1 the endpoint does **not** send real messages. Its simulated outbound
 drafts are placeholders for future phases where mediation drafts will be
@@ -20,14 +22,22 @@ In Phase 1/T27, AI Guide receives `recentMessages` from `ConversationStore` via
 
 ## Prerequisites
 
-Set the environment variable before starting the server:
+1. Copy the simulation env template:
+   ```bash
+   cp .env.simulation.example .env
+   ```
+   (or add `ENABLE_SIMULATION_ENDPOINTS=true` to your existing `.env`)
 
-```bash
-ENABLE_SIMULATION_ENDPOINTS=true npm start
-```
+2. Start the server:
+   ```bash
+   npm run start:simulation
+   ```
 
 Only the exact string `"true"` (case-insensitive) enables the endpoint. Any
 other value (including `"false"`, `"0"`, or unset) keeps it disabled.
+
+For a detailed walkthrough including mock vs real provider setup, see
+`docs/evals/manual-simulation-testing.md`.
 
 ## Endpoint
 
@@ -312,7 +322,7 @@ curl -X POST http://localhost:3000/dev/simulate/inbound-message \
 
 ## Limitations (Phase 1)
 
-- **Mock LLM only** — responses are deterministic (hash-based). No real AI. Real AI can be configured via `AI_PROVIDER=openai-compatible` env var (see `apps/core/README.md`), but the simulation endpoints always use whichever provider is configured at startup.
+- **Mock LLM by default** — responses are deterministic (hash-based) unless you configure a real provider. Set `AI_PROVIDER=openai-compatible` and the required `AI_BASE_URL`/`AI_API_KEY`/`AI_MODEL` env vars to use a real LLM (see `docs/evals/manual-simulation-testing.md`). The simulation endpoints always use whichever provider is configured at startup.
 - **No real message sending** — the endpoint only EXECUTES the pipeline and returns the trace. Real WhatsApp/message sending is the responsibility of channel-specific adapters.
 - **No auth guard** — the endpoint is disabled by default and has no token check when enabled. Only enable it in development.
 - **Clarification profile** — supported by AI Guide (`serena.mediation.clarify.v1`); real inbound policy may not route to it in normal flows yet.
@@ -429,11 +439,8 @@ a mediation → bridge session is active for Carlos to reply).
 
 ## Prerequisites
 
-Same as single-step simulation:
-
-```bash
-ENABLE_SIMULATION_ENDPOINTS=true npm start
-```
+Same as single-step simulation: copy `.env.simulation.example` to `.env` and run
+`npm run start:simulation`.
 
 ## Endpoint
 
@@ -704,7 +711,7 @@ All 3 steps are executed regardless of individual failures.
 
 ## Limitations (Phase 1)
 
-- **Mock LLM only** — AI responses are deterministic (hash-based). No real AI. Real AI can be configured via `AI_PROVIDER=openai-compatible` env var (see `apps/core/README.md`), but the scenario runner always uses whichever provider is configured at startup.
+- **Mock LLM by default** — AI responses are deterministic (hash-based) unless a real provider is configured. Set `AI_PROVIDER=openai-compatible` and the required env vars to use a real LLM (see `docs/evals/manual-simulation-testing.md`). The scenario runner always uses whichever provider is configured at startup.
 - **No real message sending** — the runner executes the pipeline and returns traces. Real WhatsApp/message sending is the responsibility of channel adapters.
 - **No auth guard** — the endpoint is disabled by default. Only enable in development.
 - **Shared in-memory state** — sessions persist across steps within the same HTTP request but are lost on server restart.

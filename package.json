@@ -18,7 +18,8 @@
     "typecheck:core": "npm run -w @serena/core typecheck",
     "typecheck:gateway-wa": "npm run -w @serena/gateway-wa typecheck",
     "typecheck:contracts": "npm run -w @serena/contracts typecheck",
-    "typecheck:scripts": "tsc -p scripts/tsconfig.json"
+    "typecheck:scripts": "tsc -p scripts/tsconfig.json",
+    "start:simulation": "node --experimental-strip-types --env-file-if-exists=.env apps/core/src/server.ts"
   },
   "devDependencies": {
     "@types/node": "^22.19.17",

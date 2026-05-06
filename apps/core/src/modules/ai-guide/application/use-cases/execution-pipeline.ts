@@ -5,29 +5,21 @@ import type { LlmProvider } from "../ports/llm-provider.ts";
 import type { AiInvocationAudit } from "../ports/ai-invocation-audit.ts";
 import type { PromptRegistry } from "../ports/prompt-registry.ts";
 import type { ContextBuilder } from "../prompts/context-builder.ts";
+import type { AiGuideInput } from "./ai-guide-input.ts";
 import { renderOutputContract } from "../prompts/render-output-contract.ts";
 import { validateOutputContract } from "../prompts/validate-output-contract.ts";
-import { parsePromptVersion } from "../../domain/prompt-version.ts";
 
 type AuditOutcome = {
   auditRecorded: boolean;
   auditId: string | undefined;
 };
 
-/** Known input field keys for type safety. Not runtime validation, but aids grep and avoids magic strings. */
-type ExecutionInput = {
-  input?: string;
-  actorRole?: string;
-  channel?: string;
-  resolvedIdentity?: string;
-} & Record<string, string>;
-
 function makeMetadata(
   model: string,
   attempts: number,
   outcome: AuditOutcome,
   promptId: PromptId,
-  promptVersion: number
+  promptVersion?: number
 ): GuideResultSuccess["metadata"] | GuideResultFailed["metadata"] {
   const base = {
     provider: "mock" as const,
@@ -35,7 +27,7 @@ function makeMetadata(
     attempts,
     auditRecorded: outcome.auditRecorded,
     promptId,
-    promptVersion,
+    ...(promptVersion !== undefined ? { promptVersion } : {}),
   };
   if (outcome.auditId !== undefined) {
     return { ...base, auditId: outcome.auditId };
@@ -63,7 +55,7 @@ export class ExecutionPipeline {
 
   async execute(
     contract: UseCaseContract,
-    input: Record<string, string>
+    input: AiGuideInput
   ): Promise<GuideResult> {
     // (1) Resolve prompt from registry — catch resolution failures gracefully
     let promptDef;
@@ -81,15 +73,6 @@ export class ExecutionPipeline {
           attempts: 0,
           auditRecorded: false,
           promptId: contract.promptId,
-          // Extract version from promptId suffix; fallback to 0 on invalid format
-          // (0 is deliberately not a valid version — easier to spot in audits than 1)
-          promptVersion: (() => {
-            try {
-              return parsePromptVersion(contract.promptId);
-            } catch {
-              return 0;
-            }
-          })(),
         },
       };
     }
@@ -108,15 +91,14 @@ export class ExecutionPipeline {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       let lastContent = "";
       let lastTokensUsed: number | undefined;
+      const outputContractInstructions = renderOutputContract(promptDef.outputContract);
+      const developerPrompt = [
+        promptDef.developerPrompt,
+        outputContractInstructions,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
       try {
-        const outputContractInstructions = renderOutputContract(promptDef.outputContract);
-        const developerPrompt = [
-          promptDef.developerPrompt,
-          outputContractInstructions,
-        ]
-          .filter(Boolean)
-          .join("\n\n");
-
         const providerResult = await this.provider.invoke({
           promptId: promptDef.id,
           promptVersion: promptDef.version,
@@ -146,6 +128,8 @@ export class ExecutionPipeline {
           contract,
           promptDef.id,
           promptDef.version,
+          promptDef.systemPrompt,
+          developerPrompt !== "" ? developerPrompt : undefined,
           userPrompt,
           content,
           providerResult.tokensUsed,
@@ -156,7 +140,7 @@ export class ExecutionPipeline {
         return {
           status: "success",
           useCaseId: contract.id,
-          output: content,
+          output: validation.parsed ?? content,
           metadata: makeMetadata(
             providerResult.modelUsed ?? "mock-model-v1",
             attempt + 1,
@@ -181,6 +165,8 @@ export class ExecutionPipeline {
             contract,
             promptDef.id,
             promptDef.version,
+            promptDef.systemPrompt,
+            developerPrompt !== "" ? developerPrompt : undefined,
             userPrompt,
             isValidationFailure ? lastContent : "",  // preserve invalid output for debuggability
             isValidationFailure ? lastTokensUsed : 0,
@@ -212,6 +198,8 @@ export class ExecutionPipeline {
                   useCaseId: contract.id,
                   promptId: promptDef.id,
                   promptVersion: promptDef.version,
+                  systemPrompt: promptDef.systemPrompt,
+                  ...(developerPrompt !== "" ? { developerPrompt } : {}),
                   userPrompt,
                 },
                 {
@@ -234,6 +222,8 @@ export class ExecutionPipeline {
           contract,
           promptDef.id,
           promptDef.version,
+          promptDef.systemPrompt,
+          developerPrompt !== "" ? developerPrompt : undefined,
           userPrompt,
           "",
           0,
@@ -291,12 +281,20 @@ export class ExecutionPipeline {
   /** Builds the userPrompt via ContextBuilder and template interpolation. */
   private buildUserPrompt(
     promptDef: { inputTemplate?: string; contextPolicy: Parameters<ContextBuilder["build"]>[0] },
-    input: ExecutionInput
+    input: AiGuideInput
   ): string {
+    const templateValues: Record<string, string> = {};
+    for (const key of ["input", "actorRole", "channel", "resolvedIdentity"] as const) {
+      const value = input[key];
+      if (typeof value === "string") {
+        templateValues[key] = value;
+      }
+    }
+
     // Template interpolation (Phase 1 — replaces old renderTemplate)
     const renderedTemplate =
       promptDef.inputTemplate !== undefined
-        ? this.contextBuilder.renderTemplate(promptDef.inputTemplate, input)
+        ? this.contextBuilder.renderTemplate(promptDef.inputTemplate, templateValues)
         : "";
 
     const currentMessage =
@@ -314,6 +312,9 @@ export class ExecutionPipeline {
       resolvedIdentity: input["resolvedIdentity"],
       actorContext,
       channelMetadata: input["channel"],
+      recentMessages: input.recentMessages,
+      knownContacts: input.knownContacts,
+      safetyMemory: input.safetyMemory,
     });
 
     return contextString;
@@ -323,6 +324,8 @@ export class ExecutionPipeline {
     contract: UseCaseContract,
     promptId: PromptId,
     promptVersion: number,
+    systemPrompt: string,
+    developerPrompt: string | undefined,
     userPrompt: string,
     output: string,
     tokensUsed: number | undefined,
@@ -340,6 +343,8 @@ export class ExecutionPipeline {
           useCaseId: contract.id,
           promptId,
           promptVersion,
+          systemPrompt,
+          ...(developerPrompt !== undefined ? { developerPrompt } : {}),
           userPrompt,
         },
         {

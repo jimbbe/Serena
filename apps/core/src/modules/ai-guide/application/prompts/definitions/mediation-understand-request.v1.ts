@@ -38,15 +38,16 @@ export const mediationUnderstandRequestV1: PromptDefinition = {
     "Contexto:\n" +
     "- El actor puede ser la persona principal, un contacto autorizado, un admin o un usuario no autorizado.\n" +
     "- No asumas que todo mensaje viene de la abuela.\n" +
-    "- Usá actorRole, channel y permissions si están presentes en el contexto.",
+    "- Usá actorRole y channel si están presentes en el contexto.",
   inputTemplate: "Mensaje a analizar: {input}",
   contextPolicy: {
     includeCurrentMessage: true,
     includeResolvedIdentity: true,
     includeActorContext: true,
     includeChannelMetadata: true,
-    includeConversationHistory: false,
-    includeKnownContacts: false,
+    includeConversationHistory: true,
+    maxRecentMessages: 4,
+    includeKnownContacts: true,
     includeSafetyMemory: false,
     includeFullConversation: false,
   },

@@ -28,6 +28,12 @@ import type { ProcessInboundMessageInput } from "./process-inbound-message.ts";
 import type { AiGuideService } from "../../../ai-guide/application/use-cases/ai-guide-service.ts";
 import type { ExternalIdentityResolver } from "../ports/external-identity-resolver.ts";
 import type { ConversationStore } from "../../../conversation-store/port/conversation-store.ts";
+import type { ContactDirectory } from "../../../contact-directory/application/ports/contact-directory.ts";
+
+const MEDIATION_USE_CASES = new Set<GuideUseCaseId>([
+  "serena.mediation.understand_request",
+  "serena.mediation.clarify",
+]);
 
 // ---------------------------------------------------------------------------
 // Dependencies
@@ -40,6 +46,8 @@ export type ProcessChannelInboundMessageDependencies = {
   conversationStore: ConversationStore;
   /** Optional custom trace ID generator (defaults to crypto.randomUUID). */
   generateTraceId?: () => string;
+  /** Optional — mediation routes can enrich prompts with known contacts. */
+  contactDirectory?: ContactDirectory;
 };
 
 // ---------------------------------------------------------------------------
@@ -52,6 +60,7 @@ export class ProcessChannelInboundMessage {
   private readonly identityResolver: ExternalIdentityResolver;
   private readonly conversationStore: ConversationStore;
   private readonly generateTraceId: () => string;
+  private readonly contactDirectory: ContactDirectory | undefined;
 
   constructor(deps: ProcessChannelInboundMessageDependencies) {
     this.processInboundMessage = deps.processInboundMessage;
@@ -59,6 +68,7 @@ export class ProcessChannelInboundMessage {
     this.identityResolver = deps.identityResolver;
     this.conversationStore = deps.conversationStore;
     this.generateTraceId = deps.generateTraceId ?? (() => randomUUID());
+    this.contactDirectory = deps.contactDirectory;
   }
 
   async execute(cmd: InboundMessageCommand): Promise<ChannelInboundResult> {
@@ -95,6 +105,7 @@ export class ProcessChannelInboundMessage {
     // 1. Conversation tracking — create conversation for resolved identities
     let conversationId: string | undefined;
     let messageCount = 0;
+    let recentMessages: string[] = [];
     if (identity.status === "resolved") {
       const personId = identity.personId ?? cmd.externalSenderId;
       const conv = await this.conversationStore.findOrCreateConversation({
@@ -105,8 +116,9 @@ export class ProcessChannelInboundMessage {
       conversationId = conv.id;
 
       // Append inbound message
+      const inboundMsgId = randomUUID();
       const inboundMsg: ConversationMessage = {
-        id: randomUUID(),
+        id: inboundMsgId,
         conversationId: conv.id,
         tenantId: identity.tenantId,
         personId,
@@ -120,6 +132,10 @@ export class ProcessChannelInboundMessage {
       // Use the real accumulated message count from the store
       const messages = await this.conversationStore.listMessages(conversationId);
       messageCount = messages.length;
+
+      recentMessages = messages
+        .filter((message) => message.id !== inboundMsgId)
+        .map((message) => `[${message.direction}] ${message.personId} via ${message.channel}: ${message.text}`);
     }
 
     // 2. Short-circuit: blocked identity
@@ -183,6 +199,13 @@ export class ProcessChannelInboundMessage {
     const profileId = route.profileId;
     const useCaseId: GuideUseCaseId = profileToUseCaseId(profileId);
 
+    let knownContacts: string[] = [];
+    if (MEDIATION_USE_CASES.has(useCaseId) && this.contactDirectory) {
+      knownContacts = (await this.contactDirectory.findAll()).map(
+        (contact) => `${contact.displayName} (id: ${contact.id})`
+      );
+    }
+
     let guideResult: GuideResult | undefined = undefined;
     let guideError: { message: string; code?: string } | undefined = undefined;
 
@@ -194,6 +217,8 @@ export class ProcessChannelInboundMessage {
         channel: cmd.channel,
         tenantId: cmd.tenantId ?? "demo",
         personId: identity.personId ?? "",
+        recentMessages,
+        knownContacts,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

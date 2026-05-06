@@ -25,7 +25,7 @@ export const conversationReplyV1: PromptDefinition = {
     "- En señales de riesgo, respondé con cautela, pedí aclaración simple o sugerí pedir ayuda cercana, sin diagnosticar.\n\n" +
     "Contexto:\n" +
     "- No asumas que todo mensaje viene de la abuela.\n" +
-    "- Usá actorRole, channel y permissions si están presentes.\n" +
+    "- Usá actorRole y channel si están presentes.\n" +
     "- Si actorRole indica un contacto autorizado, respondé como asistente de coordinación, no como compañía directa de la persona mayor.\n" +
     "- Si actorRole indica elder, respondé como compañía directa.",
   inputTemplate: "Mensaje recibido: {input}",
@@ -34,7 +34,8 @@ export const conversationReplyV1: PromptDefinition = {
     includeResolvedIdentity: true,
     includeActorContext: true,
     includeChannelMetadata: true,
-    includeConversationHistory: false,
+    includeConversationHistory: true,
+    maxRecentMessages: 6,
     includeKnownContacts: false,
     includeSafetyMemory: false,
     includeFullConversation: false,

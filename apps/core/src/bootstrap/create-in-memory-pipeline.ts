@@ -63,6 +63,7 @@ export async function createInMemoryPipeline(): Promise<{
   processInboundMessage: ProcessInboundMessage;
   identityResolver: InMemoryExternalIdentityResolver;
   conversationStore: InMemoryConversationStore;
+  contactDirectory: InMemoryContactDirectory;
 }> {
   const contacts = await loadContactsFromSeed();
 
@@ -165,5 +166,5 @@ export async function createInMemoryPipeline(): Promise<{
   // Conversation store — shared in-memory store for conversation tracking
   const conversationStore = new InMemoryConversationStore();
 
-  return { orchestrator, bridgeStore, processedMessageStore, aiGuideService, processInboundMessage, identityResolver, conversationStore };
+  return { orchestrator, bridgeStore, processedMessageStore, aiGuideService, processInboundMessage, identityResolver, conversationStore, contactDirectory };
 }

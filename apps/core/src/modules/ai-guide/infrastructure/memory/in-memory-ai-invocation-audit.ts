@@ -7,6 +7,8 @@ export type AuditRecord = {
   useCaseId: GuideUseCaseId;
   promptId: PromptId;
   promptVersion: number;
+  systemPrompt?: string;
+  developerPrompt?: string;
   userPrompt: string;
   output: string;
   tokensUsed?: number;
@@ -20,7 +22,14 @@ export class InMemoryAiInvocationAudit implements AiInvocationAudit {
   private nextId = 1;
 
   async record(
-    input: { useCaseId: GuideUseCaseId; promptId: PromptId; promptVersion: number; userPrompt: string },
+    input: {
+      useCaseId: GuideUseCaseId;
+      promptId: PromptId;
+      promptVersion: number;
+      systemPrompt?: string;
+      developerPrompt?: string;
+      userPrompt: string;
+    },
     result: { output: string; tokensUsed?: number; executionTimeMs: number; success: boolean; error?: string }
   ): Promise<{ auditId: string }> {
     const auditId = `audit-${this.nextId++}`;
@@ -29,6 +38,8 @@ export class InMemoryAiInvocationAudit implements AiInvocationAudit {
       useCaseId: input.useCaseId,
       promptId: input.promptId,
       promptVersion: input.promptVersion,
+      ...(input.systemPrompt !== undefined ? { systemPrompt: input.systemPrompt } : {}),
+      ...(input.developerPrompt !== undefined ? { developerPrompt: input.developerPrompt } : {}),
       userPrompt: input.userPrompt,
       output: result.output,
       executionTimeMs: result.executionTimeMs,

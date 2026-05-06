@@ -10,7 +10,7 @@ function findPrompt(id: string): PromptDefinition {
   return prompt;
 }
 
-// ── Phase 1 policy values (no history, no contacts, no safety) ──────
+// ── Phase 1 policy values (history active, mediation contacts active, no safety) ──────
 
 test("serena.conversation.reply contextPolicy matches Phase 1 values", () => {
   const cp = findPrompt("serena.conversation.reply.v1").contextPolicy;
@@ -19,7 +19,8 @@ test("serena.conversation.reply contextPolicy matches Phase 1 values", () => {
   assert.equal(cp.includeResolvedIdentity, true);
   assert.equal(cp.includeActorContext, true);
   assert.equal(cp.includeChannelMetadata, true);
-  assert.equal(cp.includeConversationHistory, false);
+  assert.equal(cp.includeConversationHistory, true);
+  assert.equal(cp.maxRecentMessages, 6);
   assert.equal(cp.includeKnownContacts, false);
   assert.equal(cp.includeSafetyMemory, false);
   assert.equal(cp.includeFullConversation, false);
@@ -32,7 +33,8 @@ test("serena.risk.review contextPolicy matches Phase 1 values", () => {
   assert.equal(cp.includeResolvedIdentity, true);
   assert.equal(cp.includeActorContext, true);
   assert.equal(cp.includeChannelMetadata, true);
-  assert.equal(cp.includeConversationHistory, false);
+  assert.equal(cp.includeConversationHistory, true);
+  assert.equal(cp.maxRecentMessages, 5);
   assert.equal(cp.includeKnownContacts, false);
   assert.equal(cp.includeSafetyMemory, false);
   assert.equal(cp.includeFullConversation, false);
@@ -45,8 +47,9 @@ test("serena.mediation.understand_request contextPolicy matches Phase 1 values",
   assert.equal(cp.includeResolvedIdentity, true);
   assert.equal(cp.includeActorContext, true);
   assert.equal(cp.includeChannelMetadata, true);
-  assert.equal(cp.includeConversationHistory, false);
-  assert.equal(cp.includeKnownContacts, false);
+  assert.equal(cp.includeConversationHistory, true);
+  assert.equal(cp.maxRecentMessages, 4);
+  assert.equal(cp.includeKnownContacts, true);
   assert.equal(cp.includeSafetyMemory, false);
   assert.equal(cp.includeFullConversation, false);
 });
@@ -58,30 +61,71 @@ test("serena.mediation.clarify contextPolicy matches Phase 1 values", () => {
   assert.equal(cp.includeResolvedIdentity, true);
   assert.equal(cp.includeActorContext, true);
   assert.equal(cp.includeChannelMetadata, false);
-  assert.equal(cp.includeConversationHistory, false);
-  assert.equal(cp.includeKnownContacts, false);
+  assert.equal(cp.includeConversationHistory, true);
+  assert.equal(cp.maxRecentMessages, 3);
+  assert.equal(cp.includeKnownContacts, true);
   assert.equal(cp.includeSafetyMemory, false);
   assert.equal(cp.includeFullConversation, false);
 });
 
-// ── Guard tests: Phase 1 runtime cannot deliver these ────────────────
+// ── Guard tests ───────────────────────────────────────────────────────
 
-test("guard: ALL prompts must have includeConversationHistory=false until stores are wired", () => {
+test("guard: conversation history stays enabled only on the 4 wired prompts", () => {
+  const activePrompts = new Set([
+    "serena.conversation.reply.v1",
+    "serena.risk.review.v1",
+    "serena.mediation.understand_request.v1",
+    "serena.mediation.clarify.v1",
+  ]);
+
+  const maxRecentValues: Record<string, number> = {
+    "serena.conversation.reply.v1": 6,
+    "serena.risk.review.v1": 5,
+    "serena.mediation.understand_request.v1": 4,
+    "serena.mediation.clarify.v1": 3,
+  };
+
   for (const prompt of defaultPrompts) {
-    assert.equal(
-      prompt.contextPolicy.includeConversationHistory,
-      false,
-      `${prompt.id}: includeConversationHistory must be false in Phase 1 — ExecutionPipeline does not pass recentMessages`
-    );
+    if (activePrompts.has(prompt.id)) {
+      assert.equal(
+        prompt.contextPolicy.includeConversationHistory,
+        true,
+        `${prompt.id}: includeConversationHistory must be true — recentMessages is wired into ExecutionPipeline`
+      );
+      assert.equal(prompt.contextPolicy.maxRecentMessages, maxRecentValues[prompt.id]);
+    }
   }
 });
 
-test("guard: ALL prompts must have includeKnownContacts=false until ContactDirectory is wired", () => {
+test("guard: only mediation prompts enable known contacts", () => {
+  const mediationPrompts = new Set([
+    "serena.mediation.understand_request.v1",
+    "serena.mediation.clarify.v1",
+  ]);
+
+  for (const prompt of defaultPrompts) {
+    if (mediationPrompts.has(prompt.id)) {
+      assert.equal(
+        prompt.contextPolicy.includeKnownContacts,
+        true,
+        `${prompt.id}: includeKnownContacts must be true — mediation routes receive knownContacts`
+      );
+    } else {
+      assert.equal(
+        prompt.contextPolicy.includeKnownContacts,
+        false,
+        `${prompt.id}: includeKnownContacts must remain false outside mediation routes`
+      );
+    }
+  }
+});
+
+test("guard: safetyMemory stays disabled until there is a real source", () => {
   for (const prompt of defaultPrompts) {
     assert.equal(
-      prompt.contextPolicy.includeKnownContacts,
+      prompt.contextPolicy.includeSafetyMemory,
       false,
-      `${prompt.id}: includeKnownContacts must be false in Phase 1 — ExecutionPipeline does not pass knownContacts`
+      `${prompt.id}: includeSafetyMemory must remain false until safety memory is wired`
     );
   }
 });

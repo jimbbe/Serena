@@ -105,7 +105,7 @@ Define exactamente qué contexto recibe el LLM para cada caso de uso.
 |---------|------|-------------|
 | `includeCurrentMessage` | `boolean` | Incluye el mensaje actual del usuario |
 | `includeResolvedIdentity` | `boolean` | Incluye la identidad resuelta de la persona |
-| `includeActorContext` | `boolean` | Incluye contexto del actor (rol, canal, permisos) |
+| `includeActorContext` | `boolean` | Incluye contexto del actor realmente disponible hoy (rol) |
 | `includeChannelMetadata` | `boolean` | Incluye metadata del canal (WhatsApp, voz, etc.) |
 | `includeConversationHistory` | `boolean` | Incluye historial reciente de conversación |
 | `maxRecentMessages?` | `number` | Límite de mensajes recientes si `includeConversationHistory` es true |
@@ -118,12 +118,12 @@ Define exactamente qué contexto recibe el LLM para cada caso de uso.
 
 | Use Case | current | identity | actor | channel | history | contacts | safety | full |
 |----------|---------|----------|-------|---------|---------|----------|--------|------|
-| `mediation.understand_request` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| `mediation.clarify` | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| `conversation.reply` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| `risk.review` | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| `mediation.understand_request` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
+| `mediation.clarify` | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| `conversation.reply` | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| `risk.review` | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 
-**Nota Phase 1**: `includeConversationHistory` e `includeKnownContacts` están en `false` para todos los prompts. El `ContextBuilder` tiene capacidad de recibir `recentMessages` y `knownContacts`, pero `ExecutionPipeline.buildUserPrompt()` aún no los pasa porque no hay `ConversationStore` ni `ContactDirectory` conectados. Esas banderas se activarán cuando se conecten los stores reales.
+**Nota Phase 1**: `recentMessages` ya viaja desde el flujo inbound al `ExecutionPipeline`, y `knownContacts` ya se pasa sólo en rutas de mediación cuando hay `ContactDirectory`. `safetyMemory` sigue sin fuente real y `includeFullConversation` sigue no soportado: si alguien lo activa, el `ContextBuilder` falla explícitamente en vez de inventar contexto.
 
 ---
 
@@ -136,9 +136,10 @@ El `OutputContract` documenta en código qué campos devuelve cada prompt y qué
 A partir de este PR, el `ExecutionPipeline` **valida la salida del LLM contra el `OutputContract`** después de recibirla y antes de declarar success:
 
 - **Formato `text`**: verifica que el output no esté vacío.
-- **Formato `json`**: parsea JSON, valida que sea un objeto plano, verifica todos los campos requeridos, tipos (`string`, `boolean`, `number`, `string[]`, `enum`, `enum[]`, `object`, `unknown`, `null`, `string | null`) y `allowedValues` (para campos `string`, `enum`, `string[]`, `enum[]`).
+- **Formato `json`**: parsea JSON, valida que sea un objeto plano, verifica todos los campos requeridos, tipos (`string`, `boolean`, `number`, `string[]`, `enum`, `enum[]`, `object`, `unknown`, `null`, `string | null`) y `allowedValues` (para campos `string`, `enum`, `string[]`, `enum[]`). Cuando `strict: true`, además rechaza campos inesperados.
 - Si la validación falla, el pipeline devuelve `status: "failed"` con un mensaje descriptivo y **no reintenta** (es un hard failure, igual que un output vacío).
 - El audit registra `success: false` y preserva el output inválido para debugging.
+- Si el contrato espera JSON y la validación pasa, el `GuideResult.output` queda parseado como objeto JSON; para prompts `text` sigue siendo string.
 
 Ver `validate-output-contract.ts` para la implementación completa.
 
@@ -256,7 +257,7 @@ Texto breve user-facing que Serena puede mostrar o decir al actor. No incluye JS
 
 ## 8. Actor Context
 
-El `ContextBuilder` acepta un campo `actorContext` que se construye a partir de la identidad resuelta del mensaje. Está **preparado** para crecimiento futuro, pero sin implementar todavía un `PermissionPolicy` completo.
+El `ContextBuilder` acepta un campo `actorContext` que se construye a partir de la identidad resuelta del mensaje. Hoy sólo se pasa contexto real de rol; no se simulan permisos ni otros datos no cableados.
 
 Campos previstos (futuro):
 - `actorRole`: `"elder" | "authorized_contact" | "unauthorized_contact" | "admin" | "unknown"`
@@ -269,7 +270,7 @@ En el MVP actual, el `actorRole` se deriva del `ResolvedInboundActor.role`:
 - `"elder"` → `elder`
 - `"contact"` → `authorized_contact` (contacto conocido/autorizado en el seed data)
 
-El `PermissionPolicy` completo vendrá en una fase futura.
+El `PermissionPolicy` completo vendrá en una fase futura. Hasta entonces, los prompts no deben asumir permisos reales.
 
 ---
 
@@ -346,7 +347,7 @@ No implementado todavía:
 - Memoria semántica avanzada.
 - Summarizer.
 - Herramientas externas.
-- Conexión de `ConversationStore` y `ContactDirectory` al `ContextBuilder` (las políticas de contexto están preparadas pero las banderas `includeConversationHistory` e `includeKnownContacts` permanecen en `false` hasta que existan stores reales).
+- Conversación completa (`includeFullConversation`) y memoria de seguridad (`includeSafetyMemory`) como contexto real: todavía no están implementadas.
 
 ---
 

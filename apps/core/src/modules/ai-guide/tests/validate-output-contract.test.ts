@@ -382,3 +382,34 @@ test("JSON: enum[] with valid allowedValues passes", () => {
   assert.equal(fail.ok, false);
   if (!fail.ok) assert.ok(fail.message.includes("nope"));
 });
+
+test("JSON strict contract rejects unexpected fields", () => {
+  const contract: OutputContract = {
+    format: "json",
+    strict: true,
+    description: "",
+    fields: [
+      { name: "riskLevel", type: "enum", required: true, description: "", allowedValues: ["low", "medium", "high", "critical"] },
+      { name: "riskType", type: "enum", required: true, description: "", allowedValues: ["health", "emotional", "safety", "scam", "confusion", "unknown"] },
+      { name: "source", type: "enum", required: true, description: "", allowedValues: ["direct", "reported", "system", "unknown"] },
+      { name: "situationSummary", type: "string", required: true, description: "" },
+      { name: "recommendedAction", type: "enum", required: true, description: "", allowedValues: ["reply", "clarify", "notify_contact", "human_review"] },
+      { name: "requiresEscalation", type: "boolean", required: true, description: "" },
+      { name: "missingInformation", type: "string[]", required: true, description: "" },
+    ],
+  };
+
+  const result = validateOutputContract(contract, JSON.stringify({
+    riskLevel: "low",
+    riskType: "unknown",
+    source: "direct",
+    situationSummary: "ok",
+    recommendedAction: "reply",
+    requiresEscalation: false,
+    missingInformation: [],
+    extra: true,
+  }));
+
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.ok(result.message.includes("Unexpected field: extra"));
+});

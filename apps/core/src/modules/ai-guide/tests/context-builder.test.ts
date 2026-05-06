@@ -67,7 +67,16 @@ test("does NOT include full conversation when flag is false", () => {
     { currentMessage: "Hola" }
   );
 
-  assert.ok(!output.includes("[Full conversation history"));
+  assert.equal(output.includes("Full conversation history"), false);
+});
+
+test("throws when includeFullConversation is enabled because it is not supported yet", () => {
+  const builder = makeBuilder();
+
+  assert.throws(
+    () => builder.build({ ...fullPolicy, includeFullConversation: true }, { currentMessage: "Hola" }),
+    /includeFullConversation is not supported yet/
+  );
 });
 
 test("respects maxRecentMessages limit (only N most recent)", () => {

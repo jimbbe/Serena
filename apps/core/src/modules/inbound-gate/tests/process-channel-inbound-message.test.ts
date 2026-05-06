@@ -22,6 +22,7 @@ import type { InboundMessageCommand as InboundCmd } from "../domain/inbound-mess
 import type { ConversationStore } from "../../conversation-store/port/conversation-store.ts";
 import type { Conversation } from "../../conversation-store/domain/conversation.ts";
 import type { ConversationMessage } from "../../conversation-store/domain/conversation-message.ts";
+import type { ContactDirectory } from "../../contact-directory/application/ports/contact-directory.ts";
 
 import { AiGuideService } from "../../ai-guide/application/use-cases/ai-guide-service.ts";
 import { UseCaseRegistry } from "../../ai-guide/application/use-cases/use-case-registry.ts";
@@ -1479,4 +1480,104 @@ test("mediation_understanding does not record outbound message", async () => {
   // messageCount should reflect the real accumulated count (1 inbound only)
   assert.ok(result.conversation !== undefined);
   assert.equal(result.conversation!.messageCount, 1);
+});
+
+test("second message passes recentMessages to AiGuide", async () => {
+  let capturedInput: Record<string, unknown> | undefined;
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, input: Record<string, unknown>): Promise<GuideResult> => {
+      capturedInput = input;
+      return successGuideResult(useCaseId);
+    },
+  };
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("conversation"),
+      route: profileRoute("conversation"),
+    }),
+  };
+
+  const existingMsg: ConversationMessage = {
+    id: "msg-prev-1",
+    conversationId: "conv-test-1",
+    tenantId: "demo",
+    personId: "maria",
+    channel: "whatsapp",
+    direction: "inbound",
+    text: "previous message",
+    occurredAt: new Date(),
+  };
+
+  const mockStore = mockConversationStore({ messages: [existingMsg] });
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockStore as unknown as ConversationStore,
+  });
+
+  await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "second message",
+    tenantId: "demo",
+  });
+
+  assert.ok(capturedInput !== undefined);
+  const recentMessages = capturedInput.recentMessages as string[];
+  assert.ok(Array.isArray(recentMessages));
+  assert.equal(recentMessages.length, 1);
+  assert.ok(recentMessages[0]!.includes("previous message"));
+  assert.ok(recentMessages[0]!.includes("[inbound]"));
+  assert.ok(recentMessages[0]!.includes("whatsapp"));
+});
+
+test("mediation route passes knownContacts to AiGuide when ContactDirectory is available", async () => {
+  let capturedInput: Record<string, unknown> | undefined;
+
+  const mockAiService = {
+    execute: async (useCaseId: GuideUseCaseId, input: Record<string, unknown>): Promise<GuideResult> => {
+      capturedInput = input;
+      return successGuideResult(useCaseId);
+    },
+  };
+
+  const contactDirectory: ContactDirectory = {
+    findAll: async () => [
+      { id: "c1", displayName: "María", whatsappId: "+5492600111111" },
+      { id: "c2", displayName: "Carlos", whatsappId: "+5492600222222" },
+    ],
+    findByWhatsAppId: async () => undefined,
+    findById: async () => undefined,
+    hasAllowedSender: async () => true,
+  };
+
+  const mockProcessInbound = {
+    execute: async (_input: ProcessInboundMessageInput) => ({
+      decision: allowedDecision("mediation_understanding"),
+      route: profileRoute("mediation_understanding"),
+    }),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as unknown as ProcessChannelInboundMessage["processInboundMessage"],
+    aiGuideService: mockAiService as unknown as ProcessChannelInboundMessage["aiGuideService"],
+    identityResolver: mockResolver(resolvedIdentity()),
+    conversationStore: mockConversationStore() as unknown as ConversationStore,
+    contactDirectory,
+  });
+
+  await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "avisale a Carlos",
+    tenantId: "demo",
+  });
+
+  assert.ok(capturedInput !== undefined);
+  const knownContacts = capturedInput.knownContacts as string[];
+  assert.deepEqual(knownContacts, ["María (id: c1)", "Carlos (id: c2)"]);
 });

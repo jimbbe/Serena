@@ -15,7 +15,7 @@ export type GuideResultSuccess = {
     auditId?: string;
     auditRecorded: boolean;
     promptId: PromptId;
-    promptVersion: number;
+    promptVersion?: number;
   };
 };
 
@@ -34,6 +34,6 @@ export type GuideResultFailed = {
     auditId?: string;
     auditRecorded: boolean;
     promptId: PromptId;
-    promptVersion: number;
+    promptVersion?: number;
   };
 };

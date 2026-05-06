@@ -569,8 +569,10 @@ describe("POST /dev/simulate/inbound-message", () => {
       const guideResult = obj.guideResult as Record<string, unknown>;
       assert.equal(guideResult.status, "success");
       assert.equal(guideResult.useCaseId, "serena.mediation.clarify");
-      assert.ok(typeof guideResult.output === "string");
-      assert.ok((guideResult.output as string).length > 0);
+      assert.equal(typeof guideResult.output, "object");
+      const output = guideResult.output as Record<string, unknown>;
+      assert.ok(typeof output.question === "string");
+      assert.ok(typeof output.reason === "string");
 
       // No guideError since clarification executes successfully
       assert.equal(obj.guideError, undefined);

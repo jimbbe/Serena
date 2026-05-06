@@ -86,7 +86,7 @@ test("execute returns success GuideResult for risk review", async () => {
   assert.equal(result.status, "success");
   assert.equal(result.useCaseId, "serena.risk.review");
   const success = result as GuideResultSuccess;
-  assert.ok(typeof success.output === "string");
+  assert.equal(typeof success.output, "object");
   assert.equal(success.metadata.promptId, RISK);
 });
 
@@ -107,7 +107,7 @@ test("execute returns success GuideResult for mediation understanding", async ()
   assert.equal(result.status, "success");
   assert.equal(result.useCaseId, "serena.mediation.understand_request");
   const success = result as GuideResultSuccess;
-  assert.ok(typeof success.output === "string");
+  assert.equal(typeof success.output, "object");
   assert.equal(success.metadata.promptId, UNDERSTAND);
 });
 
@@ -135,9 +135,8 @@ test("execute returns success for clarification use case", async () => {
   const success = result as GuideResultSuccess;
   assert.equal(success.useCaseId, "serena.mediation.clarify");
   assert.equal(success.metadata.promptId, CLARIFY);
-  assert.ok(typeof success.output === "string");
-  // Clarification output should be JSON with question and reason
-  const parsed = JSON.parse(success.output as string);
+  assert.equal(typeof success.output, "object");
+  const parsed = success.output as Record<string, unknown>;
   assert.ok(typeof parsed.question === "string");
   assert.ok(typeof parsed.reason === "string");
 });

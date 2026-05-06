@@ -286,9 +286,9 @@ test("pipeline fails when prompt not in registry", async () => {
   );
 });
 
-// ── FIX 1: promptVersion parsed from promptId suffix on resolution failure ──
+// ── Prompt resolution failure audit metadata ───────────────────────────
 
-test("resolution failure extracts promptVersion from contract promptId suffix (.v2)", async () => {
+test("resolution failure does not invent promptVersion", async () => {
   const provider = new MockLlmProvider();
   const emptyRegistry = new InMemoryPromptRegistry([]);
   const pipeline = new ExecutionPipeline({
@@ -297,18 +297,13 @@ test("resolution failure extracts promptVersion from contract promptId suffix (.
     contextBuilder: makeContextBuilder(),
   });
 
-  // Use a contract with a .v2 promptId not registered
-  const contract = makeContract({
-    // promptId must be cast through unknown — the union type only has .v1 members,
-    // but this test validates the parser handles any valid .v{N} suffix
-    promptId: "serena.conversation.reply.v2" as PromptId,
-  });
+  const contract = makeContract({ promptId: "serena.conversation.reply.v2" as PromptId });
 
   const result = await pipeline.execute(contract, { input: "test" });
 
   assert.equal(result.status, "failed");
   const failed = result as GuideResultFailed;
-  assert.equal(failed.metadata.promptVersion, 2, "must extract version 2 from .v2 suffix, not hardcoded 1");
+  assert.equal(failed.metadata.promptVersion, undefined);
 });
 
 // ── Output contract rendering tests ──────────────────────────────
@@ -555,6 +550,69 @@ test("provider returns valid JSON → success", async () => {
   assert.equal(result.status, "success");
   const success = result as GuideResultSuccess;
   assert.equal(success.metadata.promptId, "serena.risk.review.v1");
+  assert.deepEqual(success.output, {
+    riskLevel: "low",
+    riskType: "unknown",
+    source: "direct",
+    situationSummary: "No se detectan riesgos.",
+    recommendedAction: "reply",
+    requiresEscalation: false,
+    missingInformation: [],
+  });
+});
+
+test("provider returns JSON with unexpected field in strict contract → failed", async () => {
+  const pipeline = new ExecutionPipeline({
+    provider: {
+      async invoke() {
+        return {
+          content: JSON.stringify({
+            riskLevel: "low",
+            riskType: "unknown",
+            source: "direct",
+            situationSummary: "ok",
+            recommendedAction: "reply",
+            requiresEscalation: false,
+            missingInformation: [],
+            extra: true,
+          }),
+          tokensUsed: 12,
+          modelUsed: "mock",
+        };
+      },
+    },
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+
+  const result = await pipeline.execute(
+    makeContract({ id: "serena.risk.review", promptId: "serena.risk.review.v1" }),
+    { input: "test" }
+  );
+
+  assert.equal(result.status, "failed");
+  if (result.status === "failed") {
+    assert.ok(result.error.message.includes("Unexpected field: extra"));
+  }
+});
+
+test("audit keeps systemPrompt, developerPrompt and userPrompt on success", async () => {
+  const audit = new InMemoryAiInvocationAudit();
+  const pipeline = new ExecutionPipeline({
+    provider: new MockLlmProvider(),
+    audit,
+    registry: makeRegistry(),
+    contextBuilder: makeContextBuilder(),
+  });
+
+  const result = await pipeline.execute(makeContract(), { input: "Hello" });
+
+  assert.equal(result.status, "success");
+  const [record] = audit.getRecords();
+  assert.ok(record !== undefined);
+  assert.ok(record.systemPrompt !== undefined);
+  assert.ok(record.developerPrompt !== undefined);
+  assert.ok(record.userPrompt.includes("Mensaje actual"));
 });
 
 test("validation failure audits success=false with provider output", async () => {

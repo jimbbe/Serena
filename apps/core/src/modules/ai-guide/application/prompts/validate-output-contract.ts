@@ -46,6 +46,15 @@ function validateJson(
     if (err) return { ok: false, message: err };
   }
 
+  if (contract.strict) {
+    const allowedFields = new Set(contract.fields.map((field) => field.name));
+    for (const key of Object.keys(obj)) {
+      if (!allowedFields.has(key)) {
+        return { ok: false, message: `Unexpected field: ${key}` };
+      }
+    }
+  }
+
   return { ok: true, parsed };
 }
 

@@ -17,10 +17,6 @@ export type ContextData = {
 
 /**
  * Assembles the user prompt string from explicit ContextPolicy flags.
- *
- * Phase 1: template interpolation only. Future deps (ConversationStore,
- * ContactDirectory) are accepted as optional constructor params but
- * not yet wired into the build logic.
  */
 export class ContextBuilder {
   /**
@@ -44,7 +40,7 @@ export class ContextBuilder {
       sections.push(`Identidad: ${data.resolvedIdentity}`);
     }
 
-    // Actor context (role, channel, permissions — prepared for future growth)
+    // Actor context (only the fields actually provided by the pipeline)
     if (policy.includeActorContext && data.actorContext) {
       sections.push(`Contexto del actor: ${data.actorContext}`);
     }
@@ -65,10 +61,8 @@ export class ContextBuilder {
       }
     }
 
-    // Full conversation (Phase 1: always false, but structurally supported)
     if (policy.includeFullConversation) {
-      // Reserved for Phase 2+ — would include full history from ConversationStore
-      sections.push("[Full conversation history not yet implemented]");
+      throw new Error("ContextPolicy includeFullConversation is not supported yet");
     }
 
     // Known contacts

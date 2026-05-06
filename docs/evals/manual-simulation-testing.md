@@ -18,6 +18,20 @@ Esta guía deja a Serena lista para pruebas manuales locales usando:
 cp .env.simulation.example .env
 ```
 
+## Windows PowerShell
+
+Para copiar el env de simulación:
+
+```powershell
+Copy-Item .env.simulation.example .env
+```
+
+Para levantar Serena:
+
+```powershell
+npm run start:simulation
+```
+
 2. Levantá Serena:
 
 ```bash
@@ -34,6 +48,12 @@ AI_PROVIDER=mock
 HOST=127.0.0.1
 PORT=3000
 ```
+
+### PORT vs CORE_PORT
+
+- `npm run start:simulation` usa `PORT`.
+- `CORE_PORT` queda reservado para Docker Compose o wiring de contenedores cuando corresponda.
+- Para esta guía manual local, la variable que tenés que mirar es `PORT`.
 
 Después de copiar a `.env`, corré:
 

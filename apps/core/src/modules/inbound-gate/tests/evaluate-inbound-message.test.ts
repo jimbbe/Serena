@@ -70,6 +70,17 @@ test("known sender + urgent signal routes to needs_mediation with urgent reason"
   assert.deepEqual(decision.metadata.matchedSignals, ["urgente", "ayuda"]);
 });
 
+test("known sender + fall and immobility signal routes to risk review", async () => {
+  const useCase = new EvaluateInboundMessage({ contactDirectory: new InMemoryContactDirectory(["maria"]) });
+
+  const decision = await useCase.execute({ senderId: "maria", text: "Me caí y no puedo levantarme" });
+
+  assert.equal(decision.status, "needs_mediation");
+  assert.equal(decision.reason, "urgent_or_risk_content");
+  assert.equal(decision.metadata.precedence, "urgent_or_risk_over_mediation");
+  assert.deepEqual(decision.metadata.matchedSignals, ["me caí", "no puedo levantarme"]);
+});
+
 test("known sender + mediation and risk prefers urgent reason", async () => {
   const useCase = new EvaluateInboundMessage({ contactDirectory: new InMemoryContactDirectory(["maria"]) });
 
@@ -86,7 +97,7 @@ test("metadata includes traceability fields", async () => {
 
   const decision = await useCase.execute({ senderId: "maria", text: "hola" });
 
-  assert.equal(decision.metadata.policyVersion, "t07-v1");
+  assert.equal(decision.metadata.policyVersion, "t08-v1");
   assert.deepEqual(decision.metadata.matchedSignals, []);
   assert.equal(typeof decision.metadata.precedence, "string");
 });
@@ -103,6 +114,6 @@ test("audit adapter stores decisions and marks metadata audited", async () => {
   assert.equal(decision.metadata.audited, true);
   assert.equal(audit.getAll().length, 1);
   assert.equal(audit.getAll()[0]?.decision.status, "allowed");
-  assert.equal(audit.getAll()[0]?.decision.metadata.policyVersion, "t07-v1");
+  assert.equal(audit.getAll()[0]?.decision.metadata.policyVersion, "t08-v1");
   assert.equal(audit.getAll()[0]?.decision.metadata.precedence, "conversation_default");
 });

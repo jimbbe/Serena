@@ -58,6 +58,18 @@ test("urgent or risk content routes to risk_review profile", async () => {
   }
 });
 
+test("fall and immobility content routes to risk_review profile", async () => {
+  const useCase = new ProcessInboundMessage({ contactDirectory: new InMemoryContactDirectory(["maria"]) });
+
+  const result = await useCase.execute({ senderId: "maria", text: "Me caí y no puedo levantarme" });
+
+  assert.equal(result.route.nextStep, "llm_profile_required");
+  if (result.route.nextStep === "llm_profile_required") {
+    assert.equal(result.route.profileId, "risk_review");
+    assert.equal(result.route.reason, "urgent_or_risk_content");
+  }
+});
+
 test("mediation plus risk resolves to risk_review profile", async () => {
   const useCase = new ProcessInboundMessage({ contactDirectory: new InMemoryContactDirectory(["maria"]) });
 
@@ -88,7 +100,7 @@ test("route context preserves original message and decision trace fields", async
     assert.equal(result.route.context.receivedAt, "2026-05-01T10:11:12.000Z");
     assert.equal(result.route.context.decisionStatus, "allowed");
     assert.equal(result.route.context.decisionReason, "known_sender_conversational");
-    assert.equal(result.route.context.policyVersion, "t07-v1");
+    assert.equal(result.route.context.policyVersion, "t08-v1");
     assert.deepEqual(result.route.context.matchedSignals, []);
     assert.equal(result.route.context.precedence, "conversation_default");
   }

@@ -56,6 +56,14 @@ export class MockLlmProvider implements LlmProvider {
         "serena.conversation.reply.v1",
         "Entendido. ¿Hay algo más en lo que pueda ayudarte?",
       ],
+      [
+        "serena.inbound.classify_intent.v1",
+        JSON.stringify({
+          intent: "conversation",
+          confidence: 0.9,
+          reason: "Mensaje casual sin señales de mediación ni riesgo.",
+        }),
+      ],
     ];
 
     for (const [id, content] of defaults) {

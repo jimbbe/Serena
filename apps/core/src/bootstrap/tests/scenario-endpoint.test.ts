@@ -533,11 +533,14 @@ describe("POST /dev/simulate/scenario", () => {
     assert.equal(result.summary.mediationEvents, 1);
     assert.equal(result.summary.successfulSteps, 3);
 
-    // The mediation step should have the right profile
+    // The mediation step should have the right decision
     const mediationStep = result.steps[1]!;
     assert.ok(mediationStep.result !== null);
     assert.equal(mediationStep.result.inboundDecision.status, "needs_mediation");
     assert.equal(mediationStep.result.inboundDecision.reason, "third_party_mediation_request");
+    // NOTE: With T31 semantic classifier, the classifier returns "conversation"
+    // by default. However, deterministic mediation is now sticky — it cannot be
+    // downgraded to conversation by the classifier.
     assert.equal(mediationStep.result.profileId, "mediation_understanding");
   });
 
@@ -545,12 +548,12 @@ describe("POST /dev/simulate/scenario", () => {
   // Risk scenario
   // =========================================================================
 
-  it("risk scenario — step with 'necesito ayuda urgente' triggers risk_review", async () => {
+  it("risk scenario — step with hard signal triggers risk_review", async () => {
     const { status, body } = await request("POST", "/dev/simulate/scenario", port, scenarioPayload({
       scenarioId: "risk-test",
       steps: [
         { text: "hola" },
-        { text: "necesito ayuda urgente" },
+        { text: "me caí y no puedo levantarme" },
         { text: "gracias" },
       ],
     }));
@@ -609,7 +612,7 @@ describe("POST /dev/simulate/scenario", () => {
       steps: [
         { text: "hola Serena" },
         { text: "avisale a Carlos que voy a llegar 15 minutos tarde" },
-        { text: "necesito ayuda urgente" },
+        { text: "me caí y no puedo levantarme" },
         { text: "gracias" },
       ],
     }));

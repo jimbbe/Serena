@@ -369,8 +369,10 @@ describe("POST /dev/simulate/inbound-message", () => {
 
   it("mediation message returns mediation_understanding profile", async () => {
     // NOTE: With T31 semantic classifier, the classifier returns "conversation"
-    // by default via MockLlmProvider. The fusion policy overrides the deterministic
-    // mediation route to conversation. This test verifies the pipeline executes.
+    // by default via MockLlmProvider. However, the fusion policy now makes
+    // deterministic mediation_understanding sticky — it cannot be downgraded
+    // to conversation by the classifier. This test verifies that sticky
+    // mediation protection works correctly.
     const { status, body } = await request("POST", "/dev/simulate/inbound-message", port, {
       channel: "whatsapp",
       externalSenderId: MARIA_WHATSAPP,
@@ -384,9 +386,10 @@ describe("POST /dev/simulate/inbound-message", () => {
     assert.equal(decision.status, "needs_mediation");
     assert.equal(decision.reason, "third_party_mediation_request");
 
-    // profileId is fused result: classifier says "conversation" → conversation
-    assert.equal(obj.profileId, "conversation");
-    assert.equal(obj.useCaseId, "serena.conversation.reply");
+    // profileId is fused result: deterministic mediation is sticky,
+    // classifier says "conversation" but mediation_understanding wins
+    assert.equal(obj.profileId, "mediation_understanding");
+    assert.equal(obj.useCaseId, "serena.mediation.understand_request");
 
     const guideResult = obj.guideResult as Record<string, unknown> | undefined;
     assert.ok(guideResult !== undefined);

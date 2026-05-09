@@ -799,9 +799,24 @@ test("applyFusionPolicy: AI clarification overrides deterministic conversation",
   assert.equal(result, "clarification");
 });
 
-test("applyFusionPolicy: AI conversation overrides deterministic mediation", () => {
+test("applyFusionPolicy: AI conversation does NOT override deterministic mediation (sticky mediation)", () => {
   const result = applyFusionPolicy("mediation_understanding", "conversation", 0.9);
-  assert.equal(result, "conversation");
+  assert.equal(result, "mediation_understanding");
+});
+
+test("applyFusionPolicy: deterministic mediation with AI conversation + mediation signals stays mediation", () => {
+  const result = applyFusionPolicy("mediation_understanding", "conversation", 0.9, ["avisale"]);
+  assert.equal(result, "mediation_understanding");
+});
+
+test("applyFusionPolicy: deterministic mediation with AI clarification + mediation signals stays mediation", () => {
+  const result = applyFusionPolicy("mediation_understanding", "clarification", 0.5, ["avisale"]);
+  assert.equal(result, "mediation_understanding");
+});
+
+test("applyFusionPolicy: deterministic mediation with AI risk + mediation signals elevates to risk", () => {
+  const result = applyFusionPolicy("mediation_understanding", "risk_review", 0.8, ["avisale"]);
+  assert.equal(result, "risk_review");
 });
 
 test("applyFusionPolicy: AI conversation overrides deterministic clarification", () => {

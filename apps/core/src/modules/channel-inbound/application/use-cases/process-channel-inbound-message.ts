@@ -343,11 +343,12 @@ export class ProcessChannelInboundMessage {
  * Priority order:
  * 1. Deterministic risk with HARD signal → risk_review (non-negotiable safety)
  * 2. Deterministic risk with SOFT-only signals → fall through to AI intent
- * 3. AI says risk → risk_review
- * 4. AI says mediation → mediation_understanding
- * 5. AI says clarification → clarification
- * 6. AI says conversation → conversation
- * 7. Unknown AI intent → fallback deterministic
+ * 3. AI says risk → risk_review (can elevate any route)
+ * 4. Deterministic mediation → mediation_understanding (sticky; cannot be downgraded)
+ * 5. AI says mediation → mediation_understanding
+ * 6. AI says clarification → clarification
+ * 7. AI says conversation → conversation
+ * 8. Unknown AI intent → fallback deterministic
  */
 export function applyFusionPolicy(
   deterministicProfile: LlmProfileId,
@@ -363,18 +364,21 @@ export function applyFusionPolicy(
   // 2. Deterministic risk with SOFT-only signals → let AI decide
   // (falls through to AI intent evaluation below)
 
-  // 3. AI says risk → risk_review
+  // 3. AI says risk → risk_review (can elevate any route, including mediation)
   if (aiIntent === "risk_review") return "risk_review";
 
-  // 4. AI says mediation → mediation_understanding
+  // 4. Deterministic mediation → sticky, cannot be downgraded to conversation or clarification
+  if (deterministicProfile === "mediation_understanding") return "mediation_understanding";
+
+  // 5. AI says mediation → mediation_understanding
   if (aiIntent === "mediation_understanding") return "mediation_understanding";
 
-  // 5. AI says clarification → clarification
+  // 6. AI says clarification → clarification
   if (aiIntent === "clarification") return "clarification";
 
-  // 6. AI says conversation → conversation
+  // 7. AI says conversation → conversation
   if (aiIntent === "conversation") return "conversation";
 
-  // 7. Unknown AI intent → fallback deterministic
+  // 8. Unknown AI intent → fallback deterministic
   return deterministicProfile;
 }

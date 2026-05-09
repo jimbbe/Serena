@@ -97,7 +97,7 @@ test("metadata includes traceability fields", async () => {
 
   const decision = await useCase.execute({ senderId: "maria", text: "hola" });
 
-  assert.equal(decision.metadata.policyVersion, "t07-v1");
+  assert.equal(decision.metadata.policyVersion, "t08-v1");
   assert.deepEqual(decision.metadata.matchedSignals, []);
   assert.equal(typeof decision.metadata.precedence, "string");
 });
@@ -114,6 +114,6 @@ test("audit adapter stores decisions and marks metadata audited", async () => {
   assert.equal(decision.metadata.audited, true);
   assert.equal(audit.getAll().length, 1);
   assert.equal(audit.getAll()[0]?.decision.status, "allowed");
-  assert.equal(audit.getAll()[0]?.decision.metadata.policyVersion, "t07-v1");
+  assert.equal(audit.getAll()[0]?.decision.metadata.policyVersion, "t08-v1");
   assert.equal(audit.getAll()[0]?.decision.metadata.precedence, "conversation_default");
 });

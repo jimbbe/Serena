@@ -30,6 +30,7 @@ import type { AiGuideService } from "../../../ai-guide/application/use-cases/ai-
 import type { ExternalIdentityResolver } from "../../../inbound-gate/application/ports/external-identity-resolver.ts";
 import type { ConversationStore } from "../../../conversation-store/port/conversation-store.ts";
 import type { ContactDirectory } from "../../../contact-directory/application/ports/contact-directory.ts";
+import { hasHardRiskSignal } from "../../../inbound-gate/domain/risk-signals.ts";
 
 // ---------------------------------------------------------------------------
 // Dependencies
@@ -219,7 +220,8 @@ export class ProcessChannelInboundMessage {
         profileId = applyFusionPolicy(
           profileId,
           parsed.intent,
-          typeof parsed.confidence === "number" ? parsed.confidence : 0
+          typeof parsed.confidence === "number" ? parsed.confidence : 0,
+          decision.metadata.matchedSignals,
         );
       }
       // If classifier fails → profileId stays deterministic
@@ -339,33 +341,40 @@ export class ProcessChannelInboundMessage {
  * Fuses the deterministic gate profile with the AI classifier intent.
  *
  * Priority order:
- * 1. Deterministic risk always wins — no negotiation
- * 2. AI says risk → risk_review
- * 3. AI says mediation → mediation_understanding
- * 4. AI says clarification → clarification
- * 5. AI says conversation → conversation
- * 6. Unknown AI intent → fallback deterministic
+ * 1. Deterministic risk with HARD signal → risk_review (non-negotiable safety)
+ * 2. Deterministic risk with SOFT-only signals → fall through to AI intent
+ * 3. AI says risk → risk_review
+ * 4. AI says mediation → mediation_understanding
+ * 5. AI says clarification → clarification
+ * 6. AI says conversation → conversation
+ * 7. Unknown AI intent → fallback deterministic
  */
 export function applyFusionPolicy(
   deterministicProfile: LlmProfileId,
   aiIntent: string,
-  _aiConfidence: number
+  _aiConfidence: number,
+  matchedSignals: readonly string[] = []
 ): LlmProfileId {
-  // 1. Deterministic risk always wins — no negotiation
-  if (deterministicProfile === "risk_review") return "risk_review";
+  // 1. Deterministic risk with HARD signal → non-negotiable safety
+  if (deterministicProfile === "risk_review" && hasHardRiskSignal(matchedSignals)) {
+    return "risk_review";
+  }
 
-  // 2. AI says risk → risk_review
+  // 2. Deterministic risk with SOFT-only signals → let AI decide
+  // (falls through to AI intent evaluation below)
+
+  // 3. AI says risk → risk_review
   if (aiIntent === "risk_review") return "risk_review";
 
-  // 3. AI says mediation → mediation_understanding
+  // 4. AI says mediation → mediation_understanding
   if (aiIntent === "mediation_understanding") return "mediation_understanding";
 
-  // 4. AI says clarification → clarification
+  // 5. AI says clarification → clarification
   if (aiIntent === "clarification") return "clarification";
 
-  // 5. AI says conversation → conversation
+  // 6. AI says conversation → conversation
   if (aiIntent === "conversation") return "conversation";
 
-  // 6. Unknown AI intent → fallback deterministic
+  // 7. Unknown AI intent → fallback deterministic
   return deterministicProfile;
 }

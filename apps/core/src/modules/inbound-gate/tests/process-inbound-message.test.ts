@@ -100,7 +100,7 @@ test("route context preserves original message and decision trace fields", async
     assert.equal(result.route.context.receivedAt, "2026-05-01T10:11:12.000Z");
     assert.equal(result.route.context.decisionStatus, "allowed");
     assert.equal(result.route.context.decisionReason, "known_sender_conversational");
-    assert.equal(result.route.context.policyVersion, "t07-v1");
+    assert.equal(result.route.context.policyVersion, "t08-v1");
     assert.deepEqual(result.route.context.matchedSignals, []);
     assert.equal(result.route.context.precedence, "conversation_default");
   }

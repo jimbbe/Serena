@@ -402,11 +402,11 @@ describe("POST /dev/simulate/inbound-message", () => {
   // Valid payloads — risk content
   // =========================================================================
 
-  it("risk message returns risk_review profile", async () => {
+  it("risk message with HARD signal returns risk_review profile", async () => {
     const { status, body } = await request("POST", "/dev/simulate/inbound-message", port, {
       channel: "whatsapp",
       externalSenderId: MARIA_WHATSAPP,
-      text: "necesito ayuda urgente",
+      text: "me caí y no puedo levantarme",
     });
 
     assert.equal(status, 200);

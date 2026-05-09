@@ -547,12 +547,12 @@ describe("POST /dev/simulate/scenario", () => {
   // Risk scenario
   // =========================================================================
 
-  it("risk scenario — step with 'necesito ayuda urgente' triggers risk_review", async () => {
+  it("risk scenario — step with hard signal triggers risk_review", async () => {
     const { status, body } = await request("POST", "/dev/simulate/scenario", port, scenarioPayload({
       scenarioId: "risk-test",
       steps: [
         { text: "hola" },
-        { text: "necesito ayuda urgente" },
+        { text: "me caí y no puedo levantarme" },
         { text: "gracias" },
       ],
     }));
@@ -611,7 +611,7 @@ describe("POST /dev/simulate/scenario", () => {
       steps: [
         { text: "hola Serena" },
         { text: "avisale a Carlos que voy a llegar 15 minutos tarde" },
-        { text: "necesito ayuda urgente" },
+        { text: "me caí y no puedo levantarme" },
         { text: "gracias" },
       ],
     }));

@@ -71,8 +71,8 @@ Revert `applyFusionPolicy` to its current behavior (line 355: `if (deterministic
 
 ## Success Criteria
 
-- [ ] `hasHardRiskSignal(["me caí"])` returns `true`; `hasHardRiskSignal(["urgente"])` returns `false`
-- [ ] Deterministic `risk_review` with hard signal → always returns `risk_review`
-- [ ] Deterministic `risk_review` with soft-only signal + AI says `conversation` → returns `conversation`
-- [ ] All existing tests pass (updated for soft-signal override)
-- [ ] Policy version is `t08-v1`
+- [x] `hasHardRiskSignal(["me caí"])` returns `true`; `hasHardRiskSignal(["urgente"])` returns `false`
+- [x] Deterministic `risk_review` with hard signal → always returns `risk_review`
+- [x] Deterministic `risk_review` with soft-only signal + AI says `conversation` → returns `conversation`
+- [x] All existing tests pass (updated for soft-signal override) — 612/612 passing
+- [x] Policy version is `t08-v1`

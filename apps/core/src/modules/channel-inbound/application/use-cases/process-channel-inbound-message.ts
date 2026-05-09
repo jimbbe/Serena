@@ -21,6 +21,7 @@ import type { ResolvedInboundActor } from "../results/resolved-inbound-actor.ts"
 import type { GuideUseCaseId } from "../../../ai-guide/domain/guide-use-case-id.ts";
 import type { GuideResult } from "../../../ai-guide/domain/guide-result.ts";
 import type { ConversationMessage } from "../../../conversation-store/domain/conversation-message.ts";
+import type { InboundDecision } from "../../../inbound-gate/domain/inbound-decision.ts";
 
 import { profileToUseCaseId } from "../../../inbound-gate/application/mappers/profile-to-usecase.ts";
 import type { LlmProfileId } from "../../../inbound-gate/domain/llm-profile.ts";
@@ -30,6 +31,9 @@ import type { AiGuideService } from "../../../ai-guide/application/use-cases/ai-
 import type { ExternalIdentityResolver } from "../../../inbound-gate/application/ports/external-identity-resolver.ts";
 import type { ConversationStore } from "../../../conversation-store/port/conversation-store.ts";
 import type { ContactDirectory } from "../../../contact-directory/application/ports/contact-directory.ts";
+import type { MediationFlowStore } from "../../../mediation-flow/port/mediation-flow-store.ts";
+import type { MediationFlowState, PendingAction, MissingMediationField } from "../../../mediation-flow/domain/mediation-flow-state.ts";
+import { resolveConfirmationInput } from "../../../mediation-flow/application/resolve-confirmation-input.ts";
 import { hasHardRiskSignal } from "../../../inbound-gate/domain/risk-signals.ts";
 
 // ---------------------------------------------------------------------------
@@ -50,6 +54,8 @@ export type ProcessChannelInboundMessageDependencies = {
   generateTraceId?: () => string;
   /** Optional — when provided, known contacts are fetched and passed to AI guide for mediation routes. */
   contactDirectory?: ContactDirectory;
+  /** T32 — Optional mediation flow store. When undefined, falls back to current no-flow behavior. */
+  mediationFlowStore?: MediationFlowStore;
 };
 
 // ---------------------------------------------------------------------------
@@ -63,6 +69,7 @@ export class ProcessChannelInboundMessage {
   private readonly conversationStore: ConversationStore;
   private readonly generateTraceId: () => string;
   private readonly contactDirectory: ContactDirectory | undefined;
+  private readonly mediationFlowStore: MediationFlowStore | undefined;
 
   constructor(deps: ProcessChannelInboundMessageDependencies) {
     this.processInboundMessage = deps.processInboundMessage;
@@ -71,6 +78,7 @@ export class ProcessChannelInboundMessage {
     this.conversationStore = deps.conversationStore;
     this.generateTraceId = deps.generateTraceId ?? (() => randomUUID());
     this.contactDirectory = deps.contactDirectory;
+    this.mediationFlowStore = deps.mediationFlowStore;
   }
 
   async execute(cmd: InboundMessageCommand): Promise<ChannelInboundResult> {
@@ -166,6 +174,43 @@ export class ProcessChannelInboundMessage {
         warnings,
         errors,
       };
+    }
+
+    // === T32: Flow check [A] — before gate evaluation ===
+    // Only applies when MediationFlowStore is provided and conversation exists
+    if (this.mediationFlowStore !== undefined && conversationId !== undefined && identity.status === "resolved") {
+      const activeFlow = await this.mediationFlowStore.findActiveByConversation(conversationId);
+      if (activeFlow !== undefined) {
+        // Check for risk signal — ALWAYS pauses flow
+        const { decision: gateDecision } = await this.processInboundMessage.execute(this.adaptInput(cmd, identity));
+        if (gateDecision.reason === "urgent_or_risk_content" && hasHardRiskSignal(gateDecision.metadata.matchedSignals)) {
+          await this.mediationFlowStore.pauseFlow(conversationId);
+          warnings.push("Risk signal detected — mediation flow paused");
+          return this.buildFlowResult({
+            traceId, channel: cmd.channel, identity, warnings, errors, conversationId,
+            flowState: { status: "paused", pendingAction: null, missingFields: activeFlow.missingFields, draftRecipientHint: activeFlow.draft?.recipientHint ?? null, draftMessageDraft: activeFlow.draft?.messageDraft ?? null, version: activeFlow.draft?.version ?? 0 },
+            promptText: "Detectamos una posible situación de riesgo. Tu pedido de mediación queda en pausa.",
+          });
+        }
+
+        // Active confirming flow → resolve via keyword resolver
+        if (activeFlow.status === "confirming") {
+          const resolution = resolveConfirmationInput(cmd.text);
+          return await this.handleConfirmingFlow({
+            traceId, channel: cmd.channel, identity, warnings, errors, conversationId,
+            flow: activeFlow, resolution, personId: identity.personId ?? cmd.externalSenderId,
+            userText: cmd.text,
+          });
+        }
+
+        // Active clarifying flow → route to AI guide with flow context
+        if (activeFlow.status === "clarifying") {
+          return await this.handleClarifyingFlow({
+            traceId, channel: cmd.channel, identity, warnings, errors, conversationId,
+            flow: activeFlow, cmd, gateDecision: gateDecision, personId: identity.personId ?? cmd.externalSenderId,
+          });
+        }
+      }
     }
 
     // 3. Adapt InboundMessageCommand → ProcessInboundMessageInput
@@ -271,6 +316,61 @@ export class ProcessChannelInboundMessage {
     // operations — not conversational replies that should appear in the message
     // history.
 
+    // === T32: Flow start [B] — after AI guide execution ===
+    // Parse guideResult for mediation output to start a new flow
+    if (this.mediationFlowStore !== undefined && conversationId !== undefined && guideResult !== undefined && identity.status === "resolved") {
+      const mediationOutput = parseMediationGuideOutput(guideResult);
+      if (mediationOutput !== undefined) {
+        const now = new Date();
+        const draftId = randomUUID();
+        const missingFields = mediationOutput.missingFields;
+        const status: MediationFlowState["status"] = missingFields.length === 0 || (missingFields.length === 1 && missingFields[0] === "confirmation") ? "confirming" : "clarifying";
+        const pendingAction = derivePendingAction(missingFields);
+
+        const draft: MediationFlowState["draft"] = {
+          id: draftId,
+          conversationId,
+          requesterPersonId: identity.personId ?? cmd.externalSenderId,
+          recipientHint: mediationOutput.recipientHint,
+          messageDraft: mediationOutput.messageDraft,
+          sourceMessageId: randomUUID(),
+          sourceText: cmd.text,
+          version: 1,
+          status: "draft",
+        };
+
+        const flowState: MediationFlowState = {
+          conversationId,
+          personId: identity.personId ?? cmd.externalSenderId,
+          status,
+          draft,
+          pendingAction,
+          missingFields,
+          lastQuestion: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        await this.mediationFlowStore.startFlow(flowState);
+
+        const promptText = buildPromptText(flowState);
+        return this.buildFlowResult({
+          traceId, channel: cmd.channel, identity, warnings, errors, conversationId,
+          profileId, useCaseId, guideResult,
+          ...(guideError !== undefined ? { guideError } : {}),
+          flowState: {
+            status: flowState.status,
+            pendingAction: flowState.pendingAction,
+            missingFields: flowState.missingFields,
+            draftRecipientHint: draft.recipientHint,
+            draftMessageDraft: draft.messageDraft,
+            version: draft.version,
+          },
+          promptText,
+        });
+      }
+    }
+
     return {
       traceId,
       channel: cmd.channel,
@@ -331,6 +431,293 @@ export class ProcessChannelInboundMessage {
 
     return input;
   }
+
+  // -----------------------------------------------------------------------
+  // T32 — Flow routing helpers
+  // -----------------------------------------------------------------------
+
+  /** Build a ChannelInboundResult with optional flow state fields. */
+  private buildFlowResult(args: {
+    traceId: string;
+    channel: InboundMessageCommand["channel"];
+    identity: ResolvedInboundActor;
+    warnings: string[];
+    errors: string[];
+    conversationId?: string;
+    profileId?: LlmProfileId;
+    useCaseId?: GuideUseCaseId;
+    guideResult?: GuideResult | undefined;
+    guideError?: { message: string; code?: string };
+    flowState?: ChannelInboundResult["flowState"];
+    promptText?: string;
+    /** For confirming flow: the inbound decision from gate evaluation. */
+    inboundDecision?: InboundDecision;
+  }): ChannelInboundResult {
+    const result: ChannelInboundResult = {
+      traceId: args.traceId,
+      channel: args.channel,
+      identity: args.identity,
+      inboundDecision: args.inboundDecision ?? {
+        status: "allowed",
+        reason: "known_sender_conversational",
+        metadata: {
+          normalizedSenderId: args.identity.externalSenderId,
+          senderKnown: true,
+          receivedAt: new Date().toISOString(),
+          audited: false,
+          policyVersion: "flow-v1",
+          matchedSignals: [],
+          precedence: "conversation_default",
+        },
+      },
+      profileId: args.profileId,
+      useCaseId: args.useCaseId,
+      guideResult: args.guideResult,
+      ...(args.guideError !== undefined ? { guideError: args.guideError } : {}),
+      ...(args.conversationId !== undefined ? {
+        conversation: {
+          id: args.conversationId,
+          status: "open",
+          messageCount: 0,
+        },
+      } : {}),
+      warnings: args.warnings,
+      errors: args.errors,
+    };
+    if (args.flowState !== undefined) result.flowState = args.flowState;
+    if (args.promptText !== undefined) result.promptText = args.promptText;
+    return result;
+  }
+
+  /** Handle an active confirming flow — resolve user input via keyword resolver. */
+  private async handleConfirmingFlow(args: {
+    traceId: string;
+    channel: InboundMessageCommand["channel"];
+    identity: ResolvedInboundActor;
+    warnings: string[];
+    errors: string[];
+    conversationId: string;
+    flow: MediationFlowState;
+    resolution: ReturnType<typeof resolveConfirmationInput>;
+    personId: string;
+    userText: string;
+  }): Promise<ChannelInboundResult> {
+    const { flow, resolution, userText } = args;
+
+    if (resolution.action === "confirm") {
+      // Confirm the mediation
+      const updatedDraft = flow.draft !== null ? { ...flow.draft, status: "confirmed" as const } : null;
+      const resolvedFlow: MediationFlowState = {
+        ...flow,
+        status: "resolved",
+        draft: updatedDraft,
+        pendingAction: null,
+        missingFields: [],
+        updatedAt: new Date(),
+      };
+      await this.mediationFlowStore!.updateFlow(resolvedFlow);
+
+      return this.buildFlowResult({
+        ...args,
+        flowState: {
+          status: "resolved",
+          pendingAction: null,
+          missingFields: [],
+          draftRecipientHint: flow.draft?.recipientHint ?? null,
+          draftMessageDraft: flow.draft?.messageDraft ?? null,
+          version: flow.draft?.version ?? 0,
+        },
+        promptText: "Entendido. Tu mensaje será enviado a " + (flow.draft?.recipientHint ?? "tu contacto") + ".",
+      });
+    }
+
+    if (resolution.action === "cancel") {
+      // Cancel the mediation
+      const updatedDraft = flow.draft !== null ? { ...flow.draft, status: "cancelled" as const } : null;
+      const cancelledFlow: MediationFlowState = {
+        ...flow,
+        status: "resolved",
+        draft: updatedDraft,
+        pendingAction: null,
+        missingFields: [],
+        updatedAt: new Date(),
+      };
+      await this.mediationFlowStore!.updateFlow(cancelledFlow);
+
+      return this.buildFlowResult({
+        ...args,
+        flowState: {
+          status: "resolved",
+          pendingAction: null,
+          missingFields: [],
+          draftRecipientHint: flow.draft?.recipientHint ?? null,
+          draftMessageDraft: flow.draft?.messageDraft ?? null,
+          version: flow.draft?.version ?? 0,
+        },
+        promptText: "Ok, no se enviará ningún mensaje.",
+      });
+    }
+
+    if (resolution.action === "edit") {
+      // Edit the draft — update message and re-request confirmation
+      const newVersion = (flow.draft?.version ?? 0) + 1;
+      const newMessage = extractEditMessage(
+        resolution.matchedKeyword ?? "",
+        userText,
+        flow.draft?.messageDraft ?? null,
+      );
+      const updatedDraft = flow.draft !== null
+        ? { ...flow.draft, messageDraft: newMessage, version: newVersion }
+        : null;
+      const editFlow: MediationFlowState = {
+        ...flow,
+        draft: updatedDraft,
+        pendingAction: "confirm_mediation",
+        missingFields: ["confirmation"],
+        updatedAt: new Date(),
+      };
+      const recipient = updatedDraft?.recipientHint ?? "tu contacto";
+      const message = newMessage ?? updatedDraft?.messageDraft ?? "el mensaje";
+      const promptText = newMessage !== flow.draft?.messageDraft
+        ? `Mensaje actualizado: "${message}". ¿Confirmás el envío a ${recipient}?`
+        : "Mensaje actualizado. ¿Confirmas el envío?";
+
+      await this.mediationFlowStore!.updateFlow(editFlow);
+
+      return this.buildFlowResult({
+        ...args,
+        flowState: {
+          status: "confirming",
+          pendingAction: "confirm_mediation",
+          missingFields: ["confirmation"],
+          draftRecipientHint: updatedDraft?.recipientHint ?? null,
+          draftMessageDraft: updatedDraft?.messageDraft ?? null,
+          version: newVersion,
+        },
+        promptText,
+      });
+    }
+
+    // Unknown — re-prompt for confirmation
+    return this.buildFlowResult({
+      ...args,
+      flowState: {
+        status: "confirming",
+        pendingAction: flow.pendingAction,
+        missingFields: flow.missingFields,
+        draftRecipientHint: flow.draft?.recipientHint ?? null,
+        draftMessageDraft: flow.draft?.messageDraft ?? null,
+        version: flow.draft?.version ?? 0,
+      },
+      promptText: "No estoy segura. ¿Confirmás el envío, querés cancelarlo, o preferís cambiar algo?",
+    });
+  }
+
+  /** Handle an active clarifying flow — route to AI guide with flow context. */
+  private async handleClarifyingFlow(args: {
+    traceId: string;
+    channel: InboundMessageCommand["channel"];
+    identity: ResolvedInboundActor;
+    warnings: string[];
+    errors: string[];
+    conversationId: string;
+    flow: MediationFlowState;
+    cmd: InboundMessageCommand;
+    gateDecision: InboundDecision;
+    personId: string;
+  }): Promise<ChannelInboundResult> {
+    const { flow, cmd } = args;
+
+    // Execute AI guide with clarification context
+    let guideResult: GuideResult | undefined;
+    let guideError: { message: string; code?: string } | undefined;
+
+    try {
+      guideResult = await this.aiGuideService.execute("serena.mediation.clarify", {
+        input: cmd.text,
+        actorRole: args.identity.role ?? "unknown",
+        resolvedIdentity: args.identity.displayName ?? args.identity.personId ?? cmd.externalSenderId,
+        channel: cmd.channel,
+        tenantId: cmd.tenantId ?? "demo",
+        personId: args.personId,
+        flowContext: JSON.stringify({
+          pendingAction: flow.pendingAction,
+          missingFields: flow.missingFields,
+          draftRecipientHint: flow.draft?.recipientHint,
+          draftMessageDraft: flow.draft?.messageDraft,
+        }),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      guideError = { message, code: "clarification_failed" };
+      args.errors.push(`Clarification AI guide failed: ${message}`);
+    }
+
+    // Parse clarification result for updated fields
+    if (guideResult !== undefined) {
+      const clarificationOutput = parseMediationGuideOutput(guideResult);
+      if (clarificationOutput !== undefined) {
+        const updatedDraft = flow.draft !== null
+          ? {
+              ...flow.draft,
+              recipientHint: clarificationOutput.recipientHint ?? flow.draft.recipientHint,
+              messageDraft: clarificationOutput.messageDraft ?? flow.draft.messageDraft,
+              version: (flow.draft.version ?? 0) + 1,
+            }
+          : null;
+
+        const remainingFields = clarificationOutput.missingFields;
+        const newStatus: MediationFlowState["status"] = remainingFields.length === 0 || (remainingFields.length === 1 && remainingFields[0] === "confirmation") ? "confirming" : "clarifying";
+        const newPendingAction = derivePendingAction(remainingFields);
+
+        const updatedFlow: MediationFlowState = {
+          ...flow,
+          draft: updatedDraft,
+          status: newStatus,
+          pendingAction: newPendingAction,
+          missingFields: remainingFields,
+          updatedAt: new Date(),
+        };
+        await this.mediationFlowStore!.updateFlow(updatedFlow);
+
+        const promptText = buildPromptText(updatedFlow);
+        return this.buildFlowResult({
+          ...args,
+          profileId: "mediation_understanding",
+          useCaseId: "serena.mediation.clarify",
+          guideResult,
+          ...(guideError !== undefined ? { guideError } : {}),
+          flowState: {
+            status: updatedFlow.status,
+            pendingAction: updatedFlow.pendingAction,
+            missingFields: updatedFlow.missingFields,
+            draftRecipientHint: updatedDraft?.recipientHint ?? null,
+            draftMessageDraft: updatedDraft?.messageDraft ?? null,
+            version: updatedDraft?.version ?? 0,
+          },
+          promptText,
+        });
+      }
+    }
+
+    // Fallback — keep flow as-is
+    return this.buildFlowResult({
+      ...args,
+      profileId: "mediation_understanding",
+      useCaseId: "serena.mediation.clarify",
+      guideResult,
+      ...(guideError !== undefined ? { guideError } : {}),
+      flowState: {
+        status: flow.status,
+        pendingAction: flow.pendingAction,
+        missingFields: flow.missingFields,
+        draftRecipientHint: flow.draft?.recipientHint ?? null,
+        draftMessageDraft: flow.draft?.messageDraft ?? null,
+        version: flow.draft?.version ?? 0,
+      },
+      promptText: buildPromptText(flow),
+    });
+  }
 }
 
 // -----------------------------------------------------------------------
@@ -381,4 +768,129 @@ export function applyFusionPolicy(
 
   // 8. Unknown AI intent → fallback deterministic
   return deterministicProfile;
+}
+
+// -----------------------------------------------------------------------
+// T32 — Pure helper functions for mediation flow
+// -----------------------------------------------------------------------
+
+/** Parsed mediation output from AI guide result. */
+type MediationOutput = {
+  missingFields: MissingMediationField[];
+  recipientHint: string | null;
+  messageDraft: string | null;
+};
+
+/**
+ * Parses the AI guide result output for mediation fields.
+ * Returns undefined if the output is not a mediation result.
+ */
+function parseMediationGuideOutput(guideResult: GuideResult): MediationOutput | undefined {
+  if (guideResult.status !== "success") return undefined;
+  if (typeof guideResult.output !== "string") return undefined;
+
+  try {
+    const parsed = JSON.parse(guideResult.output);
+    // Check for mediation-specific fields
+    if (parsed.missingFields === undefined && parsed.recipientHint === undefined && parsed.messageDraft === undefined) {
+      return undefined;
+    }
+
+    const missingFields: MissingMediationField[] = Array.isArray(parsed.missingFields)
+      ? parsed.missingFields.filter((f: string) => ["recipient", "message", "confirmation"].includes(f))
+      : [];
+
+    return {
+      missingFields,
+      recipientHint: typeof parsed.recipientHint === "string" ? parsed.recipientHint : null,
+      messageDraft: typeof parsed.messageDraft === "string" ? parsed.messageDraft : null,
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Derives the pending action from the list of missing fields.
+ */
+function derivePendingAction(missingFields: readonly MissingMediationField[]): PendingAction | null {
+  if (missingFields.length === 0) return null;
+  if (missingFields.length === 1) {
+    if (missingFields[0] === "recipient") return "clarify_recipient";
+    if (missingFields[0] === "message") return "clarify_message";
+    if (missingFields[0] === "confirmation") return "confirm_mediation";
+  }
+  if (missingFields.includes("recipient") && missingFields.includes("message")) return "clarify_both";
+  if (missingFields.includes("recipient")) return "clarify_recipient";
+  if (missingFields.includes("message")) return "clarify_message";
+  return "clarify_both";
+}
+
+/**
+ * Builds a prompt text for the user based on the current flow state.
+ */
+function buildPromptText(flow: MediationFlowState): string {
+  if (flow.status === "confirming") {
+    const recipient = flow.draft?.recipientHint ?? "tu contacto";
+    const message = flow.draft?.messageDraft ?? "el mensaje";
+    return `¿Confirmás enviar "${message}" a ${recipient}? Respondé "sí" para confirmar, "no" para cancelar, o pedí un cambio.`;
+  }
+  if (flow.status === "clarifying") {
+    if (flow.pendingAction === "clarify_recipient") return "¿A quién querés que le avise?";
+    if (flow.pendingAction === "clarify_message") return "¿Qué querés que le diga?";
+    if (flow.pendingAction === "clarify_both") return "¿A quién querés avisarle y qué querés decirle?";
+  }
+  return "¿En qué puedo ayudarte?";
+}
+
+/**
+ * Extracts the new message content from an edit request.
+ *
+ * Parses common Spanish patterns to find the new message text:
+ *   - "decile que X" / "dile que X" → X
+ *   - "poné que X" / "pone que X" → X
+ *   - "el mensaje X" / "el texto X" → X
+ *   - "cambiá X" / "editá X" → X (when X is not just "el mensaje" / "el texto")
+ *
+ * Returns the existing draft message if no new content can be extracted.
+ */
+function extractEditMessage(matchedKeyword: string, userText: string, existingDraft: string | null): string | null {
+  const normalized = userText.trim().toLowerCase();
+
+  // Try to extract message after "decile que" / "dile que"
+  const decileQueMatch = normalized.match(/(?:dec[íi]le|d[íi]le)\s+que\s+(.+)/i);
+  if (decileQueMatch && decileQueMatch[1] && decileQueMatch[1].trim().length > 0) {
+    return decileQueMatch[1].trim();
+  }
+
+  // Try "decile X" / "dile X" (without "que")
+  const decileMatch = normalized.match(/(?:dec[íi]le|d[íi]le)\s+(.+)/i);
+  if (decileMatch && decileMatch[1] && decileMatch[1].trim().length > 0) {
+    const extracted = decileMatch[1].trim();
+    // Avoid returning just "que" or very short fragments
+    if (extracted.length > 2) return extracted;
+  }
+
+  // Try "poné que X" / "pone que X"
+  const poneQueMatch = normalized.match(/pon[ée]\s+que\s+(.+)/i);
+  if (poneQueMatch && poneQueMatch[1] && poneQueMatch[1].trim().length > 0) {
+    return poneQueMatch[1].trim();
+  }
+
+  // Try "el mensaje X" / "el texto X" (when X is not empty)
+  const mensajeMatch = normalized.match(/(?:el\s+mensaj|el\s+text)[eo]?\s+(.+)/i);
+  if (mensajeMatch && mensajeMatch[1] && mensajeMatch[1].trim().length > 0) {
+    const extracted = mensajeMatch[1].trim();
+    // Avoid returning just punctuation or very short fragments
+    if (extracted.length > 2 && !/^[,.;:!?]+$/.test(extracted)) return extracted;
+  }
+
+  // Try "cambiá a X" / "editá a X" / "cambia por X"
+  const cambioMatch = normalized.match(/(?:cambi[áa]|edit[áa])\s+(?:a|por)\s+(.+)/i);
+  if (cambioMatch && cambioMatch[1] && cambioMatch[1].trim().length > 0) {
+    return cambioMatch[1].trim();
+  }
+
+  // No new content found — keep existing draft
+  return existingDraft;
 }

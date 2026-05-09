@@ -56,7 +56,7 @@ test("known sender + mediation signal routes to needs_mediation", async () => {
   assert.equal(decision.status, "needs_mediation");
   assert.equal(decision.reason, "third_party_mediation_request");
   assert.equal(decision.metadata.precedence, "mediation_over_conversation");
-  assert.deepEqual(decision.metadata.matchedSignals, ["avisale"]);
+  assert.deepEqual(decision.metadata.matchedSignals, ["avisale", "avisa"]);
 });
 
 test("known sender + urgent signal routes to needs_mediation with urgent reason", async () => {

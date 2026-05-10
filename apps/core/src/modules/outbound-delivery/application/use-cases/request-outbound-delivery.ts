@@ -6,19 +6,8 @@ import type { DeliveryResult } from "../../domain/delivery-result.ts";
 
 const DELIVERABLE_STATUS = "confirmed_pending_delivery" as const;
 
-const NON_DELIVERABLE_STATUSES = [
-  "needs_recipient_resolution",
-  "needs_recipient_disambiguation",
-  "cancelled",
-  "delivery_requested",
-  "delivered",
-  "failed",
-] as const;
-
 export type RequestOutboundDeliveryInput = {
   outboundDraftId: string;
-  outboundDraftStore: OutboundDraftStore;
-  deliveryPort: DeliveryPort;
 };
 
 export type RequestOutboundDeliveryOutput = {
@@ -36,10 +25,10 @@ export class RequestOutboundDelivery {
   }
 
   async execute(input: RequestOutboundDeliveryInput): Promise<RequestOutboundDeliveryOutput> {
-    const { outboundDraftId, outboundDraftStore, deliveryPort } = input;
+    const { outboundDraftId } = input;
 
     // 1. Find draft
-    const draft = await outboundDraftStore.findById(outboundDraftId);
+    const draft = await this.outboundDraftStore.findById(outboundDraftId);
     if (draft === undefined) {
       throw new Error(`Outbound draft not found: ${outboundDraftId}`);
     }
@@ -59,7 +48,7 @@ export class RequestOutboundDelivery {
 
     // 4. Mark as delivery_requested
     const now = new Date();
-    let currentDraft = await outboundDraftStore.markDeliveryRequested(outboundDraftId, now);
+    let currentDraft = await this.outboundDraftStore.markDeliveryRequested(outboundDraftId, now);
 
     // 5. Build request
     const request: PreparedDeliveryRequest = this.buildRequest(currentDraft, now);
@@ -67,11 +56,11 @@ export class RequestOutboundDelivery {
     // 6. Call delivery port
     let deliveryResult: DeliveryResult;
     try {
-      deliveryResult = await deliveryPort.sendPreparedMessage(request);
+      deliveryResult = await this.deliveryPort.sendPreparedMessage(request);
     } catch (err) {
       // 7. Port threw — mark as failed and return
       const message = err instanceof Error ? err.message : String(err);
-      currentDraft = await outboundDraftStore.markFailed(outboundDraftId, message, new Date());
+      currentDraft = await this.outboundDraftStore.markFailed(outboundDraftId, message, new Date());
       return {
         delivery: { status: "failed", failureReason: message },
         outboundDraft: currentDraft,
@@ -80,10 +69,10 @@ export class RequestOutboundDelivery {
 
     // 8. Update draft based on result
     if (deliveryResult.status === "delivered") {
-      currentDraft = await outboundDraftStore.markDelivered(outboundDraftId, new Date());
+      currentDraft = await this.outboundDraftStore.markDelivered(outboundDraftId, new Date());
     } else if (deliveryResult.status === "failed") {
       const reason = deliveryResult.failureReason ?? "delivery_failed";
-      currentDraft = await outboundDraftStore.markFailed(outboundDraftId, reason, new Date());
+      currentDraft = await this.outboundDraftStore.markFailed(outboundDraftId, reason, new Date());
     }
     // "accepted" → stays as delivery_requested (already set)
 

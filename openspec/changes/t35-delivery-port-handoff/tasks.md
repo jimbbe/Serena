@@ -26,5 +26,11 @@
 
 ## Validation
 
-- [x] T35.13 `npm run check` passes
-- [x] T35.14 `npm test` passes
+- [x] T35.13 `npm run check` passes (core typecheck clean)
+- [x] T35.14 `npm test` passes (794/794)
+
+## Design Fixes
+
+- [x] T35.15 Refactor `RequestOutboundDelivery.execute()` to use constructor dependencies only
+- [x] T35.16 Remove `as unknown as` casts from `simulation-handler.ts`
+- [x] T35.17 Create `verify-report.md`

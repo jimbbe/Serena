@@ -21,7 +21,6 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { InboundChannel, InboundMessageCommand } from "../modules/inbound-gate/domain/inbound-message-command.ts";
 import type { PipelineRequestHandler } from "./server.ts";
 import type { ProcessChannelInboundMessage } from "../modules/channel-inbound/application/use-cases/process-channel-inbound-message.ts";
-import type { OutboundDraftStore } from "../modules/outbound-draft/port/outbound-draft-store.ts";
 import type { RequestOutboundDelivery } from "../modules/outbound-delivery/application/use-cases/request-outbound-delivery.ts";
 
 // ---------------------------------------------------------------------------
@@ -159,14 +158,8 @@ function validateCommand(body: unknown):
 // Handler factory
 // ---------------------------------------------------------------------------
 
-export type SimulationHandlerDeps = {
-  outboundDraftStore?: OutboundDraftStore;
-  requestOutboundDelivery?: RequestOutboundDelivery;
-};
-
 export function createSimulationHandler(
   processChannelInboundMessage: ProcessChannelInboundMessage,
-  deliveryDeps?: SimulationHandlerDeps,
 ): PipelineRequestHandler {
   return async (req, res) => {
     // Method check — POST only
@@ -268,8 +261,6 @@ export function createOutboundDeliveryHandler(
     try {
       const result = await requestOutboundDelivery.execute({
         outboundDraftId: outboundDraftId.trim(),
-        outboundDraftStore: (requestOutboundDelivery as unknown as { outboundDraftStore: OutboundDraftStore }).outboundDraftStore,
-        deliveryPort: (requestOutboundDelivery as unknown as { deliveryPort: import("../modules/outbound-delivery/port/delivery-port.ts").DeliveryPort }).deliveryPort,
       });
       sendJson(res, 200, {
         delivery: result.delivery,

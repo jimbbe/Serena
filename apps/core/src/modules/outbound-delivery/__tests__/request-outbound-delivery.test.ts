@@ -99,7 +99,7 @@ test("confirmed draft with resolved recipient calls DeliveryPort and marks deliv
   const port = new FakeDeliveryPort();
   const useCase = new RequestOutboundDelivery({ outboundDraftStore: store, deliveryPort: port });
 
-  const result = await useCase.execute({ outboundDraftId: "od-1", outboundDraftStore: store, deliveryPort: port });
+  const result = await useCase.execute({ outboundDraftId: "od-1" });
 
   assert.equal(result.delivery.status, "delivered");
   assert.ok(result.delivery.providerMessageId?.startsWith("fake_msg_"));
@@ -117,7 +117,7 @@ test("draft needs_recipient_resolution does not call DeliveryPort", async () => 
   const useCase = new RequestOutboundDelivery({ outboundDraftStore: store, deliveryPort: port });
 
   await assert.rejects(
-    async () => useCase.execute({ outboundDraftId: "od-1", outboundDraftStore: store, deliveryPort: port }),
+    async () => useCase.execute({ outboundDraftId: "od-1" }),
     /cannot deliver/i,
   );
 
@@ -133,7 +133,7 @@ test("draft needs_recipient_disambiguation does not call DeliveryPort", async ()
   const useCase = new RequestOutboundDelivery({ outboundDraftStore: store, deliveryPort: port });
 
   await assert.rejects(
-    async () => useCase.execute({ outboundDraftId: "od-1", outboundDraftStore: store, deliveryPort: port }),
+    async () => useCase.execute({ outboundDraftId: "od-1" }),
     /cannot deliver/i,
   );
 
@@ -149,7 +149,7 @@ test("draft cancelled does not call DeliveryPort", async () => {
   const useCase = new RequestOutboundDelivery({ outboundDraftStore: store, deliveryPort: port });
 
   await assert.rejects(
-    async () => useCase.execute({ outboundDraftId: "od-1", outboundDraftStore: store, deliveryPort: port }),
+    async () => useCase.execute({ outboundDraftId: "od-1" }),
     /cannot deliver/i,
   );
 
@@ -165,7 +165,7 @@ test("draft already delivered does not call DeliveryPort again", async () => {
   const useCase = new RequestOutboundDelivery({ outboundDraftStore: store, deliveryPort: port });
 
   await assert.rejects(
-    async () => useCase.execute({ outboundDraftId: "od-1", outboundDraftStore: store, deliveryPort: port }),
+    async () => useCase.execute({ outboundDraftId: "od-1" }),
     /cannot deliver/i,
   );
 
@@ -183,7 +183,7 @@ test("missing recipientExternalId does not call DeliveryPort, returns validation
   const useCase = new RequestOutboundDelivery({ outboundDraftStore: store, deliveryPort: port });
 
   await assert.rejects(
-    async () => useCase.execute({ outboundDraftId: "od-1", outboundDraftStore: store, deliveryPort: port }),
+    async () => useCase.execute({ outboundDraftId: "od-1" }),
     /recipientExternalId/i,
   );
 
@@ -198,7 +198,7 @@ test("DeliveryPort returns failed marks draft as failed with failureReason", asy
   const port = new FakeDeliveryPort({ mode: "failure", failureReason: "test_failure" });
   const useCase = new RequestOutboundDelivery({ outboundDraftStore: store, deliveryPort: port });
 
-  const result = await useCase.execute({ outboundDraftId: "od-1", outboundDraftStore: store, deliveryPort: port });
+  const result = await useCase.execute({ outboundDraftId: "od-1" });
 
   assert.equal(result.delivery.status, "failed");
   assert.equal(result.delivery.failureReason, "test_failure");
@@ -223,7 +223,7 @@ test("DeliveryPort throws does not crash, marks draft as failed", async () => {
   const useCase = new RequestOutboundDelivery({ outboundDraftStore: store, deliveryPort: throwingPort });
 
   // Should NOT throw
-  const result = await useCase.execute({ outboundDraftId: "od-1", outboundDraftStore: store, deliveryPort: throwingPort });
+  const result = await useCase.execute({ outboundDraftId: "od-1" });
 
   assert.equal(result.delivery.status, "failed");
   assert.ok(result.delivery.failureReason?.includes("network crash"));
@@ -239,7 +239,7 @@ test("FakeDeliveryPort stores request with correct messageText and recipientExte
   const port = new FakeDeliveryPort();
   const useCase = new RequestOutboundDelivery({ outboundDraftStore: store, deliveryPort: port });
 
-  await useCase.execute({ outboundDraftId: "od-1", outboundDraftStore: store, deliveryPort: port });
+  await useCase.execute({ outboundDraftId: "od-1" });
 
   const stored = port.getSentRequests();
   assert.equal(stored.length, 1);
@@ -256,7 +256,7 @@ test("draft not found throws controlled error", async () => {
   const useCase = new RequestOutboundDelivery({ outboundDraftStore: store, deliveryPort: port });
 
   await assert.rejects(
-    async () => useCase.execute({ outboundDraftId: "od_nonexistent", outboundDraftStore: store, deliveryPort: port }),
+    async () => useCase.execute({ outboundDraftId: "od_nonexistent" }),
     /not found/i,
   );
 });
@@ -270,7 +270,7 @@ test("draft delivery_requested does not call DeliveryPort", async () => {
   const useCase = new RequestOutboundDelivery({ outboundDraftStore: store, deliveryPort: port });
 
   await assert.rejects(
-    async () => useCase.execute({ outboundDraftId: "od-1", outboundDraftStore: store, deliveryPort: port }),
+    async () => useCase.execute({ outboundDraftId: "od-1" }),
     /cannot deliver/i,
   );
 
@@ -286,7 +286,7 @@ test("draft failed does not call DeliveryPort", async () => {
   const useCase = new RequestOutboundDelivery({ outboundDraftStore: store, deliveryPort: port });
 
   await assert.rejects(
-    async () => useCase.execute({ outboundDraftId: "od-1", outboundDraftStore: store, deliveryPort: port }),
+    async () => useCase.execute({ outboundDraftId: "od-1" }),
     /cannot deliver/i,
   );
 

@@ -54,10 +54,7 @@ if (env.enableSimulationEndpoints) {
       outboundDraftStore,
       createOutboundDraft,
     });
-  simulationHandler = createSimulationHandler(processChannelInboundMessage, {
-    outboundDraftStore,
-    requestOutboundDelivery,
-  });
+  simulationHandler = createSimulationHandler(processChannelInboundMessage);
   outboundDeliveryHandler = createOutboundDeliveryHandler(requestOutboundDelivery);
 
   const scenarioRunner = new SimulationScenarioRunner({

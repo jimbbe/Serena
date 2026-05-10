@@ -25,6 +25,7 @@ import type { ProcessInboundMessageInput } from "../../modules/inbound-gate/appl
 
 const MARIA_WHATSAPP = "5491111111111";
 const UNKNOWN_WHATSAPP = "5499999999999";
+const ELDER_WHATSAPP = "+5492600000000";
 
 // ---------------------------------------------------------------------------
 // HTTP request helper
@@ -86,14 +87,8 @@ let server: http.Server;
 let port: number;
 
 before(async () => {
-  const { processInboundMessage, aiGuideService, identityResolver, conversationStore } = await createInMemoryPipeline();
-
-  const processChannelInboundMessage = new ProcessChannelInboundMessage({
-    processInboundMessage,
-    aiGuideService,
-    identityResolver,
-    conversationStore,
-  });
+  const pipeline = await createInMemoryPipeline();
+  const { processChannelInboundMessage } = pipeline;
 
   const simulationHandler = createSimulationHandler(processChannelInboundMessage);
 
@@ -375,7 +370,7 @@ describe("POST /dev/simulate/inbound-message", () => {
     // mediation protection works correctly.
     const { status, body } = await request("POST", "/dev/simulate/inbound-message", port, {
       channel: "whatsapp",
-      externalSenderId: MARIA_WHATSAPP,
+      externalSenderId: ELDER_WHATSAPP,
       text: "avisale a Carlos que voy a llegar 15 minutos tarde",
     });
 
@@ -383,8 +378,8 @@ describe("POST /dev/simulate/inbound-message", () => {
     const obj = body as Record<string, unknown>;
 
     const decision = obj.inboundDecision as Record<string, unknown>;
-    assert.equal(decision.status, "needs_mediation");
-    assert.equal(decision.reason, "third_party_mediation_request");
+    assert.equal(decision.status, "allowed");
+    assert.equal(decision.reason, "known_sender_conversational");
 
     // profileId is fused result: deterministic mediation is sticky,
     // classifier says "conversation" but mediation_understanding wins
@@ -394,11 +389,115 @@ describe("POST /dev/simulate/inbound-message", () => {
     const guideResult = obj.guideResult as Record<string, unknown> | undefined;
     assert.ok(guideResult !== undefined);
     assert.equal(guideResult.status, "success");
+    const flowState = obj.flowState as Record<string, unknown> | undefined;
+    assert.ok(flowState !== undefined);
+    assert.equal(flowState.status, "confirming");
 
     // Identity present in all result paths
     const identity = obj.identity as Record<string, unknown> | undefined;
     assert.ok(identity !== undefined, "identity field must be present");
     assert.equal(identity.status, "resolved");
+  });
+
+  it("confirmation with known recipient returns preparedOutbound deliveryReady=true", async () => {
+    const first = await request("POST", "/dev/simulate/inbound-message", port, {
+      channel: "whatsapp",
+      externalSenderId: "+5492600000000",
+      text: "avisale a Carlos que llego tarde",
+    });
+
+    const firstBody = first.body as Record<string, unknown>;
+    const conversation = firstBody.conversation as Record<string, unknown>;
+
+    const second = await request("POST", "/dev/simulate/inbound-message", port, {
+      channel: "whatsapp",
+      externalSenderId: "+5492600000000",
+      text: "sí",
+      conversationId: conversation.id,
+    });
+
+    assert.equal(second.status, 200);
+    const obj = second.body as Record<string, unknown>;
+    const preparedOutbound = obj.preparedOutbound as Record<string, unknown> | undefined;
+    assert.ok(preparedOutbound !== undefined);
+    assert.equal(preparedOutbound.status, "confirmed_pending_delivery");
+    assert.equal(preparedOutbound.deliveryReady, true);
+    assert.equal(obj.simulatedOutbound, undefined);
+  });
+
+  it("confirmation with unknown recipient returns preparedOutbound deliveryReady=false", async () => {
+    const first = await request("POST", "/dev/simulate/inbound-message", port, {
+      channel: "whatsapp",
+      externalSenderId: "+5492600000000",
+      text: "avisale a Persona Fantasma que llego tarde",
+    });
+
+    const firstBody = first.body as Record<string, unknown>;
+    const conversation = firstBody.conversation as Record<string, unknown>;
+
+    const second = await request("POST", "/dev/simulate/inbound-message", port, {
+      channel: "whatsapp",
+      externalSenderId: "+5492600000000",
+      text: "sí",
+      conversationId: conversation.id,
+    });
+
+    assert.equal(second.status, 200);
+    const obj = second.body as Record<string, unknown>;
+    const preparedOutbound = obj.preparedOutbound as Record<string, unknown> | undefined;
+    assert.ok(preparedOutbound !== undefined);
+    assert.equal(preparedOutbound.status, "needs_recipient_resolution");
+    assert.equal(preparedOutbound.deliveryReady, false);
+    assert.equal(obj.simulatedOutbound, undefined);
+  });
+
+  it("confirmation cancel keeps preparedOutbound absent", async () => {
+    const first = await request("POST", "/dev/simulate/inbound-message", port, {
+      channel: "whatsapp",
+      externalSenderId: "+5492600000000",
+      text: "avisale a Carlos que llego tarde",
+    });
+    const conversation = (first.body as Record<string, unknown>).conversation as Record<string, unknown>;
+
+    const second = await request("POST", "/dev/simulate/inbound-message", port, {
+      channel: "whatsapp",
+      externalSenderId: "+5492600000000",
+      text: "mejor no",
+      conversationId: conversation.id,
+    });
+
+    const obj = second.body as Record<string, unknown>;
+    assert.equal(obj.preparedOutbound, undefined);
+  });
+
+  it("risk interrupt keeps preparedOutbound absent", async () => {
+    const first = await request("POST", "/dev/simulate/inbound-message", port, {
+      channel: "whatsapp",
+      externalSenderId: "+5492600000000",
+      text: "avisale a Carlos que llego tarde",
+    });
+    const conversation = (first.body as Record<string, unknown>).conversation as Record<string, unknown>;
+
+    const second = await request("POST", "/dev/simulate/inbound-message", port, {
+      channel: "whatsapp",
+      externalSenderId: "+5492600000000",
+      text: "me caí y no puedo levantarme",
+      conversationId: conversation.id,
+    });
+
+    const obj = second.body as Record<string, unknown>;
+    assert.equal(obj.preparedOutbound, undefined);
+  });
+
+  it("unknown sender keeps preparedOutbound absent", async () => {
+    const response = await request("POST", "/dev/simulate/inbound-message", port, {
+      channel: "whatsapp",
+      externalSenderId: "+5400000000000",
+      text: "sí",
+    });
+
+    const obj = response.body as Record<string, unknown>;
+    assert.equal(obj.preparedOutbound, undefined);
   });
 
   // =========================================================================
@@ -536,12 +635,15 @@ describe("POST /dev/simulate/inbound-message", () => {
       }),
     };
 
-    const { aiGuideService, identityResolver, conversationStore } = await createInMemoryPipeline();
+    const { aiGuideService, identityResolver, conversationStore, contactDirectory, mediationFlowStore, outboundDraftStore } = await createInMemoryPipeline();
     const useCase = new ProcessChannelInboundMessage({
       processInboundMessage: mockProcessInbound as unknown as ProcessInboundMessage,
       aiGuideService,
       identityResolver,
       conversationStore,
+      contactDirectory,
+      mediationFlowStore,
+      outboundDraftStore,
     });
 
     const handler = createSimulationHandler(useCase);

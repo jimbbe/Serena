@@ -94,7 +94,8 @@ guarded by the environment variable.
   "useCaseId":        "serena.mediation.understand_request", // AI guide use case (undefined if blocked)
   "guideResult":      { /* AI guide response */ }, // AI output (undefined if blocked or error)
   "guideError":       null,           // structured error { message, code? } if AI failed
-  "simulatedOutbound": null,          // simulated draft (Phase 1: always null)
+  "simulatedOutbound": null,          // simulated draft (legacy simulation field; unchanged)
+  "preparedOutbound": null,           // confirmed outbound draft prepared for future delivery
   "conversation":    {                 // conversation tracking (when identity is resolved)
     "id":            "a1b2c3d4-...",   // auto-generated conversation UUID
     "status":        "open",           // conversation status (always "open" in Phase 1)
@@ -104,6 +105,38 @@ guarded by the environment variable.
   "errors":           []              // fatal issues (empty = success)
 }
 ```
+
+### `preparedOutbound`
+
+When a mediation flow reaches positive confirmation (`"sí"`, `"confirmo"`, etc.),
+the simulation response can include a compact `preparedOutbound` object:
+
+```jsonc
+{
+  "preparedOutbound": {
+    "id": "od_...",
+    "status": "confirmed_pending_delivery",
+    "recipientPersonId": "c2",
+    "recipientDisplayName": "Carlos",
+    "recipientChannel": "whatsapp",
+    "recipientExternalId": "5492222222222",
+    "messageText": "que llego tarde",
+    "deliveryReady": true
+  }
+}
+```
+
+Semantics:
+
+| Field | Meaning |
+|-------|---------|
+| `status` | Current outbound draft lifecycle. In T34 the relevant initial values are `confirmed_pending_delivery`, `needs_recipient_resolution`, and `needs_recipient_disambiguation`. |
+| `deliveryReady` | `true` only when the recipient was resolved and the draft is ready for a future delivery worker. |
+| `recipient*` fields | Populated only when Serena could resolve the recipient. |
+
+`preparedOutbound` is present ONLY after a positive confirmation with a valid
+mediation draft. It is absent on cancellation, edit-only steps, risk pauses,
+unknown senders, and validation failures.
 
 ### Error Responses
 
@@ -158,6 +191,34 @@ curl -X POST http://localhost:3000/dev/simulate/inbound-message \
 ```
 
 **Response**: 200 — `profileId === "mediation_understanding"`, `useCaseId === "serena.mediation.understand_request"`, `guideResult` present.
+
+### Confirm mediation → outbound draft prepared
+
+```bash
+# Step 1 — create confirming flow
+curl -X POST http://localhost:3000/dev/simulate/inbound-message \
+  -H "Content-Type: application/json" \
+  -d '{
+    "channel": "whatsapp",
+    "externalSenderId": "+5492600000000",
+    "text": "avisale a Carlos que llego tarde"
+  }'
+
+# Step 2 — confirm using the returned conversationId
+curl -X POST http://localhost:3000/dev/simulate/inbound-message \
+  -H "Content-Type: application/json" \
+  -d '{
+    "channel": "whatsapp",
+    "externalSenderId": "+5492600000000",
+    "conversationId": "<conversation-id>",
+    "text": "sí"
+  }'
+```
+
+**Response**: 200 — `flowState.status === "resolved"` and `preparedOutbound`
+contains the stored outbound draft projection. If the recipient is unknown,
+`preparedOutbound.status === "needs_recipient_resolution"` and
+`deliveryReady === false`.
 
 ### Risk content
 
@@ -326,7 +387,8 @@ curl -X POST http://localhost:3000/dev/simulate/inbound-message \
 - **No real message sending** — the endpoint only EXECUTES the pipeline and returns the trace. Real WhatsApp/message sending is the responsibility of channel-specific adapters.
 - **No auth guard** — the endpoint is disabled by default and has no token check when enabled. Only enable it in development.
 - **Clarification profile** — supported by AI Guide (`serena.mediation.clarify.v1`); real inbound policy may not route to it in normal flows yet.
-- **Empty simulatedOutbound** — mediation drafts are not generated yet. The field is reserved for Phase 2.
+- **`simulatedOutbound` remains unchanged** — the legacy simulation field is still independent from `preparedOutbound`.
+- **No real delivery** — `preparedOutbound` means "stored and ready for future delivery orchestration", NOT "sent".
 - **Identity resolution runs first** — the `ExternalIdentityResolver` translates external channel IDs to internal `personId` BEFORE gate evaluation. Blocked identities short-circuit the entire pipeline. Unknown identities continue to the gate (which will likely block them as unknown senders).
 
 ## Conversation Tracking (NEW)

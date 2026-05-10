@@ -268,9 +268,23 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - 15 import-update files across core (server.ts, bootstrap/, inbound-gate/application, inbound-gate/infrastructure, inbound-gate/tests).
 - Zero behavior changes — all 578 tests pass identically. Typecheck passes for core, gateway-wa, and scripts.
 
-## Expected Next Task
+## Decided (2026-05-10): WhatsApp Module First
 
-After T30B: decide between persistence (PostgreSQL adapters) and real WhatsApp adapter (Evolution API / Baileys).
+La decision entre persistencia y WhatsApp real fue tomada: **WhatsApp primero**.
+
+Se creo el plan de implementacion del modulo WhatsApp Gateway + Evolution API en:
+
+📋 **`docs/architecture/whatsapp-gateway-implementation-plan.md`**
+
+Decisiones clave:
+- WhatsApp Gateway agnostico y multi-proyecto, construido como `apps/gateway-whatsapp/` en el monorepo (extraible a repo propio despues)
+- Evolution API desplegada via Docker Compose en la VPS (Hostinger no tiene template one-click)
+- Dominio: `wsp.goingmerry01.tech` para admin del Gateway; Evolution API SIN ruta publica
+- DB separada para Evolution API (`evo-postgres` + `redis`)
+- 6 fases: F1 Preparacion, F2 Evolution API deploy, F3 Gateway codigo, F4 Gateway deploy, F5 Conexion Serena, F6 Hardening
+- F2 y F3 pueden ejecutarse en paralelo
+
+La persistencia conversacional (PostgreSQL adapters) queda para despues de tener WhatsApp real funcionando.
 
 ### Repository note
 Este repositorio es el centro operativo del proyecto. Contiene documentación técnica (`docs/architecture/`) y operativa (`docs/ops/`) con datos reales de VPS, deploy, rutas de Caddy y backups. Debe hacerse privado antes de uso productivo o exposición pública prolongada.

@@ -458,3 +458,40 @@ The system MUST handle all error cases gracefully with clear error messages.
 - WHEN `runDryGatewayEvent()` is called with a valid event
 - THEN it returns a configuration error without attempting HTTP
 - AND the error mentions `SERENA_INTERNAL_TOKEN`
+
+---
+
+### Requirement: Real API Contract Supersedes Mock Endpoint Assumptions
+
+The mock gateway's assumed endpoint shapes are superseded by the real `whatsapp-gateway-api` contract defined in Phase 1. The mock adapter remains valid for dry-run testing but MUST NOT be used as the source of truth for endpoint shapes, auth model, or webhook payload format.
+
+#### Scenario: Real contract takes precedence over mock assumptions
+
+- GIVEN the real `whatsapp-gateway-api` spec defines 7 endpoints with specific request/response shapes
+- WHEN endpoint shapes are needed for integration planning
+- THEN the real contract is the source of truth, not the mock adapter
+
+---
+
+### Requirement: Webhook Normalization Differs from Mock Normalization
+
+The real webhook normalization from Evolution API format to `NormalizedInboundMessage` uses different field mappings than the mock's `MockWhatsAppEvent` → `PipelineInput` normalization.
+
+| Source | Evolution API webhook field | MockWhatsAppEvent field | Normalized field |
+|--------|---------------------------|------------------------|------------------|
+| Sender | `data.key.remoteJid` (strip `@s.whatsapp.net`) | `from` | `senderWhatsAppId` |
+| Text | `data.message.conversation` or `data.message.extendedTextMessage.text` | `text` | `messageText` |
+| Timestamp | `data.messageTimestamp` (epoch → ISO 8601) | `timestamp` | `receivedAt` |
+| Message ID | `data.key.id` | `messageId` | `messageId` |
+
+#### Scenario: Evolution API sender ID requires domain stripping
+
+- GIVEN Evolution API webhook with `data.key.remoteJid: "5491111111111@s.whatsapp.net"`
+- WHEN normalizing to `NormalizedInboundMessage`
+- THEN `senderWhatsAppId` is `"5491111111111"` (domain stripped)
+
+#### Scenario: Mock normalization uses direct field mapping
+
+- GIVEN `MockWhatsAppEvent` with `from: "5491111111111"`
+- WHEN normalizing via mock adapter
+- THEN `senderWhatsAppId` is `"5491111111111"` (no stripping needed)

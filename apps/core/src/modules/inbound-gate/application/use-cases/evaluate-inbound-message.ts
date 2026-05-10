@@ -78,7 +78,10 @@ export class EvaluateInboundMessage {
       );
     }
 
-    if (matchedMediationSignals.length > 0) {
+    // T32 — Do not treat first-person self-actions as third-party mediation.
+    // Example: "después voy a llamar a Carlos yo" means the user will call,
+    // not that Serena should mediate or send anything.
+    if (matchedMediationSignals.length > 0 && !isFirstPersonSelfAction(normalizedText)) {
       return this.auditAndReturn(
         input,
         this.makeDecision(
@@ -153,4 +156,11 @@ function normalize(value: string): string {
 
 function getMatchedSignals(text: string, hints: readonly string[]): string[] {
   return hints.filter((hint) => text.includes(hint));
+}
+
+function isFirstPersonSelfAction(text: string): boolean {
+  return (
+    /\b(?:yo\s+)?(?:voy|puedo|quiero|tengo)\s+a\s+(?:llamar|escribir|contactar)\b/.test(text) ||
+    /\b(?:llamo|llamar[ée]|escribo|escribir[ée]|contacto|contactar[ée])\b.*\b(?:yo|mi mismo|mí mismo)\b/.test(text)
+  );
 }

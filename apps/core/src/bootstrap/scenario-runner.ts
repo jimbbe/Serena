@@ -85,6 +85,8 @@ export type ScenarioStepResult = {
   result: ChannelInboundResult | null;
   /** Error message captured from a thrown exception (null if none). */
   error: string | null;
+  /** T32 — Flow state after this step (undefined if no active flow). */
+  flowState?: ChannelInboundResult["flowState"];
 };
 
 /** Aggregate counts across all steps. */
@@ -127,6 +129,8 @@ export type ScenarioResult = {
     readonly status: string;
     readonly messageCount: number;
   };
+  /** T32 — Last flow state across scenario steps. */
+  flowState?: ChannelInboundResult["flowState"];
 };
 
 // ---------------------------------------------------------------------------
@@ -327,6 +331,7 @@ export class SimulationScenarioRunner {
         input: capturedInput,
         result,
         error,
+        ...(result?.flowState !== undefined ? { flowState: result.flowState } : {}),
       });
 
       // Auto-propagate conversationId from result to next step
@@ -356,12 +361,23 @@ export class SimulationScenarioRunner {
       }
     }
 
+    // T32 — Extract the last flow state for top-level convenience.
+    let scenarioFlowState: ScenarioResult["flowState"] = undefined;
+    for (let i = steps.length - 1; i >= 0; i--) {
+      const fs = steps[i]!.result?.flowState;
+      if (fs !== undefined) {
+        scenarioFlowState = fs;
+        break;
+      }
+    }
+
     return {
       scenarioId: request.scenarioId,
       traceId,
       steps,
       summary,
       ...(scenarioConversation !== undefined ? { conversation: scenarioConversation } : {}),
+      ...(scenarioFlowState !== undefined ? { flowState: scenarioFlowState } : {}),
     };
   }
 }

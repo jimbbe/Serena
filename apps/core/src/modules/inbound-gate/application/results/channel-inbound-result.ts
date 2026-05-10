@@ -13,6 +13,11 @@ import type { LlmProfileId } from "../../domain/llm-profile.ts";
 import type { GuideUseCaseId } from "../../../ai-guide/domain/guide-use-case-id.ts";
 import type { GuideResult } from "../../../ai-guide/domain/guide-result.ts";
 import type { ResolvedInboundActor } from "../../../channel-inbound/application/results/resolved-inbound-actor.ts";
+import type {
+  MediationFlowStatus,
+  PendingAction,
+  MissingMediationField,
+} from "../../../mediation-flow/domain/mediation-flow-state.ts";
 
 /**
  * Simulated outbound draft included in the simulation result when
@@ -70,4 +75,15 @@ export type ChannelInboundResult = {
   warnings: string[];
   /** Fatal errors encountered during execution. */
   errors: string[];
+  /** T32 — Current mediation flow state after this step (undefined if no active flow). */
+  flowState?: {
+    readonly status: MediationFlowStatus;
+    readonly pendingAction: PendingAction | null;
+    readonly missingFields: readonly MissingMediationField[];
+    readonly draftRecipientHint: string | null;
+    readonly draftMessageDraft: string | null;
+    readonly version: number;
+  };
+  /** T32 — Prompt text to show to the user (clarification question, confirmation request, etc.). */
+  promptText?: string;
 };

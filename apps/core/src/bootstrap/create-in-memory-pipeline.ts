@@ -41,6 +41,8 @@ import type { ProcessedMessageStore } from "../modules/internal-pipeline/domain/
 
 import { InMemoryConversationStore } from "../modules/conversation-store/adapter/in-memory-conversation-store.ts";
 
+import { InMemoryMediationFlowStore } from "../modules/mediation-flow/adapter/in-memory-mediation-flow-store.ts";
+
 import { AiGuideService } from "../modules/ai-guide/application/use-cases/ai-guide-service.ts";
 import { UseCaseRegistry } from "../modules/ai-guide/application/use-cases/use-case-registry.ts";
 import type { LlmProvider } from "../modules/ai-guide/application/ports/llm-provider.ts";
@@ -51,6 +53,8 @@ import { InMemoryAiInvocationAudit } from "../modules/ai-guide/infrastructure/me
 import { InMemoryPromptRegistry } from "../modules/ai-guide/application/prompts/in-memory-prompt-registry.ts";
 import { ContextBuilder } from "../modules/ai-guide/application/prompts/context-builder.ts";
 import { defaultPrompts } from "../modules/ai-guide/application/prompts/default-prompts.ts";
+
+import { ProcessChannelInboundMessage } from "../modules/channel-inbound/application/use-cases/process-channel-inbound-message.ts";
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -69,6 +73,8 @@ export async function createInMemoryPipeline(options?: {
   identityResolver: InMemoryExternalIdentityResolver;
   conversationStore: InMemoryConversationStore;
   contactDirectory: InMemoryContactDirectory;
+  mediationFlowStore: InMemoryMediationFlowStore;
+  processChannelInboundMessage: ProcessChannelInboundMessage;
 }> {
   const contacts = await loadContactsFromSeed();
 
@@ -175,5 +181,18 @@ export async function createInMemoryPipeline(options?: {
   // Conversation store — shared in-memory store for conversation tracking
   const conversationStore = new InMemoryConversationStore();
 
-  return { orchestrator, bridgeStore, processedMessageStore, aiGuideService, processInboundMessage, identityResolver, conversationStore, contactDirectory };
+  // T32 — Mediation flow store — shared in-memory store for flow state
+  const mediationFlowStore = new InMemoryMediationFlowStore();
+
+  // T32 — ProcessChannelInboundMessage with flow store wired
+  const processChannelInboundMessage = new ProcessChannelInboundMessage({
+    processInboundMessage,
+    aiGuideService,
+    identityResolver,
+    conversationStore,
+    contactDirectory,
+    mediationFlowStore,
+  });
+
+  return { orchestrator, bridgeStore, processedMessageStore, aiGuideService, processInboundMessage, identityResolver, conversationStore, contactDirectory, mediationFlowStore, processChannelInboundMessage };
 }

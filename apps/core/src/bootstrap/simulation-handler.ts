@@ -7,6 +7,12 @@
  *   3. Calls ProcessChannelInboundMessage.execute
  *   4. Returns ChannelInboundResult as JSON
  *
+ * T35 — Also handles POST /dev/simulate/outbound-delivery:
+ *   1. Validates method (POST only)
+ *   2. Parses and validates JSON body for outboundDraftId
+ *   3. Calls RequestOutboundDelivery.execute
+ *   4. Returns delivery result as JSON
+ *
  * Dev-only — no token guard, no external services.
  */
 
@@ -15,6 +21,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { InboundChannel, InboundMessageCommand } from "../modules/inbound-gate/domain/inbound-message-command.ts";
 import type { PipelineRequestHandler } from "./server.ts";
 import type { ProcessChannelInboundMessage } from "../modules/channel-inbound/application/use-cases/process-channel-inbound-message.ts";
+import type { RequestOutboundDelivery } from "../modules/outbound-delivery/application/use-cases/request-outbound-delivery.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -200,6 +207,79 @@ export function createSimulationHandler(
     } catch (err) {
       const message = err instanceof Error ? err.message : "internal_pipeline_error";
       sendJson(res, 500, { error: "pipeline_execution_failed", detail: message });
+    }
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Outbound delivery handler factory
+// ---------------------------------------------------------------------------
+
+export function createOutboundDeliveryHandler(
+  requestOutboundDelivery: RequestOutboundDelivery,
+): PipelineRequestHandler {
+  return async (req, res) => {
+    // Method check — POST only
+    if (req.method !== "POST") {
+      sendJson(res, 405, {
+        error: "method_not_allowed",
+        detail: `Method ${req.method} not allowed. Use POST.`,
+      });
+      return;
+    }
+
+    // Read body
+    let rawBody: string;
+    try {
+      rawBody = await readBody(req);
+    } catch {
+      sendJson(res, 400, { error: "failed_to_read_body" });
+      return;
+    }
+
+    // Parse JSON
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawBody);
+    } catch {
+      sendJson(res, 400, { error: "invalid_json", detail: "Request body is not valid JSON" });
+      return;
+    }
+
+    // Validate outboundDraftId
+    const obj = parsed as Record<string, unknown>;
+    const outboundDraftId = obj.outboundDraftId;
+    if (typeof outboundDraftId !== "string" || outboundDraftId.trim().length === 0) {
+      sendJson(res, 400, {
+        error: "invalid_payload",
+        detail: "outboundDraftId is required and must be a non-empty string",
+      });
+      return;
+    }
+
+    // Execute delivery
+    try {
+      const result = await requestOutboundDelivery.execute({
+        outboundDraftId: outboundDraftId.trim(),
+      });
+      sendJson(res, 200, {
+        delivery: result.delivery,
+        outboundDraft: {
+          id: result.outboundDraft.id,
+          status: result.outboundDraft.status,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      // Determine status code based on error type
+      if (message.includes("not found")) {
+        sendJson(res, 404, { error: "draft_not_found", detail: message });
+      } else if (message.includes("cannot deliver") || message.includes("status is")) {
+        sendJson(res, 409, { error: "draft_not_ready", detail: message });
+      } else {
+        sendJson(res, 400, { error: "delivery_failed", detail: message });
+      }
     }
   };
 }

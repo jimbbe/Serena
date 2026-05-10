@@ -332,7 +332,8 @@ export class ProcessChannelInboundMessage {
       if (mediationOutput !== undefined) {
         const now = new Date();
         const draftId = randomUUID();
-        const missingFields = mediationOutput.missingFields;
+        const normalizedOutput = normalizeInitialMediationOutput(mediationOutput, cmd.text);
+        const missingFields = normalizedOutput.missingFields;
         const status: MediationFlowState["status"] = missingFields.length === 0 || (missingFields.length === 1 && missingFields[0] === "confirmation") ? "confirming" : "clarifying";
         // T32 fix: ensure pendingAction is never null in confirming state
         const rawAction = derivePendingAction(missingFields);
@@ -342,8 +343,8 @@ export class ProcessChannelInboundMessage {
           id: draftId,
           conversationId,
           requesterPersonId: identity.personId ?? cmd.externalSenderId,
-          recipientHint: mediationOutput.recipientHint,
-          messageDraft: mediationOutput.messageDraft,
+          recipientHint: normalizedOutput.recipientHint,
+          messageDraft: normalizedOutput.messageDraft,
           sourceMessageId: randomUUID(),
           sourceText: cmd.text,
           version: 1,
@@ -538,7 +539,7 @@ export class ProcessChannelInboundMessage {
           draftMessageDraft: flow.draft?.messageDraft ?? null,
           version: flow.draft?.version ?? 0,
         },
-        promptText: "Entendido. Tu mensaje será enviado a " + (flow.draft?.recipientHint ?? "tu contacto") + ".",
+        promptText: "Perfecto, dejo este mensaje confirmado para envío futuro. Todavía no se envía por ningún canal real.",
       });
     }
 
@@ -570,13 +571,30 @@ export class ProcessChannelInboundMessage {
     }
 
     if (resolution.action === "edit") {
-      // Edit the draft — update message and re-request confirmation
-      const newVersion = (flow.draft?.version ?? 0) + 1;
+      // Edit the draft — update message and re-request confirmation only when
+      // the user actually provided replacement content. Otherwise ask for it;
+      // do NOT pretend the draft changed.
       const newMessage = extractEditMessage(
         resolution.matchedKeyword ?? "",
         userText,
         flow.draft?.messageDraft ?? null,
       );
+      if (newMessage === null || newMessage === flow.draft?.messageDraft) {
+        return this.buildFlowResult({
+          ...args,
+          flowState: {
+            status: "confirming",
+            pendingAction: "confirm_mediation",
+            missingFields: ["confirmation"],
+            draftRecipientHint: flow.draft?.recipientHint ?? null,
+            draftMessageDraft: flow.draft?.messageDraft ?? null,
+            version: flow.draft?.version ?? 0,
+          },
+          promptText: "¿Qué cambio querés hacer en el mensaje? Decime el texto nuevo y lo dejo preparado para confirmar.",
+        });
+      }
+
+      const newVersion = (flow.draft?.version ?? 0) + 1;
       const updatedDraft = flow.draft !== null
         ? { ...flow.draft, messageDraft: newMessage, version: newVersion }
         : null;
@@ -589,9 +607,7 @@ export class ProcessChannelInboundMessage {
       };
       const recipient = updatedDraft?.recipientHint ?? "tu contacto";
       const message = newMessage ?? updatedDraft?.messageDraft ?? "el mensaje";
-      const promptText = newMessage !== flow.draft?.messageDraft
-        ? `Mensaje actualizado: "${message}". ¿Confirmás el envío a ${recipient}?`
-        : "Mensaje actualizado. ¿Confirmas el envío?";
+      const promptText = `Mensaje actualizado: "${message}". ¿Confirmás dejarlo preparado para ${recipient}?`;
 
       await this.mediationFlowStore!.updateFlow(editFlow);
 
@@ -620,7 +636,7 @@ export class ProcessChannelInboundMessage {
         draftMessageDraft: flow.draft?.messageDraft ?? null,
         version: flow.draft?.version ?? 0,
       },
-      promptText: "No estoy segura. ¿Confirmás el envío, querés cancelarlo, o preferís cambiar algo?",
+      promptText: "No estoy segura. ¿Confirmás dejar este mensaje preparado, querés cancelarlo, o preferís cambiar algo?",
     });
   }
 
@@ -826,6 +842,12 @@ type MediationOutput = {
   messageDraft: string | null;
 };
 
+type InitialMediationInference = {
+  isMediationLike: boolean;
+  recipientHint: string | null;
+  messageDraft: string | null;
+};
+
 /**
  * Parses the AI guide result output for mediation fields.
  * Returns undefined if the output is not a mediation result.
@@ -856,6 +878,95 @@ function parseMediationGuideOutput(guideResult: GuideResult): MediationOutput | 
 }
 
 /**
+ * Normalizes initial mediation fields against the actual user text.
+ *
+ * The AI/mock may provide a complete canned draft even when the user only said
+ * "avisale a Carlos". That would be dangerous: Serena would ask for confirmation
+ * for a message the user never dictated. For initial requests that are clearly
+ * mediation-like but incomplete, the source text is authoritative for missing
+ * recipient/message fields.
+ */
+function normalizeInitialMediationOutput(output: MediationOutput, sourceText: string): MediationOutput {
+  const inferred = inferInitialMediationFields(sourceText);
+
+  if (!inferred.isMediationLike) return output;
+
+  const recipientHint = inferred.recipientHint ?? output.recipientHint;
+  const messageDraft = inferred.messageDraft ?? output.messageDraft;
+
+  // If the source text is missing a field, never let AI/mock invent it.
+  const sourceMissingRecipient = inferred.recipientHint === null;
+  const sourceMissingMessage = inferred.messageDraft === null;
+  const safeRecipientHint = sourceMissingRecipient ? null : recipientHint;
+  const safeMessageDraft = sourceMissingMessage ? null : messageDraft;
+
+  const missingFields: MissingMediationField[] = [];
+  if (safeRecipientHint === null || !isSubstantiveField(safeRecipientHint)) missingFields.push("recipient");
+  if (safeMessageDraft === null || !isSubstantiveField(safeMessageDraft)) missingFields.push("message");
+  if (missingFields.length === 0) missingFields.push("confirmation");
+
+  return {
+    recipientHint: safeRecipientHint,
+    messageDraft: safeMessageDraft,
+    missingFields,
+  };
+}
+
+function inferInitialMediationFields(text: string): InitialMediationInference {
+  const trimmed = text.trim();
+  const lower = trimmed.toLocaleLowerCase();
+  const isMediationLike = /\b(?:avis(?:a|ale|ále)|av[íi]sale|dec[íi]le|d[íi]le|escribile|llamale|ll[áa]male|contact[áa]|pedile)\b/i.test(lower);
+
+  if (!isMediationLike) {
+    return { isMediationLike: false, recipientHint: null, messageDraft: null };
+  }
+
+  const messageDraft = extractInitialMessage(trimmed);
+  const recipientHint = extractInitialRecipient(trimmed);
+
+  return {
+    isMediationLike: true,
+    recipientHint,
+    messageDraft,
+  };
+}
+
+function extractInitialRecipient(text: string): string | null {
+  // "avisale a Carlos que llego tarde" / "escribile a Pedro" / "llamale a Laura"
+  const explicitMatch = text.match(/\b(?:a|al|para)\s+([^,.;!?]+?)(?=\s+que\b|$|[,.;!?])/i);
+  if (explicitMatch?.[1]) {
+    const recipient = cleanupRecipient(explicitMatch[1]);
+    if (isSubstantiveField(recipient)) return recipient;
+  }
+
+  return null;
+}
+
+function extractInitialMessage(text: string): string | null {
+  const queMatch = text.match(/\bque\s+(.+)/i);
+  if (queMatch?.[1]) {
+    const message = cleanupMessage(queMatch[1]);
+    if (isSubstantiveField(message)) return message;
+  }
+
+  return null;
+}
+
+function cleanupRecipient(value: string): string {
+  return value.trim().replace(/^(mi\s+|el\s+|la\s+)/i, "").trim();
+}
+
+function cleanupMessage(value: string): string {
+  return value.trim().replace(/^[,.;:!?\s]+/, "").trim();
+}
+
+function isSubstantiveField(value: string | null): value is string {
+  if (value === null) return false;
+  const trimmed = value.trim();
+  return trimmed.length > 2 && !/^[,.;:!?]+$/.test(trimmed);
+}
+
+/**
  * Derives the pending action from the list of missing fields.
  */
 function derivePendingAction(missingFields: readonly MissingMediationField[]): PendingAction | null {
@@ -878,7 +989,7 @@ function buildPromptText(flow: MediationFlowState): string {
   if (flow.status === "confirming") {
     const recipient = flow.draft?.recipientHint ?? "tu contacto";
     const message = flow.draft?.messageDraft ?? "el mensaje";
-    return `¿Confirmás enviar "${message}" a ${recipient}? Respondé "sí" para confirmar, "no" para cancelar, o pedí un cambio.`;
+    return `¿Confirmás dejar preparado "${message}" para ${recipient}? Respondé "sí" para confirmar, "no" para cancelar, o pedí un cambio. No se envía por ningún canal real todavía.`;
   }
   if (flow.status === "clarifying") {
     if (flow.pendingAction === "clarify_recipient") return "¿A quién querés que le avise?";
@@ -897,9 +1008,9 @@ function buildPromptText(flow: MediationFlowState): string {
  *   - "el mensaje X" / "el texto X" → X
  *   - "cambiá X" / "editá X" → X (when X is not just "el mensaje" / "el texto")
  *
- * Returns the existing draft message if no new content can be extracted.
+ * Returns null if no new content can be extracted.
  */
-function extractEditMessage(matchedKeyword: string, userText: string, existingDraft: string | null): string | null {
+function extractEditMessage(_matchedKeyword: string, userText: string, _existingDraft: string | null): string | null {
   const normalized = userText.trim().toLowerCase();
 
   // Try to extract message after "decile que" / "dile que"
@@ -936,8 +1047,15 @@ function extractEditMessage(matchedKeyword: string, userText: string, existingDr
     return cambioMatch[1].trim();
   }
 
-  // No new content found — keep existing draft
-  return existingDraft;
+  // Try "editá: X" / "cambiá: X" / "corregí: X"
+  const colonMatch = normalized.match(/(?:cambi[áa]|edit[áa]|correg[íi])\s*:\s*(.+)/i);
+  if (colonMatch && colonMatch[1] && colonMatch[1].trim().length > 0) {
+    const extracted = colonMatch[1].trim();
+    if (extracted.length > 2 && !/^[,.;:!?]+$/.test(extracted)) return extracted;
+  }
+
+  // No new content found — do not pretend the draft changed.
+  return null;
 }
 
 /**

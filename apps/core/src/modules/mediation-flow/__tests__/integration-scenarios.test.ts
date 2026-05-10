@@ -82,7 +82,7 @@ test("S1: Complete mediation flow — understand → confirm → resolved", asyn
   assert.ok(step2.flowState !== undefined, "Step 2 should have flow state");
   assert.equal(step2.flowState.status, "resolved");
   assert.equal(step2.flowState.pendingAction, null);
-  assert.ok(step2.promptText?.includes("será enviado"));
+  assert.ok(step2.promptText?.includes("No se envió") || step2.promptText?.includes("Todavía no se envía"));
 });
 
 // ---------------------------------------------------------------------------
@@ -120,7 +120,7 @@ test("S3: Mediation flow — canned override → clarify → confirm", async () 
   ]);
   const pipeline = await freshPipeline(canned);
 
-  const step1 = await doStep(pipeline, "avisale a Carlos que llego tarde");
+  const step1 = await doStep(pipeline, "avisale");
   assert.ok(step1.flowState !== undefined);
   assert.equal(step1.flowState.status, "clarifying");
 
@@ -140,9 +140,10 @@ test("S4: Mediation flow — understand → edit → confirm", async () => {
   const step1 = await doStep(pipeline, "avisale a Carlos que llego tarde");
   assert.equal(step1.flowState?.status, "confirming");
 
-  const step2 = await doStep(pipeline, "cambiá el mensaje", step1.conversation?.id);
+  const step2 = await doStep(pipeline, "cambiá el mensaje, decile que voy mañana", step1.conversation?.id);
   assert.equal(step2.flowState?.status, "confirming");
   assert.equal(step2.flowState?.pendingAction, "confirm_mediation");
+  assert.equal(step2.flowState?.draftMessageDraft, "voy mañana");
   assert.ok(step2.promptText?.includes("Mensaje actualizado"));
 
   const step3 = await doStep(pipeline, "dale", step1.conversation?.id);
@@ -164,6 +165,31 @@ test("S5: Risk signal during confirming flow → paused", async () => {
   assert.equal(step2.flowState.status, "paused");
   assert.equal(step2.flowState.pendingAction, null);
   assert.ok(step2.warnings.some((w) => w.includes("paused") || w.includes("riesgo")));
+});
+
+test("S5b: Risk signal during clarifying flow → paused", async () => {
+  const pipeline = await freshPipeline();
+
+  const step1 = await doStep(pipeline, "avisale a Carlos");
+  assert.equal(step1.flowState?.status, "clarifying");
+  assert.equal(step1.flowState?.pendingAction, "clarify_message");
+
+  const step2 = await doStep(pipeline, "me caí y no puedo levantarme", step1.conversation?.id);
+  assert.ok(step2.flowState !== undefined);
+  assert.equal(step2.flowState.status, "paused");
+  assert.equal(step2.flowState.pendingAction, null);
+  assert.ok(step2.warnings.some((w) => w.includes("paused") || w.includes("riesgo")));
+});
+
+test("S5c: Incomplete mediation with recipient only asks for message", async () => {
+  const pipeline = await freshPipeline();
+
+  const result = await doStep(pipeline, "avisale a Carlos");
+  assert.equal(result.flowState?.status, "clarifying");
+  assert.equal(result.flowState?.pendingAction, "clarify_message");
+  assert.ok(result.flowState?.missingFields.includes("message"));
+  assert.equal(result.flowState?.draftRecipientHint, "Carlos");
+  assert.equal(result.flowState?.draftMessageDraft, null);
 });
 
 // ---------------------------------------------------------------------------
@@ -213,7 +239,7 @@ test("S8: Clarification loop — canned override for both fields missing", async
   ]);
   const pipeline = await freshPipeline(canned);
 
-  const step1 = await doStep(pipeline, "avisale a Carlos que llego tarde");
+  const step1 = await doStep(pipeline, "avisale");
   assert.ok(step1.flowState !== undefined);
   assert.equal(step1.flowState.status, "clarifying");
   assert.ok(step1.flowState.missingFields.includes("recipient"));

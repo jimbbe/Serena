@@ -12,7 +12,7 @@ This spec defines a per-conversation flow state machine that persists between me
 
 The system MUST provide a `MediationFlowStore` port with an in-memory adapter that:
 - Stores flow state keyed by `conversationId`
-- Supports CRUD operations: `upsert`, `findByConversation`, `clearByConversation`
+- Supports operations: `findActiveByConversation`, `startFlow`, `updateFlow`, `clearFlow`, `pauseFlow`, `resumeFlow`
 - Is isolated from `ConversationStore` (separate module, no cross-module domain imports)
 - Is optional in dependency injection (undefined → fallback to current classification-only path)
 
@@ -37,16 +37,16 @@ The flow state MUST include:
 
 ### R4 — Pending Action (MUST)
 
-`PendingAction` MUST be a discriminated union:
-- `{ type: "clarify_recipient" }` — waiting for recipient clarification
-- `{ type: "clarify_message" }` — waiting for message clarification
-- `{ type: "clarify_both" }` — waiting for both recipient and message
-- `{ type: "awaiting_confirmation" }` — waiting for user confirmation/rejection/edit
+`PendingAction` MUST be a string union:
+- `"clarify_recipient"` — waiting for recipient clarification
+- `"clarify_message"` — waiting for message clarification
+- `"clarify_both"` — waiting for both recipient and message
+- `"confirm_mediation"` — waiting for user confirmation/rejection/edit
 
 ### R5 — Flow-State-Aware Routing (MUST)
 
 `ProcessChannelInboundMessage.execute()` MUST:
-1. Check `MediationFlowStore.findByConversation(conversationId)` BEFORE classification
+1. Check `MediationFlowStore.findActiveByConversation(conversationId)` BEFORE classification
 2. If no active flow exists → proceed with normal classification pipeline
 3. If an active flow exists with status `clarifying` → resolve user input as clarification
 4. If an active flow exists with status `confirming` → resolve user input as confirmation response
@@ -55,18 +55,18 @@ The flow state MUST include:
 ### R6 — Clarification Resolution (MUST)
 
 When status is `clarifying`:
-- If `pendingAction.type === "clarify_recipient"` → extract recipient from user input, update draft, check if message is also present
+- If `pendingAction === "clarify_recipient"` → extract recipient from user input, update draft, check if message is also present
 - If `pendingAction.type === "clarify_message"` → extract message from user input, update draft
-- If `pendingAction.type === "clarify_both"` → extract both if present, or clarify whichever is still missing
+- If `pendingAction === "clarify_both"` → extract both if present, or clarify whichever is still missing
 - After clarification → re-run mediation analysis on the combined intent
-- If all fields are now present → transition to `confirming` with `pendingAction: "awaiting_confirmation"`
+- If all fields are now present → transition to `confirming` with `pendingAction: "confirm_mediation"`
 - If fields are still missing → stay in `clarifying` with updated `pendingAction`
 
 ### R7 — Confirmation Resolution (MUST)
 
-When status is `confirming` (pending action is `awaiting_confirmation`):
-- **Positive confirmation**: keywords "sí", "mandalo", "confirmo", "dale", "ok", "dale que sí", "mandale" → transition to `resolved` with `confirmationState: "confirmed"`
-- **Negative/cancel**: keywords "no", "mejor no", "esperá", "no lo mandes", "cancelá", "cancelar" → transition to `resolved` with `confirmationState: "cancelled"`
+When status is `confirming` (pending action is `confirm_mediation`):
+- **Positive confirmation**: keywords "sí", "mandalo", "confirmo", "dale", "ok", "dale que sí", "mandale" → transition to `resolved`, mark the draft as confirmed, and explicitly state that no real message was sent
+- **Negative/cancel**: keywords "no", "mejor no", "esperá", "no lo mandes", "cancelá", "cancelar" → transition to `resolved` and mark the draft as cancelled
 - **Draft edit**: input containing "cambiá", "mejor", "decile", "poné", "modificá" + message content → update draft, increment version, re-request confirmation (stay in `confirming`)
 - **Ambiguous**: input that doesn't match any pattern → re-prompt for clarification, stay in `confirming`
 
@@ -86,7 +86,7 @@ The system MUST NOT:
 - Write to PostgreSQL
 - Perform any real outbound communication
 
-All mediation flows end at `resolved` with `confirmationState` recorded. No actual sending occurs.
+All mediation flows end at `resolved` with draft status recorded. No actual sending occurs.
 
 ### R10 — No Fabrication (MUST)
 
@@ -130,7 +130,7 @@ Each draft modification SHOULD increment the `version` field. This enables audit
 - Creates flow state with `status: "clarifying"`
 - Sets `draft.recipientHint = "Carlos"`
 - Sets `missingFields = ["message"]`
-- Sets `pendingAction = { type: "clarify_message" }`
+- Sets `pendingAction = "clarify_message"`
 - Returns `promptText` asking what to tell Carlos
 - Does NOT create a message draft
 
@@ -143,7 +143,7 @@ Each draft modification SHOULD increment the `version` field. This enables audit
 - Creates flow state with `status: "clarifying"`
 - Sets `draft.messageDraft = "que no venga"`
 - Sets `missingFields = ["recipient"]`
-- Sets `pendingAction = { type: "clarify_recipient" }`
+- Sets `pendingAction = "clarify_recipient"`
 - Returns `promptText` asking who to tell
 
 ### S3 — Mediation with neither recipient nor message
@@ -155,7 +155,7 @@ Each draft modification SHOULD increment the `version` field. This enables audit
 - Creates flow state with `status: "clarifying"`
 - Sets `draft` with null recipient and null message
 - Sets `missingFields = ["recipient", "message"]`
-- Sets `pendingAction = { type: "clarify_both" }`
+- Sets `pendingAction = "clarify_both"`
 - Returns `promptText` asking who to tell and what to say
 - Does NOT invent a recipient or message
 
@@ -165,13 +165,13 @@ Each draft modification SHOULD increment the `version` field. This enables audit
 - `status: "clarifying"`
 - `draft.recipientHint = "Carlos"`
 - `missingFields = ["message"]`
-- `pendingAction = { type: "clarify_message" }`
+- `pendingAction = "clarify_message"`
 **When** the user sends "que voy a llegar tarde"
 **Then** the system:
 - Updates `draft.messageDraft = "que voy a llegar tarde"`
 - Sets `missingFields = ["confirmation"]`
 - Sets `status: "confirming"`
-- Sets `pendingAction = { type: "awaiting_confirmation" }`
+- Sets `pendingAction = "confirm_mediation"`
 - Increments `version` to 2
 - Returns `promptText` asking for confirmation with the full draft summary
 
@@ -181,13 +181,13 @@ Each draft modification SHOULD increment the `version` field. This enables audit
 - `status: "clarifying"`
 - `draft.messageDraft = "que no venga"`
 - `missingFields = ["recipient"]`
-- `pendingAction = { type: "clarify_recipient" }`
+- `pendingAction = "clarify_recipient"`
 **When** the user sends "a Carlos"
 **Then** the system:
 - Updates `draft.recipientHint = "Carlos"`
 - Sets `missingFields = ["confirmation"]`
 - Sets `status: "confirming"`
-- Sets `pendingAction = { type: "awaiting_confirmation" }`
+- Sets `pendingAction = "confirm_mediation"`
 - Increments `version` to 2
 - Returns `promptText` asking for confirmation
 
@@ -196,13 +196,13 @@ Each draft modification SHOULD increment the `version` field. This enables audit
 **Given** a conversation with active flow:
 - `status: "clarifying"`
 - `missingFields = ["recipient", "message"]`
-- `pendingAction = { type: "clarify_both" }`
+- `pendingAction = "clarify_both"`
 **When** the user sends "a Carlos"
 **Then** the system:
 - Updates `draft.recipientHint = "Carlos"`
 - Sets `missingFields = ["message"]` (recipient resolved, message still missing)
 - Keeps `status: "clarifying"`
-- Sets `pendingAction = { type: "clarify_message" }`
+- Sets `pendingAction = "clarify_message"`
 - Increments `version` to 2
 
 **When** the user then sends "que llego tarde"
@@ -210,7 +210,7 @@ Each draft modification SHOULD increment the `version` field. This enables audit
 - Updates `draft.messageDraft = "que llego tarde"`
 - Sets `missingFields = ["confirmation"]`
 - Sets `status: "confirming"`
-- Sets `pendingAction = { type: "awaiting_confirmation" }`
+- Sets `pendingAction = "confirm_mediation"`
 - Increments `version` to 3
 
 ### S7 — Positive confirmation
@@ -219,11 +219,11 @@ Each draft modification SHOULD increment the `version` field. This enables audit
 - `status: "confirming"`
 - `draft.recipientHint = "Carlos"`
 - `draft.messageDraft = "que llego tarde"`
-- `pendingAction = { type: "awaiting_confirmation" }`
+- `pendingAction = "confirm_mediation"`
 **When** the user sends "sí, mandalo"
 **Then** the system:
 - Sets `status: "resolved"`
-- Sets `confirmationState: "confirmed"`
+- Marks the draft as confirmed
 - Clears `pendingAction`
 - Returns result indicating mediation is confirmed and ready to send (but does NOT actually send)
 
@@ -233,11 +233,11 @@ Each draft modification SHOULD increment the `version` field. This enables audit
 - `status: "confirming"`
 - `draft.recipientHint = "Carlos"`
 - `draft.messageDraft = "que llego tarde"`
-- `pendingAction = { type: "awaiting_confirmation" }`
+- `pendingAction = "confirm_mediation"`
 **When** the user sends "mejor no"
 **Then** the system:
 - Sets `status: "resolved"`
-- Sets `confirmationState: "cancelled"`
+- Marks the draft as cancelled
 - Clears `pendingAction`
 - Returns result indicating mediation was cancelled
 
@@ -247,14 +247,14 @@ Each draft modification SHOULD increment the `version` field. This enables audit
 - `status: "confirming"`
 - `draft.recipientHint = "Carlos"`
 - `draft.messageDraft = "que llego tarde"`
-- `pendingAction = { type: "awaiting_confirmation" }`
+- `pendingAction = "confirm_mediation"`
 - `version: 1`
 **When** the user sends "cambiá el mensaje, decile que voy mañana"
 **Then** the system:
-- Updates `draft.messageDraft = "que voy mañana"`
+- Updates `draft.messageDraft = "voy mañana"`
 - Increments `version` to 2
 - Keeps `status: "confirming"`
-- Keeps `pendingAction = { type: "awaiting_confirmation" }`
+- Keeps `pendingAction = "confirm_mediation"`
 - Sets `missingFields = ["confirmation"]`
 - Returns `promptText` re-requesting confirmation with updated draft
 
@@ -264,7 +264,7 @@ Each draft modification SHOULD increment the `version` field. This enables audit
 - `status: "confirming"`
 - `draft.recipientHint = "Carlos"`
 - `draft.messageDraft = "que llego tarde"`
-- `pendingAction = { type: "awaiting_confirmation" }`
+- `pendingAction = "confirm_mediation"`
 **When** the user sends "me caí y no puedo levantarme"
 **Then** the system:
 - Detects `riskSignal === true`
@@ -304,7 +304,7 @@ Each draft modification SHOULD increment the `version` field. This enables audit
 - Sets `draft.messageDraft = "que llego tarde"`
 - Sets `missingFields = ["confirmation"]`
 - Sets `status: "confirming"`
-- Sets `pendingAction = { type: "awaiting_confirmation" }`
+- Sets `pendingAction = "confirm_mediation"`
 - Returns `promptText` asking for confirmation
 
 ### S14 — Casual conversation does not trigger mediation
@@ -329,7 +329,7 @@ Each draft modification SHOULD increment the `version` field. This enables audit
 
 **Given** a conversation with active flow:
 - `status: "resolved"`
-- `confirmationState: "confirmed"`
+- draft marked as confirmed
 **When** the user sends a new message "avisale a María que ya comí"
 **Then** the system:
 - Clears the previous resolved flow state
@@ -341,7 +341,7 @@ Each draft modification SHOULD increment the `version` field. This enables audit
 **Given** a conversation with active flow:
 - `status: "clarifying"`
 - `draft.recipientHint = "Carlos"`
-- `pendingAction = { type: "clarify_message" }`
+- `pendingAction = "clarify_message"`
 **When** the user sends "me siento mal, me mareé"
 **Then** the system:
 - Detects `riskSignal === true`
@@ -356,7 +356,7 @@ Each draft modification SHOULD increment the `version` field. This enables audit
 - `status: "confirming"`
 - `draft.recipientHint = "Carlos"`
 - `draft.messageDraft = "que llego tarde"`
-- `pendingAction = { type: "awaiting_confirmation" }`
+- `pendingAction = "confirm_mediation"`
 **When** the user sends "bueno"
 **Then** the system:
 - Does NOT treat as positive confirmation (too ambiguous)
@@ -432,19 +432,19 @@ Expected: flowStatus = "clarifying", missingFields includes "recipient" AND "mes
           draft.messageDraft = null
 ```
 
-### AC4 — "avisale a Carlos que llego tarde" → pide confirmación antes de ready_to_send
+### AC4 — "avisale a Carlos que llego tarde" → pide confirmación antes de dejar preparado
 ```
 Input: "avisale a Carlos que llego tarde"
 Expected: flowStatus = "confirming", missingFields includes "confirmation",
-          pendingAction = "awaiting_confirmation", draft.recipientHint = "Carlos",
+          pendingAction = "confirm_mediation", draft.recipientHint = "Carlos",
           draft.messageDraft = "que llego tarde"
 ```
 
 ### AC5 — "sí/mandalo/confirmo" → confirma solo si hay draft pendiente
 ```
-Precondition: flowStatus = "confirming", pendingAction = "awaiting_confirmation"
+Precondition: flowStatus = "confirming", pendingAction = "confirm_mediation"
 Input: "sí" / "mandalo" / "confirmo"
-Expected: flowStatus = "resolved", confirmationState = "confirmed"
+Expected: flowStatus = "resolved", draft marked confirmed, no real send
 
 Precondition: NO active flow
 Input: "sí" / "mandalo" / "confirmo"
@@ -453,9 +453,9 @@ Expected: No flow state created, classified as normal conversation
 
 ### AC6 — "mejor no/esperá/no lo mandes" → cancela o pausa solo si hay draft pendiente
 ```
-Precondition: flowStatus = "confirming", pendingAction = "awaiting_confirmation"
+Precondition: flowStatus = "confirming", pendingAction = "confirm_mediation"
 Input: "mejor no" / "esperá" / "no lo mandes"
-Expected: flowStatus = "resolved", confirmationState = "cancelled"
+Expected: flowStatus = "resolved", draft marked cancelled
 
 Precondition: NO active flow
 Input: "mejor no" / "esperá" / "no lo mandes"
@@ -466,8 +466,8 @@ Expected: No flow state affected, classified as normal conversation
 ```
 Precondition: flowStatus = "confirming", draft.messageDraft = "que llego tarde", version = 1
 Input: "cambiá el mensaje, decile que voy mañana"
-Expected: draft.messageDraft = "que voy mañana", version = 2,
-          flowStatus = "confirming", pendingAction = "awaiting_confirmation"
+Expected: draft.messageDraft = "voy mañana", version = 2,
+          flowStatus = "confirming", pendingAction = "confirm_mediation"
 ```
 
 ### AC8 — Riesgo interrumpe cualquier flow pendiente
@@ -524,18 +524,17 @@ The following simulation sets MUST pass with the expected outcomes:
 
 | Artifact | Action | Description |
 |----------|--------|-------------|
-| `apps/core/src/modules/mediation-flow/domain/flow-types.ts` | New | Domain types: `MediationFlowState`, `MediationDraft`, `PendingAction`, `FlowStatus`, `ConfirmationState`, `MissingField` |
-| `apps/core/src/modules/mediation-flow/port/mediation-flow-store.ts` | New | Port interface: `upsert`, `findByConversation`, `clearByConversation` |
-| `apps/core/src/modules/mediation-flow/adapter/in-memory-flow-store.ts` | New | In-memory adapter using `Map<string, MediationFlowState>` |
-| `apps/core/src/modules/mediation-flow/application/confirmation-resolver.ts` | New | Confirmation keyword matching and resolution logic |
-| `apps/core/src/modules/mediation-flow/application/clarification-resolver.ts` | New | Clarification extraction and draft update logic |
-| `apps/core/src/modules/mediation-flow/application/risk-interruptor.ts` | New | Risk signal detection and flow pause logic |
+| `apps/core/src/modules/mediation-flow/domain/mediation-flow-state.ts` | New | Domain types: `MediationFlowState`, `MediationDraft`, `PendingAction`, `MediationFlowStatus`, `MissingMediationField` |
+| `apps/core/src/modules/mediation-flow/port/mediation-flow-store.ts` | New | Store port: `findActiveByConversation`, `startFlow`, `updateFlow`, `clearFlow`, `pauseFlow`, `resumeFlow` |
+| `apps/core/src/modules/mediation-flow/adapter/in-memory-mediation-flow-store.ts` | New | In-memory adapter using `Map<string, MediationFlowState>` |
+| `apps/core/src/modules/mediation-flow/application/resolve-confirmation-input.ts` | New | Confirmation keyword matching and resolution logic |
+| `apps/core/src/modules/mediation-flow/__tests__/flow-routing.test.ts` | New | Flow routing, edit, clarification, and risk interruption tests |
 | `apps/core/src/modules/inbound-gate/application/results/channel-inbound-result.ts` | Modified | Add `flowState`, `missingFields`, `pendingAction`, `promptText` fields |
 | `apps/core/src/modules/channel-inbound/application/use-cases/process-channel-inbound-message.ts` | Modified | Add flow-state check before classification, integrate resolvers |
 | `apps/core/src/bootstrap/scenario-runner.ts` | Modified | Propagate flow state between steps |
 | `apps/core/src/bootstrap/simulation-handler.ts` | Modified | Return flow state in simulation result |
 | `apps/core/src/bootstrap/create-in-memory-pipeline.ts` | Modified | Wire `MediationFlowStore` into pipeline |
-| `apps/core/src/modules/mediation-flow/tests/` | New | Unit tests for store, resolvers, routing |
+| `apps/core/src/modules/mediation-flow/__tests__/` | New | Unit, integration, and simulation acceptance tests |
 
 ## Out of Scope (Explicitly Deferred)
 

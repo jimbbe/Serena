@@ -334,6 +334,97 @@ test("T32: active confirming flow + 'cambiá' → edit, stays confirming", async
   assert.equal(result.flowState.pendingAction, "confirm_mediation");
 });
 
+test("T32: active confirming flow + edit content → updates draft message", async () => {
+  let updatedFlow: MediationFlowState | undefined;
+  const flowStore: MediationFlowStore = {
+    findActiveByConversation: async () => makeFlowState(),
+    startFlow: async (state) => state,
+    updateFlow: async (state) => {
+      updatedFlow = state;
+      return state;
+    },
+    clearFlow: async () => {},
+    pauseFlow: async () => undefined,
+    resumeFlow: async () => undefined,
+  };
+
+  const mockAiService = {
+    execute: async (): Promise<GuideResult> => successGuideResult("serena.conversation.reply"),
+  };
+
+  const mockProcessInbound = {
+    execute: async () => ({
+      decision: allowedDecision(),
+      route: profileRoute("conversation"),
+    }),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as never,
+    aiGuideService: mockAiService as never,
+    identityResolver: mockResolver(),
+    conversationStore: mockConversationStore(),
+    mediationFlowStore: flowStore,
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "cambiá el mensaje, decile que voy mañana",
+    tenantId: "demo",
+  });
+
+  assert.equal(updatedFlow?.draft?.messageDraft, "voy mañana");
+  assert.equal(result.flowState?.draftMessageDraft, "voy mañana");
+  assert.equal(result.flowState?.version, 2);
+});
+
+test("T32: active confirming flow + edit without content does not update draft", async () => {
+  let updateCalled = false;
+  const flowStore: MediationFlowStore = {
+    findActiveByConversation: async () => makeFlowState(),
+    startFlow: async (state) => state,
+    updateFlow: async (state) => {
+      updateCalled = true;
+      return state;
+    },
+    clearFlow: async () => {},
+    pauseFlow: async () => undefined,
+    resumeFlow: async () => undefined,
+  };
+
+  const mockAiService = {
+    execute: async (): Promise<GuideResult> => successGuideResult("serena.conversation.reply"),
+  };
+
+  const mockProcessInbound = {
+    execute: async () => ({
+      decision: allowedDecision(),
+      route: profileRoute("conversation"),
+    }),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as never,
+    aiGuideService: mockAiService as never,
+    identityResolver: mockResolver(),
+    conversationStore: mockConversationStore(),
+    mediationFlowStore: flowStore,
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "cambiá el mensaje",
+    tenantId: "demo",
+  });
+
+  assert.equal(updateCalled, false);
+  assert.equal(result.flowState?.draftMessageDraft, "que llego tarde");
+  assert.equal(result.flowState?.version, 1);
+  assert.ok(result.promptText?.includes("Qué cambio"));
+});
+
 test("T32: active confirming flow + ambiguous text → re-prompt", async () => {
   const flowStore: MediationFlowStore = {
     findActiveByConversation: async () => makeFlowState(),
@@ -477,6 +568,54 @@ test("T32: risk signal during active flow → pauses flow", async () => {
   assert.equal(result.flowState.status, "paused");
   assert.equal(result.flowState.pendingAction, null);
   assert.ok(result.warnings.some((w) => w.includes("paused")));
+});
+
+test("T32: risk signal during clarifying flow → pauses flow", async () => {
+  const flowStore: MediationFlowStore = {
+    findActiveByConversation: async () => makeFlowState({
+      status: "clarifying",
+      pendingAction: "clarify_message",
+      missingFields: ["message"],
+    }),
+    startFlow: async (state) => state,
+    updateFlow: async (state) => state,
+    clearFlow: async () => {},
+    pauseFlow: async () => makeFlowState({
+      status: "paused",
+      pendingAction: null,
+      missingFields: ["message"],
+    }),
+    resumeFlow: async () => undefined,
+  };
+
+  const mockAiService = {
+    execute: async (): Promise<GuideResult> => successGuideResult("serena.conversation.reply"),
+  };
+
+  const mockProcessInbound = {
+    execute: async () => ({
+      decision: riskDecision(),
+      route: profileRoute("risk_review"),
+    }),
+  };
+
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: mockProcessInbound as never,
+    aiGuideService: mockAiService as never,
+    identityResolver: mockResolver(),
+    conversationStore: mockConversationStore(),
+    mediationFlowStore: flowStore,
+  });
+
+  const result = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: "maria",
+    text: "me caí y no puedo levantarme",
+    tenantId: "demo",
+  });
+
+  assert.equal(result.flowState?.status, "paused");
+  assert.equal(result.flowState?.pendingAction, null);
 });
 
 test("T32: no active flow → normal classification path", async () => {

@@ -97,14 +97,22 @@ test("C1.2: 'decile a X que Y' → starts confirming flow", async () => {
   assert.equal(result.flowState?.status, "confirming");
 });
 
-test("C1.3: 'escribile a X' → starts confirming flow", async () => {
+test("C1.3: 'escribile a X' → asks what message to send", async () => {
   const result = await doStep(await freshPipeline(), "escribile a Pedro");
-  assert.equal(result.flowState?.status, "confirming");
+  assert.equal(result.flowState?.status, "clarifying");
+  assert.equal(result.flowState?.pendingAction, "clarify_message");
+  assert.ok(result.flowState?.missingFields.includes("message"));
+  assert.equal(result.flowState?.draftRecipientHint, "Pedro");
+  assert.equal(result.flowState?.draftMessageDraft, null);
 });
 
-test("C1.4: 'llamale a X' → starts confirming flow", async () => {
+test("C1.4: 'llamale a X' → asks what message to send", async () => {
   const result = await doStep(await freshPipeline(), "llamale a Laura");
-  assert.equal(result.flowState?.status, "confirming");
+  assert.equal(result.flowState?.status, "clarifying");
+  assert.equal(result.flowState?.pendingAction, "clarify_message");
+  assert.ok(result.flowState?.missingFields.includes("message"));
+  assert.equal(result.flowState?.draftRecipientHint, "Laura");
+  assert.equal(result.flowState?.draftMessageDraft, null);
 });
 
 test("C1.5: 'avisa a X que Y' (short form) → starts confirming flow", async () => {
@@ -140,17 +148,22 @@ test("C1.10: Emoji in message → starts confirming flow", async () => {
 // ---------------------------------------------------------------------------
 // C2: Clarification Loop (10 tests)
 // ---------------------------------------------------------------------------
-// Uses canned MockLlmProvider responses to simulate missing fields.
-// The canned response overrides rule-based extraction for flow state determination.
+// Uses canned MockLlmProvider responses where useful, but source text remains
+// authoritative for incomplete recipient/message fields.
 
 test("C2.1: Standard mediation → goes to confirming (rules extract all fields)", async () => {
   const result = await doStep(await freshPipeline(), "avisale a Carlos que llego tarde");
   assert.equal(result.flowState?.status, "confirming");
 });
 
-test("C2.2: Mediation with only recipient (no 'que') → flow state present", async () => {
+test("C2.2: Mediation with only recipient (no 'que') → asks for message", async () => {
   const result = await doStep(await freshPipeline(), "avisale a Carlos");
-  assert.ok(result.flowState !== undefined);
+  assert.equal(result.flowState?.status, "clarifying");
+  assert.equal(result.flowState?.pendingAction, "clarify_message");
+  assert.ok(result.flowState?.missingFields.includes("message"));
+  assert.equal(result.flowState?.draftRecipientHint, "Carlos");
+  assert.equal(result.flowState?.draftMessageDraft, null);
+  assert.ok(result.promptText?.includes("Qué querés"));
 });
 
 test("C2.3: Canned override → clarifying state (both fields missing)", async () => {
@@ -159,9 +172,11 @@ test("C2.3: Canned override → clarifying state (both fields missing)", async (
       isMediationRequest: true, recipientHint: null, messageDraft: null,
       missingFields: ["recipient", "message"], requiresConfirmation: true, riskSignal: false    }) }],
   ]);
-  const result = await doStep(await freshPipeline(canned), "avisale a Carlos que llego tarde");
+  const result = await doStep(await freshPipeline(canned), "avisale");
   assert.equal(result.flowState?.status, "clarifying");
-  assert.equal(result.flowState?.missingFields.length, 2);
+  assert.equal(result.flowState?.pendingAction, "clarify_both");
+  assert.ok(result.flowState?.missingFields.includes("recipient"));
+  assert.ok(result.flowState?.missingFields.includes("message"));
 });
 
 test("C2.4: Canned override → clarifying state (recipient missing)", async () => {
@@ -170,7 +185,7 @@ test("C2.4: Canned override → clarifying state (recipient missing)", async () 
       isMediationRequest: true, recipientHint: null, messageDraft: "Llego tarde",
       missingFields: ["recipient"], requiresConfirmation: true, riskSignal: false    }) }],
   ]);
-  const result = await doStep(await freshPipeline(canned), "avisale a Carlos que llego tarde");
+  const result = await doStep(await freshPipeline(canned), "decile que llego tarde");
   assert.equal(result.flowState?.status, "clarifying");
   assert.ok(result.flowState?.missingFields.includes("recipient"));
 });
@@ -181,7 +196,7 @@ test("C2.5: Canned override → clarifying state (message missing)", async () =>
       isMediationRequest: true, recipientHint: "Carlos", messageDraft: null,
       missingFields: ["message"], requiresConfirmation: true, riskSignal: false    }) }],
   ]);
-  const result = await doStep(await freshPipeline(canned), "avisale a Carlos que llego tarde");
+  const result = await doStep(await freshPipeline(canned), "avisale a Carlos");
   assert.equal(result.flowState?.status, "clarifying");
   assert.ok(result.flowState?.missingFields.includes("message"));
 });
@@ -198,7 +213,7 @@ test("C2.6: Clarification → user provides info → transitions to confirming",
     }) }],
   ]);
   const pipeline = await freshPipeline(canned);
-  const step1 = await doStep(pipeline, "avisale a Carlos que llego tarde");
+  const step1 = await doStep(pipeline, "avisale");
   assert.equal(step1.flowState?.status, "clarifying");
 
   const step2 = await doStep(pipeline, "a Carlos que llego tarde", step1.conversation?.id);
@@ -217,7 +232,7 @@ test("C2.7: Clarification with missing recipient → user provides → confirmin
     }) }],
   ]);
   const pipeline = await freshPipeline(canned);
-  const step1 = await doStep(pipeline, "avisale a Carlos que llego tarde");
+  const step1 = await doStep(pipeline, "decile que llego tarde");
   assert.equal(step1.flowState?.status, "clarifying");
 
   const step2 = await doStep(pipeline, "a Carlos", step1.conversation?.id);
@@ -236,7 +251,7 @@ test("C2.8: Clarification with missing message → user provides → confirming"
     }) }],
   ]);
   const pipeline = await freshPipeline(canned);
-  const step1 = await doStep(pipeline, "avisale a Carlos que llego tarde");
+  const step1 = await doStep(pipeline, "avisale a Carlos");
   assert.equal(step1.flowState?.status, "clarifying");
 
   const step2 = await doStep(pipeline, "que llego tarde", step1.conversation?.id);
@@ -255,7 +270,7 @@ test("C2.9: Clarification version increments", async () => {
     }) }],
   ]);
   const pipeline = await freshPipeline(canned);
-  const step1 = await doStep(pipeline, "avisale a Carlos que llego tarde");
+  const step1 = await doStep(pipeline, "decile que hola");
   assert.equal(step1.flowState?.version, 1);
 
   const step2 = await doStep(pipeline, "a Carlos", step1.conversation?.id);
@@ -268,7 +283,7 @@ test("C2.10: Clarification prompt text is present", async () => {
       isMediationRequest: true, recipientHint: null, messageDraft: null,
       missingFields: ["recipient", "message"], requiresConfirmation: true, riskSignal: false    }) }],
   ]);
-  const result = await doStep(await freshPipeline(canned), "avisale a Carlos que llego tarde");
+  const result = await doStep(await freshPipeline(canned), "avisale");
   assert.equal(result.flowState?.status, "clarifying");
   assert.ok(result.promptText !== undefined);
 });
@@ -463,25 +478,27 @@ test("C5.5: 'Cambiá el mensaje' triggers edit", async () => {
   assert.equal(result.flowState?.status, "confirming");
 });
 
-test("C5.6: Edit increments draft version", async () => {
+test("C5.6: Edit with replacement content increments draft version", async () => {
   const pipeline = await freshPipeline();
   const s1 = await doStep(pipeline, "avisale a Carlos que llego tarde");
   const v1 = s1.flowState?.version ?? 0;
-  const s2 = await doStep(pipeline, "cambiá el mensaje", s1.conversation?.id);
+  const s2 = await doStep(pipeline, "cambiá el mensaje, decile que voy mañana", s1.conversation?.id);
   assert.ok(s2.flowState!.version > v1);
 });
 
-test("C5.7: Edit prompt includes 'Mensaje actualizado'", async () => {
+test("C5.7: Edit without replacement asks for new content", async () => {
   const pipeline = await freshPipeline();
   const s1 = await doStep(pipeline, "avisale a Carlos que llego tarde");
   const result = await doStep(pipeline, "cambiá", s1.conversation?.id);
-  assert.ok(result.promptText?.includes("actualizado") || result.promptText?.includes("Actualizado"));
+  assert.equal(result.flowState?.draftMessageDraft, s1.flowState?.draftMessageDraft);
+  assert.equal(result.flowState?.version, s1.flowState?.version);
+  assert.ok(result.promptText?.includes("Qué cambio"));
 });
 
 test("C5.7b: 'cambiá el mensaje, decile que voy mañana' updates draftMessageDraft", async () => {
   const pipeline = await freshPipeline();
   const s1 = await doStep(pipeline, "avisale a Carlos que llego tarde");
-  assert.equal(s1.flowState?.draftMessageDraft, "Llego más tarde.");
+  assert.equal(s1.flowState?.draftMessageDraft, "llego tarde");
   const s2 = await doStep(pipeline, "cambiá el mensaje, decile que voy mañana", s1.conversation?.id);
   assert.equal(s2.flowState?.draftMessageDraft, "voy mañana");
   assert.equal(s2.flowState?.version, 2);
@@ -490,17 +507,16 @@ test("C5.7b: 'cambiá el mensaje, decile que voy mañana' updates draftMessageDr
 test("C5.7c: 'mejor decile que no voy' updates draftMessageDraft", async () => {
   const pipeline = await freshPipeline();
   const s1 = await doStep(pipeline, "avisale a Carlos que llego tarde");
-  assert.equal(s1.flowState?.draftMessageDraft, "Llego más tarde.");
+  assert.equal(s1.flowState?.draftMessageDraft, "llego tarde");
   const s2 = await doStep(pipeline, "mejor decile que no voy", s1.conversation?.id);
   assert.equal(s2.flowState?.draftMessageDraft, "no voy");
 });
 
-test("C5.7d: 'editá: voy a llegar tarde' keeps existing draft (no pattern match)", async () => {
+test("C5.7d: 'editá: voy a llegar tarde' updates draftMessageDraft", async () => {
   const pipeline = await freshPipeline();
   const s1 = await doStep(pipeline, "avisale a Carlos que llego tarde");
   const s2 = await doStep(pipeline, "editá: voy a llegar tarde", s1.conversation?.id);
-  // "editá:" doesn't match our patterns, so it keeps existing draft
-  assert.equal(s2.flowState?.draftMessageDraft, "Llego más tarde.");
+  assert.equal(s2.flowState?.draftMessageDraft, "voy a llegar tarde");
 });
 
 test("C5.8: After edit, flow stays in confirming state", async () => {
@@ -536,6 +552,16 @@ test("C6.1: Risk signal during confirming flow → pauses flow", async () => {
   const s1 = await doStep(pipeline, "avisale a Carlos que llego tarde");
   const result = await doStep(pipeline, "me caí y no puedo levantarme", s1.conversation?.id);
   assert.equal(result.flowState?.status, "paused");
+});
+
+test("C6.1b: Risk signal during clarifying flow → pauses flow", async () => {
+  const pipeline = await freshPipeline();
+  const s1 = await doStep(pipeline, "avisale a Carlos");
+  assert.equal(s1.flowState?.status, "clarifying");
+  const result = await doStep(pipeline, "me caí y no puedo levantarme", s1.conversation?.id);
+  assert.equal(result.flowState?.status, "paused");
+  assert.equal(result.flowState?.pendingAction, null);
+  assert.ok(result.warnings.some(w => w.toLowerCase().includes("riesgo") || w.toLowerCase().includes("paused")));
 });
 
 test("C6.2: Paused flow has null pendingAction", async () => {
@@ -646,11 +672,11 @@ test("C7.5: Different senders have isolated flow states", async () => {
   assert.equal(result.flowState, undefined);
 });
 
-test("C7.6: Flow version increments on update", async () => {
+test("C7.6: Flow version increments on content update", async () => {
   const pipeline = await freshPipeline();
   const s1 = await doStep(pipeline, "avisale a Carlos que llego tarde");
   const v1 = s1.flowState?.version ?? 0;
-  const s2 = await doStep(pipeline, "cambiá", s1.conversation?.id);
+  const s2 = await doStep(pipeline, "cambiá el mensaje, decile que voy mañana", s1.conversation?.id);
   assert.ok(s2.flowState!.version > v1);
 });
 
@@ -666,7 +692,7 @@ test("C7.7: Flow status transitions: clarifying → confirming (canned override)
     }) }],
   ]);
   const pipeline = await freshPipeline(canned);
-  const s1 = await doStep(pipeline, "avisale a Carlos que llego tarde");
+  const s1 = await doStep(pipeline, "decile que hola");
   assert.equal(s1.flowState?.status, "clarifying");
   const s2 = await doStep(pipeline, "a Carlos", s1.conversation?.id);
   assert.equal(s2.flowState?.status, "confirming");
@@ -827,6 +853,18 @@ test("C9.10: Normal conversation returns AI guide result", async () => {
   assert.equal(result.guideResult.status, "success");
 });
 
+test("C9.11: First-person self-action 'yo voy a llamar a Carlos' → conversation", async () => {
+  const result = await doStep(await freshPipeline(), "yo voy a llamar a Carlos");
+  assert.equal(result.flowState, undefined);
+  assert.equal(result.profileId, "conversation");
+});
+
+test("C9.12: First-person self-action 'después voy a llamar a Carlos yo' → conversation", async () => {
+  const result = await doStep(await freshPipeline(), "después voy a llamar a Carlos yo");
+  assert.equal(result.flowState, undefined);
+  assert.equal(result.profileId, "conversation");
+});
+
 // ---------------------------------------------------------------------------
 // C10: Multi-Step Scenarios (10 tests)
 // ---------------------------------------------------------------------------
@@ -837,7 +875,7 @@ test("C10.1: Full happy path — understand → confirm → resolved", async () 
   assert.equal(s1.flowState?.status, "confirming");
   const s2 = await doStep(pipeline, "sí", s1.conversation?.id);
   assert.equal(s2.flowState?.status, "resolved");
-  assert.ok(s2.promptText?.includes("será enviado"));
+  assert.ok(s2.promptText?.includes("No se envió") || s2.promptText?.includes("Todavía no se envía"));
 });
 
 test("C10.2: Understand → edit → confirm → resolved", async () => {
@@ -878,10 +916,10 @@ test("C10.6: Multiple edits in sequence → version keeps incrementing", async (
   const pipeline = await freshPipeline();
   const s1 = await doStep(pipeline, "avisale a Carlos que llego tarde");
   const v1 = s1.flowState?.version ?? 0;
-  const s2 = await doStep(pipeline, "cambiá", s1.conversation?.id);
+  const s2 = await doStep(pipeline, "cambiá el mensaje, decile que voy mañana", s1.conversation?.id);
   const v2 = s2.flowState?.version ?? 0;
   assert.ok(v2 > v1);
-  const s3 = await doStep(pipeline, "editá", s1.conversation?.id);
+  const s3 = await doStep(pipeline, "editá: no voy", s1.conversation?.id);
   const v3 = s3.flowState?.version ?? 0;
   assert.ok(v3 > v2);
 });
@@ -898,7 +936,7 @@ test("C10.7: Clarification → partial info → more info → confirm", async ()
     }) }],
   ]);
   const pipeline = await freshPipeline(canned);
-  const s1 = await doStep(pipeline, "avisale a Carlos que llego tarde");
+  const s1 = await doStep(pipeline, "avisale");
   assert.equal(s1.flowState?.status, "clarifying");
   const s2 = await doStep(pipeline, "a Carlos", s1.conversation?.id);
   assert.ok(s2.flowState !== undefined);

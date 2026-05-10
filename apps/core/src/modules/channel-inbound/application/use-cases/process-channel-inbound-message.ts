@@ -285,9 +285,16 @@ export class ProcessChannelInboundMessage {
 
     const useCaseId: GuideUseCaseId = profileToUseCaseId(profileId);
 
+    const gatedUseCaseId =
+      identity.status === "unknown" &&
+      (useCaseId === "serena.mediation.understand_request" || useCaseId === "serena.mediation.clarify")
+        ? "serena.conversation.reply"
+        : useCaseId;
+    const finalProfileId: LlmProfileId = gatedUseCaseId === useCaseId ? profileId : "conversation";
+
     // Fetch known contacts for mediation routes (same pattern as recentMessages in T27)
     let knownContacts: string[] = [];
-    if (MEDIATION_USE_CASES.has(useCaseId) && this.contactDirectory) {
+    if (MEDIATION_USE_CASES.has(gatedUseCaseId) && this.contactDirectory) {
       knownContacts = (await this.contactDirectory.findAll()).map(
         (c) => `${c.displayName} (id: ${c.id})`,
       );
@@ -297,7 +304,7 @@ export class ProcessChannelInboundMessage {
     let guideError: { message: string; code?: string } | undefined = undefined;
 
     try {
-      guideResult = await this.aiGuideService.execute(useCaseId, {
+      guideResult = await this.aiGuideService.execute(gatedUseCaseId, {
         input: cmd.text,
         actorRole: identity.role ?? "unknown",
         resolvedIdentity: identity.displayName ?? identity.personId ?? cmd.externalSenderId,
@@ -368,7 +375,7 @@ export class ProcessChannelInboundMessage {
         const promptText = buildPromptText(flowState);
         return this.buildFlowResult({
           traceId, channel: cmd.channel, identity, warnings, errors, conversationId,
-          profileId, useCaseId, guideResult,
+           profileId: finalProfileId, useCaseId: gatedUseCaseId, guideResult,
           ...(guideError !== undefined ? { guideError } : {}),
           flowState: {
             status: flowState.status,
@@ -388,8 +395,8 @@ export class ProcessChannelInboundMessage {
       channel: cmd.channel,
       identity,
       inboundDecision: decision,
-      profileId,
-      useCaseId,
+      profileId: finalProfileId,
+      useCaseId: gatedUseCaseId,
       guideResult,
       ...(guideError !== undefined ? { guideError } : {}),
       ...(conversationId !== undefined ? {

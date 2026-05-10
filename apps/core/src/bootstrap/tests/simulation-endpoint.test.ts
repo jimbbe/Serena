@@ -605,7 +605,7 @@ describe("POST /dev/simulate/inbound-message", () => {
     const identity = obj.identity as Record<string, unknown> | undefined;
     assert.ok(identity !== undefined, "identity field must be present");
     assert.equal(identity.status, "resolved");
-    assert.equal(identity.personId, "elder_001");
+    assert.equal(identity.personId, "marta");
     assert.equal(identity.displayName, "Marta");
     assert.equal(identity.role, "elder");
     assert.equal(identity.authorized, true);
@@ -614,7 +614,7 @@ describe("POST /dev/simulate/inbound-message", () => {
   it("Marta (elder) on voice resolves with identity.resolved", async () => {
     const { status, body } = await request("POST", "/dev/simulate/inbound-message", port, {
       channel: "voice",
-      externalSenderId: "device_marta_livingroom",
+      externalSenderId: "serena_device_001",
       text: "hola",
     });
 
@@ -624,7 +624,7 @@ describe("POST /dev/simulate/inbound-message", () => {
     const identity = obj.identity as Record<string, unknown> | undefined;
     assert.ok(identity !== undefined, "identity field must be present");
     assert.equal(identity.status, "resolved");
-    assert.equal(identity.personId, "elder_001");
+    assert.equal(identity.personId, "marta");
     assert.equal(identity.displayName, "Marta");
     assert.equal(identity.channel, "voice");
   });
@@ -642,7 +642,7 @@ describe("POST /dev/simulate/inbound-message", () => {
     const identity = obj.identity as Record<string, unknown> | undefined;
     assert.ok(identity !== undefined, "identity field must be present");
     assert.equal(identity.status, "resolved");
-    assert.equal(identity.personId, "elder_001");
+    assert.equal(identity.personId, "marta");
     assert.equal(identity.displayName, "Marta");
     assert.equal(identity.channel, "web_chat");
   });

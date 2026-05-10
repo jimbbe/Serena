@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import type { Contact } from "../../domain/contact.ts";
 import type { ContactDirectory } from "../../application/ports/contact-directory.ts";
+import type { InboundChannel } from "../../../shared/channel.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,6 +20,7 @@ export class InMemoryContactDirectory implements ContactDirectory {
   private readonly contacts: Contact[];
   private readonly byId = new Map<string, Contact>();
   private readonly byWhatsAppId = new Map<string, Contact>();
+  private readonly byChannelBinding = new Map<string, Contact>();
 
   constructor(contacts: Contact[]) {
     this.contacts = [...contacts];
@@ -26,6 +28,12 @@ export class InMemoryContactDirectory implements ContactDirectory {
       this.byId.set(contact.id, contact);
       const normalizedWhatsAppId = contact.whatsappId.trim().toLocaleLowerCase();
       this.byWhatsAppId.set(normalizedWhatsAppId, contact);
+      this.byChannelBinding.set(bindingKey("whatsapp", normalizedWhatsAppId), contact);
+
+      for (const binding of contact.externalBindings ?? []) {
+        const normalizedExternalId = binding.externalId.trim().toLocaleLowerCase();
+        this.byChannelBinding.set(bindingKey(binding.channel, normalizedExternalId), contact);
+      }
     }
   }
 
@@ -39,6 +47,11 @@ export class InMemoryContactDirectory implements ContactDirectory {
     return this.byWhatsAppId.get(normalized);
   }
 
+  async findByChannelBinding(channel: InboundChannel, externalId: string): Promise<Contact | undefined> {
+    const normalized = externalId.trim().toLocaleLowerCase();
+    return this.byChannelBinding.get(bindingKey(channel, normalized));
+  }
+
   async findById(id: string): Promise<Contact | undefined> {
     return this.byId.get(id);
   }
@@ -46,4 +59,8 @@ export class InMemoryContactDirectory implements ContactDirectory {
   async findAll(): Promise<readonly Contact[]> {
     return this.contacts;
   }
+}
+
+function bindingKey(channel: InboundChannel, externalId: string): string {
+  return `${channel}:${externalId}`;
 }

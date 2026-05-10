@@ -119,6 +119,33 @@ Confirmation/cancellation/edit keywords SHOULD only resolve against a pending dr
 
 Each draft modification SHOULD increment the `version` field. This enables audit trails and prevents stale confirmations.
 
+### R15 — Identity Gate for Sensitive Flows (MUST)
+
+The system MUST enforce a channel-aware identity policy gate before allowing entry into sensitive mediation flows:
+
+1. `identity.status === "resolved"` AND `authorized === true` → allow mediation, clarification, and confirmation flows
+2. `identity.status === "blocked"` → reject entirely (return early, no processing)
+3. `identity.status === "unknown"` → allow only non-sensitive paths (conversational, informational); block mediation, clarification, and confirmation flows
+
+This gate applies AFTER identity resolution and BEFORE profile/route selection in `ProcessChannelInboundMessage`. Risk review flows remain accessible regardless of identity status.
+
+#### Scenario: resolved identity enters mediation
+- GIVEN identity resolves to `status: "resolved"`, `authorized: true`
+- WHEN the message is classified as a mediation request
+- THEN the mediation flow proceeds normally
+
+#### Scenario: unknown identity blocked from mediation
+- GIVEN identity resolves to `status: "unknown"`
+- WHEN the message is classified as a mediation request
+- THEN the system returns a response indicating the sender is not recognized
+- AND no mediation flow state is created
+
+#### Scenario: blocked identity rejected
+- GIVEN identity resolves to `status: "blocked"`
+- WHEN the message enters the pipeline
+- THEN the pipeline returns early with a blocked result
+- AND no further processing occurs
+
 ## Scenarios
 
 ### S1 — Mediation with recipient, missing message

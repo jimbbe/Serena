@@ -30,7 +30,7 @@ function command(
 // Tests
 // ---------------------------------------------------------------------------
 
-test("whatsapp known sender resolves to elder_001", async () => {
+test("whatsapp known sender resolves to marta", async () => {
   const resolver = new InMemoryExternalIdentityResolver();
   const result = await resolver.resolve(
     command({
@@ -41,7 +41,7 @@ test("whatsapp known sender resolves to elder_001", async () => {
   );
 
   assert.equal(result.status, "resolved");
-  assert.equal(result.personId, "elder_001");
+  assert.equal(result.personId, "marta");
   assert.equal(result.role, "elder");
   assert.equal(result.displayName, "Marta");
   assert.equal(result.authorized, true);
@@ -50,24 +50,24 @@ test("whatsapp known sender resolves to elder_001", async () => {
   assert.equal(result.externalSenderId, "+5492600000000");
 });
 
-test("voice known device resolves to elder_001", async () => {
+test("voice known device resolves to marta", async () => {
   const resolver = new InMemoryExternalIdentityResolver();
   const result = await resolver.resolve(
     command({
       tenantId: "demo",
       channel: "voice",
-      externalSenderId: "device_marta_livingroom",
+      externalSenderId: "serena_device_001",
     }),
   );
 
   assert.equal(result.status, "resolved");
-  assert.equal(result.personId, "elder_001");
+  assert.equal(result.personId, "marta");
   assert.equal(result.role, "elder");
   assert.equal(result.displayName, "Marta");
   assert.equal(result.authorized, true);
 });
 
-test("web_chat known session resolves to elder_001", async () => {
+test("web_chat known session resolves to marta", async () => {
   const resolver = new InMemoryExternalIdentityResolver();
   const result = await resolver.resolve(
     command({
@@ -78,7 +78,7 @@ test("web_chat known session resolves to elder_001", async () => {
   );
 
   assert.equal(result.status, "resolved");
-  assert.equal(result.personId, "elder_001");
+  assert.equal(result.personId, "marta");
   assert.equal(result.role, "elder");
   assert.equal(result.displayName, "Marta");
   assert.equal(result.authorized, true);
@@ -129,7 +129,7 @@ test("missing tenantId defaults to demo", async () => {
 
   // Should still resolve because tenantId defaults to "demo"
   assert.equal(result.status, "resolved");
-  assert.equal(result.personId, "elder_001");
+  assert.equal(result.personId, "marta");
   assert.equal(result.tenantId, "demo");
 });
 
@@ -171,8 +171,8 @@ test("extra entries override defaults", async () => {
       tenantId: "demo",
       channel: "whatsapp",
       externalSenderId: "+5492600000000",
-      personId: "elder_001",
-      actorId: "elder_001",
+      personId: "marta",
+      actorId: "marta",
       role: "elder",
       displayName: "Marta (custom)",
       authorized: true,

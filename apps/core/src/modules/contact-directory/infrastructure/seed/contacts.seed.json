@@ -1,7 +1,52 @@
 [
-  { "id": "c1", "displayName": "María", "whatsappId": "5491111111111" },
-  { "id": "c2", "displayName": "Carlos", "whatsappId": "5492222222222" },
-  { "id": "c3", "displayName": "Juan", "whatsappId": "5493333333333" },
-  { "id": "c4", "displayName": "José", "whatsappId": "5494444444444" },
-  { "id": "c5", "displayName": "José María", "whatsappId": "5495555555555" }
+  {
+    "id": "marta",
+    "displayName": "Marta",
+    "whatsappId": "+5492600000000",
+    "externalBindings": [
+      { "channel": "whatsapp", "externalId": "+5492600000000", "ownerPersonId": "marta", "role": "elder", "displayName": "Marta", "authorized": true, "bindingKind": "whatsapp_sender" },
+      { "channel": "voice", "externalId": "serena_device_001", "ownerPersonId": "marta", "role": "elder", "displayName": "Marta", "authorized": true, "bindingKind": "local_device" },
+      { "channel": "web_chat", "externalId": "session_abc", "ownerPersonId": "marta", "role": "elder", "displayName": "Marta", "authorized": true, "bindingKind": "web_session" }
+    ]
+  },
+  {
+    "id": "c1",
+    "displayName": "María",
+    "whatsappId": "5491111111111",
+    "externalBindings": [
+      { "channel": "whatsapp", "externalId": "5491111111111", "ownerPersonId": "c1", "role": "contact", "displayName": "María", "authorized": true, "bindingKind": "whatsapp_sender" }
+    ]
+  },
+  {
+    "id": "c2",
+    "displayName": "Carlos",
+    "whatsappId": "5492222222222",
+    "externalBindings": [
+      { "channel": "whatsapp", "externalId": "5492222222222", "ownerPersonId": "c2", "role": "contact", "displayName": "Carlos", "authorized": true, "bindingKind": "whatsapp_sender" }
+    ]
+  },
+  {
+    "id": "c3",
+    "displayName": "Juan",
+    "whatsappId": "5493333333333",
+    "externalBindings": [
+      { "channel": "whatsapp", "externalId": "5493333333333", "ownerPersonId": "c3", "role": "contact", "displayName": "Juan", "authorized": true, "bindingKind": "whatsapp_sender" }
+    ]
+  },
+  {
+    "id": "c4",
+    "displayName": "José",
+    "whatsappId": "5494444444444",
+    "externalBindings": [
+      { "channel": "whatsapp", "externalId": "5494444444444", "ownerPersonId": "c4", "role": "contact", "displayName": "José", "authorized": true, "bindingKind": "whatsapp_sender" }
+    ]
+  },
+  {
+    "id": "c5",
+    "displayName": "José María",
+    "whatsappId": "5495555555555",
+    "externalBindings": [
+      { "channel": "whatsapp", "externalId": "5495555555555", "ownerPersonId": "c5", "role": "contact", "displayName": "José María", "authorized": true, "bindingKind": "whatsapp_sender" }
+    ]
+  }
 ]

@@ -2378,6 +2378,7 @@ test("mediation_understanding route passes knownContacts to AiGuide", async () =
       ];
     },
     findByWhatsAppId: async () => undefined,
+    findByChannelBinding: async () => undefined,
     findById: async () => undefined,
     hasAllowedSender: async () => true,
   };
@@ -2434,6 +2435,7 @@ test("clarification route passes knownContacts to AiGuide", async () => {
       ];
     },
     findByWhatsAppId: async () => undefined,
+    findByChannelBinding: async () => undefined,
     findById: async () => undefined,
     hasAllowedSender: async () => true,
   };
@@ -2488,6 +2490,7 @@ test("conversation route does NOT pass knownContacts to AiGuide", async () => {
       ];
     },
     findByWhatsAppId: async () => undefined,
+    findByChannelBinding: async () => undefined,
     findById: async () => undefined,
     hasAllowedSender: async () => true,
   };
@@ -2542,6 +2545,7 @@ test("risk_review route does NOT pass knownContacts to AiGuide", async () => {
       ];
     },
     findByWhatsAppId: async () => undefined,
+    findByChannelBinding: async () => undefined,
     findById: async () => undefined,
     hasAllowedSender: async () => true,
   };
@@ -2638,6 +2642,7 @@ test("blocked identity does NOT call contactDirectory.findAll() nor AiGuide", as
       return [];
     },
     findByWhatsAppId: async () => undefined,
+    findByChannelBinding: async () => undefined,
     findById: async () => undefined,
     hasAllowedSender: async () => true,
   };
@@ -2691,6 +2696,7 @@ test("discard route does NOT call contactDirectory.findAll() nor AiGuide", async
       return [];
     },
     findByWhatsAppId: async () => undefined,
+    findByChannelBinding: async () => undefined,
     findById: async () => undefined,
     hasAllowedSender: async () => true,
   };

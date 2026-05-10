@@ -19,6 +19,7 @@ import { InMemoryContactDirectory as InboundGateContactDirectory } from "../modu
 import { InMemoryDecisionAudit } from "../modules/inbound-gate/infrastructure/memory/in-memory-decision-audit.ts";
 import { InMemoryExternalIdentityResolver } from "../modules/inbound-gate/infrastructure/memory/in-memory-external-identity-resolver.ts";
 import type { ResolvedInboundActor } from "../modules/channel-inbound/application/results/resolved-inbound-actor.ts";
+import type { ChannelBinding } from "../modules/shared/channel.ts";
 
 import { ExtractMediationRequest } from "../modules/mediation-understanding/application/use-cases/extract-mediation-request.ts";
 import { RuleBasedMediationUnderstanding } from "../modules/mediation-understanding/infrastructure/rules/rule-based-mediation-understanding.ts";
@@ -97,23 +98,30 @@ export async function createInMemoryPipeline(options?: {
   });
   const processInboundMessage = new ProcessInboundMessage({ evaluator });
 
-  // External identity resolver — prime with contacts from seed as "contact" role
+  // External identity resolver — prime from contact bindings (with whatsapp fallback)
   const extraIdentities: Record<string, ResolvedInboundActor> = {};
+  const identityBindings: ChannelBinding[] = [];
   for (const contact of contacts) {
-    const key = `demo:whatsapp:${contact.whatsappId}`;
-    extraIdentities[key] = {
-      status: "resolved",
-      tenantId: "demo",
-      channel: "whatsapp",
-      externalSenderId: contact.whatsappId,
-      personId: contact.id,
-      actorId: contact.id,
-      role: "contact",
-      displayName: contact.displayName,
-      authorized: true,
-    };
+    const bindings = contact.externalBindings?.length
+      ? contact.externalBindings
+      : [{
+          channel: "whatsapp",
+          externalId: contact.whatsappId,
+          ownerPersonId: contact.id,
+          role: contact.id === "marta" ? "elder" : "contact",
+          displayName: contact.displayName,
+          authorized: true,
+          bindingKind: "whatsapp_sender",
+        } satisfies ChannelBinding];
+
+    identityBindings.push(...bindings);
   }
-  const identityResolver = new InMemoryExternalIdentityResolver(extraIdentities);
+  // Explicit safety binding for MVP local device persona (Marta)
+  identityBindings.push(
+    { channel: "voice", externalId: "serena_device_001", ownerPersonId: "marta", role: "elder", displayName: "Marta", authorized: true, bindingKind: "local_device" },
+    { channel: "web_chat", externalId: "session_abc", ownerPersonId: "marta", role: "elder", displayName: "Marta", authorized: true, bindingKind: "web_session" },
+  );
+  const identityResolver = new InMemoryExternalIdentityResolver({ bindings: identityBindings, overrides: extraIdentities });
 
   // Mediation understanding
   const mediationUnderstanding = new RuleBasedMediationUnderstanding();

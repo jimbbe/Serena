@@ -65,6 +65,22 @@ async function doStep(
   });
 }
 
+async function doStepFromSender(
+  pipeline: Awaited<ReturnType<typeof freshPipeline>>,
+  senderId: string,
+  channel: "whatsapp" | "voice" | "web_chat",
+  text: string,
+  conversationId?: string,
+) {
+  return pipeline.processChannelInboundMessage.execute({
+    channel,
+    externalSenderId: senderId,
+    text,
+    tenantId: "demo",
+    ...(conversationId !== undefined ? { conversationId } : {}),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // S1: Complete mediation — understand → confirm → resolved
 // ---------------------------------------------------------------------------
@@ -267,4 +283,78 @@ test("S9: Multiple consecutive mediations in same conversation", async () => {
   assert.ok(step3.flowState !== undefined);
   assert.equal(step3.flowState.status, "confirming");
   assert.equal(step3.flowState.version, 1);
+});
+
+test("T33: unknown WhatsApp sender cannot create mediation flow", async () => {
+  const pipeline = await freshPipeline();
+  const result = await doStepFromSender(
+    pipeline,
+    "5498888888888",
+    "whatsapp",
+    "avisale a Carlos que llego tarde",
+  );
+
+  assert.ok(result.identity !== undefined);
+  assert.equal(result.identity.status, "unknown");
+  assert.equal(result.flowState, undefined);
+});
+
+test("T33: unknown voice sender cannot create mediation flow", async () => {
+  const pipeline = await freshPipeline();
+  const result = await doStepFromSender(
+    pipeline,
+    "unknown_device_001",
+    "voice",
+    "avisale a Carlos que llego tarde",
+  );
+
+  assert.ok(result.identity !== undefined);
+  assert.equal(result.identity.status, "unknown");
+  assert.equal(result.flowState, undefined);
+});
+
+test("T33: authorized elder voice device starts mediation flow", async () => {
+  const pipeline = await freshPipeline();
+  const result = await doStepFromSender(
+    pipeline,
+    "serena_device_001",
+    "voice",
+    "avisale a Carlos que llego tarde",
+  );
+
+  assert.ok(result.identity !== undefined);
+  assert.equal(result.identity.status, "resolved");
+  assert.equal(result.identity.personId, "marta");
+  assert.equal(result.flowState?.status, "confirming");
+});
+
+test("T33: authorized elder voice device with risk message routes to risk_review", async () => {
+  const pipeline = await freshPipeline();
+  const result = await doStepFromSender(
+    pipeline,
+    "serena_device_001",
+    "voice",
+    "me caí y no puedo levantarme",
+  );
+
+  assert.ok(result.identity !== undefined);
+  assert.equal(result.identity.status, "resolved");
+  assert.equal(result.identity.role, "elder");
+  assert.equal(result.profileId, "risk_review");
+  assert.equal(result.useCaseId, "serena.risk.review");
+  assert.equal(result.flowState, undefined);
+});
+
+test("T33: unknown web_chat sender cannot create mediation flow", async () => {
+  const pipeline = await freshPipeline();
+  const result = await doStepFromSender(
+    pipeline,
+    "unknown_device_001",
+    "web_chat",
+    "avisale a Carlos que llego tarde",
+  );
+
+  assert.ok(result.identity !== undefined);
+  assert.equal(result.identity.status, "unknown");
+  assert.equal(result.flowState, undefined);
 });

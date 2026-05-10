@@ -84,3 +84,40 @@ The system SHALL ensure that seed contacts from the in-memory adapter are availa
 - GIVEN createInMemoryPipeline() is called
 - WHEN the factory completes
 - THEN the contactDirectory (built from seed data) is available for injection into ProcessChannelInboundMessage
+
+### Requirement: Channel Binding Support
+
+The `Contact` type SHOULD support multi-channel external bindings so that identity resolution can derive from contact data rather than hardcoded demo entries.
+
+The system SHALL define `ChannelBinding` in `shared/channel.ts` with the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `channel` | `InboundChannel` | The channel this binding applies to |
+| `externalId` | `string` | External sender identifier on that channel |
+| `ownerPersonId` | `string` | Internal `personId` this binding belongs to |
+| `role` | `"elder" \| "contact" \| "system"` | Role of the person in the Serena ecosystem |
+| `displayName` | `string` | Human-readable name |
+| `authorized` | `boolean` | Whether this binding is authorized |
+| `bindingKind` | `"whatsapp_sender" \| "local_device" \| "web_session"` | Kind of binding |
+
+The `Contact` type SHALL add an optional `externalBindings?: ChannelBinding[]` field alongside the existing `whatsappId` (kept for backward compatibility).
+
+The `ContactDirectory` port SHALL add a `findByChannelBinding(channel: InboundChannel, externalId: string): Contact | undefined` method.
+
+The in-memory contact directory SHALL index contacts by normalized `channel:externalId` pairs derived from `externalBindings` and (for backward compatibility) the `whatsappId` field.
+
+#### Scenario: contact has WhatsApp binding
+- GIVEN a contact with `whatsappId: "5491111111111"`
+- WHEN the identity resolver is primed from contact data
+- THEN an entry exists for `demo:whatsapp:5491111111111` with `role: "contact"`
+
+#### Scenario: contact directory provides channel-aware lookup
+- GIVEN a contact directory with contacts that have channel bindings
+- WHEN `findByChannelBinding("whatsapp", "5491111111111")` is called
+- THEN the matching contact is returned
+
+#### Scenario: contact with explicit externalBindings
+- GIVEN a contact with `externalBindings: [{ channel: "voice", externalId: "serena_device_001", ... }]`
+- WHEN `findByChannelBinding("voice", "serena_device_001")` is called
+- THEN the matching contact is returned

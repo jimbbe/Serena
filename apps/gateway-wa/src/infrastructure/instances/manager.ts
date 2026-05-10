@@ -139,4 +139,19 @@ export class InstanceManager {
   get(name: string): InstanceState | undefined {
     return this._instances.get(name);
   }
+
+  /**
+   * Update the connection status of a tracked instance.
+   * Called when a connection.update webhook arrives from Evolution API.
+   * If the instance is not tracked, it is silently ignored (no crash).
+   */
+  updateStatus(name: string, status: InstanceStatus): void {
+    const existing = this._instances.get(name);
+    if (!existing) return; // untracked instance — ignore
+
+    existing.status = status;
+    if (status === "connected" || status === "open") {
+      existing.connectedAt = new Date().toISOString();
+    }
+  }
 }

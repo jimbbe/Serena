@@ -172,4 +172,92 @@ Future: configurable routing table.
 
 ---
 
-*Document created during Phase 1 of wsp-phase1-gateway-preparation.*
+## 8. Webhook Events
+
+The gateway accepts two types of webhook events from Evolution API:
+
+### 8.1 MESSAGES_UPSERT
+
+Inbound text messages. Processed through: dedup → filter → normalize → route.
+
+### 8.2 connection.update
+
+Connection state changes. The gateway updates its internal InstanceManager status:
+
+| Evolution state | Gateway status |
+|----------------|----------------|
+| `open` | `open` |
+| `connecting` | `connecting` |
+| `connected` | `connected` |
+| `close`, `closed`, `disconnected`, `loggedOut` | `disconnected` |
+| (unknown) | `connecting` |
+
+Response: `200 { "received": true, "instance": "...", "status": "..." }`
+
+If the instance is not tracked by the manager, the event is silently ignored (no crash).
+
+---
+
+## 9. Instance State Management
+
+### 9.1 In-memory limitation (Phase 3)
+
+The `InstanceManager` stores instance state **in memory only** (JavaScript `Map`).
+
+**Implications:**
+- If the gateway process restarts, it loses all local instance tracking.
+- Evolution API continues to maintain sessions in its own PostgreSQL database.
+- After a gateway restart, instances must be recreated via `POST /instances` or re-validated.
+- The `/send` endpoint includes a **stale state fallback**: if the manager reports `disconnected` or `connecting`, it queries Evolution API directly for the real connection state before blocking the request.
+
+**Future phases:** Persistence (SQLite/PostgreSQL) or rehydration from Evolution API on startup.
+
+### 9.2 Stale connection state in /send
+
+When `POST /send` is called and the manager reports a non-connected status:
+
+1. Gateway calls Evolution API `GET /instance/connectionState/{name}`
+2. If Evolution reports `open` or `connected` → manager is updated, message is sent
+3. If Evolution reports `close`/`closed`/`disconnected` → returns `400 instance_not_connected`
+4. If Evolution API is unreachable → returns `502 evolution_unreachable`
+
+This prevents false negatives where the user scanned the QR and Evolution is connected, but the gateway's in-memory cache is stale.
+
+---
+
+## 10. Dependencies
+
+### 10.1 Serena Core webhook endpoint (T36)
+
+The gateway routes inbound messages to:
+
+```
+POST http://serena-core:3000/internal/webhook/whatsapp
+```
+
+**This endpoint does not exist in Serena Core yet.** It will be implemented in T36.
+
+**Current behavior:**
+- If `SERENA_CORE_URL` is not configured, the gateway accepts the webhook but does not route it.
+- If Serena Core returns an error, the gateway logs the error but still returns `200 { "received": true }` to Evolution API (to prevent retry loops).
+
+**End-to-end inbound messaging requires T36 to be completed first.** Phase 3 delivers a fully functional gateway that is ready to route — the receiving endpoint on Serena Core is the missing piece.
+
+---
+
+## 11. Architecture Decision: apps/gateway-wa
+
+**Decision**: Reuse `apps/gateway-wa/` as the production WhatsApp Gateway instead of creating a separate `apps/gateway-whatsapp/`.
+
+**Rationale:**
+- The existing `gateway-wa` module already has the correct domain types, application layer, and 59 dry-run tests.
+- Adding an `infrastructure/` layer is purely additive — no existing code is modified or broken.
+- The `GATEWAY_MODE` environment variable controls behavior:
+  - `dry_run` (or unset in dev) → existing mock/dry-run behavior (59 tests)
+  - `production` → real Evolution API integration with HTTP server
+- A separate workspace would duplicate significant logic and create maintenance overhead.
+- The gateway remains agnostic to Serena business logic — it can be extracted to its own repo later if needed.
+
+---
+
+*Document created during Phase 1 of wsp-phase1-gateway-preparation. Updated during Phase 3 (wsp-phase3-real-gateway).*

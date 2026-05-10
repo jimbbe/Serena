@@ -182,4 +182,57 @@ describe("InstanceManager", () => {
       assert.equal(manager.exists("nonexistent"), false);
     });
   });
+
+  describe("updateStatus", () => {
+    it("updates instance status to open", async () => {
+      await manager.createInstance("test");
+      manager.updateStatus("test", "open");
+
+      const state = manager.get("test");
+      assert.ok(state);
+      assert.equal(state!.status, "open");
+      assert.ok(state!.connectedAt, "connectedAt should be set when status is open");
+    });
+
+    it("updates instance status to disconnected", async () => {
+      await manager.createInstance("test");
+      // First set to connected
+      const internal = (manager as unknown as { _instances: Map<string, InstanceState> });
+      const state = internal._instances.get("test")!;
+      state.status = "connected";
+      state.connectedAt = new Date().toISOString();
+
+      // Then disconnect
+      manager.updateStatus("test", "disconnected");
+
+      const updated = manager.get("test");
+      assert.ok(updated);
+      assert.equal(updated!.status, "disconnected");
+    });
+
+    it("does nothing for untracked instance (no crash)", () => {
+      // Should not throw
+      manager.updateStatus("nonexistent", "open");
+      assert.equal(manager.exists("nonexistent"), false);
+    });
+
+    it("updates status to connecting", async () => {
+      await manager.createInstance("test");
+      manager.updateStatus("test", "connecting");
+
+      const state = manager.get("test");
+      assert.ok(state);
+      assert.equal(state!.status, "connecting");
+    });
+
+    it("sets connectedAt when status becomes connected", async () => {
+      await manager.createInstance("test");
+      manager.updateStatus("test", "connected");
+
+      const state = manager.get("test");
+      assert.ok(state);
+      assert.equal(state!.status, "connected");
+      assert.ok(state!.connectedAt, "connectedAt should be set when status is connected");
+    });
+  });
 });

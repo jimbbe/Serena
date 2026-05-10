@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), mock WhatsApp Gateway with dry-run adapter (T18), documentation reorganized (T18.1), AI guide module with deterministic mock provider (T19), channel-agnostic inbound with external identity resolution (T20), conversation store (T22), prompt registry with output contracts and runtime validation (T23), conversation history wired into AI guide context (T27), known contacts wired into AI guide mediation context (T28), configurable OpenAI-compatible LLM provider with env-based selection (T29), post-T29 local readiness/docs-spec sync completed (T30A), structural cleanup completed (T30B), and **Phase 3 of the WhatsApp Gateway — real Evolution API integration** — completed (wsp-phase3-real-gateway). The gateway now exposes a REST API with 7 endpoints, 3-tier API key auth, instance CRUD, message sending, webhook receiver with dedup, and zero npm dependencies. 228 tests passing in gateway-wa (was 59), 519 in core. Total: **747 tests passing**.
+Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), mock WhatsApp Gateway with dry-run adapter (T18), documentation reorganized (T18.1), AI guide module with deterministic mock provider (T19), channel-agnostic inbound with external identity resolution (T20), conversation store (T22), prompt registry with output contracts and runtime validation (T23), conversation history wired into AI guide context (T27), known contacts wired into AI guide mediation context (T28), configurable OpenAI-compatible LLM provider with env-based selection (T29), post-T29 local readiness/docs-spec sync completed (T30A), structural cleanup completed (T30B), and **Phase 3 of the WhatsApp Gateway — real Evolution API integration** — completed (wsp-phase3-real-gateway). The gateway now exposes a REST API with 7 endpoints, 3-tier API key auth, instance CRUD, message sending with stale-state fallback, webhook receiver with dedup and connection.update handling, and zero npm dependencies. **244 tests passing in gateway-wa** (was 59), 519 in core. Total: **763 tests passing**.
 
 ## Decided
 
@@ -36,6 +36,8 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - Configurable instance-to-consumer routing table (currently hardcoded to Serena Core).
 - HMAC webhook signature validation between Evolution API and gateway.
 - Panel UI.
+- **T36: Serena Core inbound webhook endpoint** (`POST /internal/webhook/whatsapp`) — required for end-to-end inbound messaging from WhatsApp. Gateway is ready to route; Serena Core needs the receiving endpoint.
+- **Instance state persistence** — InstanceManager is in-memory; gateway restart loses local tracking. Evolution API remains source of truth for sessions. Rehydration from Evolution API on startup planned for a future phase.
 
 ## Repository Conventions
 

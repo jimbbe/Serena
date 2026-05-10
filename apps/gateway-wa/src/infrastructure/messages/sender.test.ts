@@ -1,14 +1,15 @@
 /**
  * T12 — Message sender tests.
  *
- * Tests for validation, instance existence check, and Evolution API call.
+ * Tests for validation, instance existence check, stale state fallback,
+ * and Evolution API call.
  */
 
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { MessageSender } from "./sender.ts";
 import type { EvolutionClient } from "../evolution/client.ts";
-import type { InstanceManager } from "../instances/manager.ts";
+import type { InstanceManager, InstanceStatus } from "../instances/manager.ts";
 
 // ---------------------------------------------------------------------------
 // Fake clients
@@ -181,5 +182,180 @@ describe("MessageSender — validation", () => {
       assert.equal(result.status, 502);
       assert.equal(result.error, "evolution_unreachable");
     }
+  });
+});
+
+describe("MessageSender — stale state fallback", () => {
+  it("queries Evolution API when manager says disconnected, allows send if Evolution says open", async () => {
+    let getStateCalled = false;
+    let sendCalled = false;
+
+    const manager: InstanceManager = {
+      exists() { return true; },
+      get() {
+        return { name: "serena-main", status: "disconnected", qr: null, connectedAt: null };
+      },
+      updateStatus() {},
+    } as unknown as InstanceManager;
+
+    const evoClient: EvolutionClient = {
+      async createInstance() { throw new Error("not implemented"); },
+      async getConnectionState() {
+        getStateCalled = true;
+        return { state: "open" };
+      },
+      async connectInstance() { throw new Error("not implemented"); },
+      async sendText() {
+        sendCalled = true;
+        return {
+          key: { id: "wamid-001", remoteJid: "x@s.whatsapp.net", fromMe: true },
+          message: { conversation: "test" },
+          messageTimestamp: "1",
+          status: "sent",
+        };
+      },
+      async deleteInstance() { throw new Error("not implemented"); },
+    };
+
+    const sender = new MessageSender(evoClient, manager);
+    const result = await sender.sendText("serena-main", "5491111111111", "Hola!");
+
+    assert.ok(getStateCalled, "Should have queried Evolution API for state");
+    assert.ok(sendCalled, "Should have sent message after state refresh");
+    assert.ok(result.ok);
+  });
+
+  it("queries Evolution API when manager says disconnected, blocks if Evolution says closed", async () => {
+    const manager: InstanceManager = {
+      exists() { return true; },
+      get() {
+        return { name: "serena-main", status: "disconnected", qr: null, connectedAt: null };
+      },
+      updateStatus() {},
+    } as unknown as InstanceManager;
+
+    const evoClient: EvolutionClient = {
+      async createInstance() { throw new Error("not implemented"); },
+      async getConnectionState() {
+        return { state: "close" };
+      },
+      async connectInstance() { throw new Error("not implemented"); },
+      async sendText() {
+        throw new Error("should not be called");
+      },
+      async deleteInstance() { throw new Error("not implemented"); },
+    };
+
+    const sender = new MessageSender(evoClient, manager);
+    const result = await sender.sendText("serena-main", "5491111111111", "Hola!");
+
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.status, 400);
+      assert.equal(result.error, "instance_not_connected");
+    }
+  });
+
+  it("returns 502 when Evolution state check fails", async () => {
+    const manager: InstanceManager = {
+      exists() { return true; },
+      get() {
+        return { name: "serena-main", status: "disconnected", qr: null, connectedAt: null };
+      },
+      updateStatus() {},
+    } as unknown as InstanceManager;
+
+    const evoClient: EvolutionClient = {
+      async createInstance() { throw new Error("not implemented"); },
+      async getConnectionState() {
+        throw new Error("Evolution API is not reachable");
+      },
+      async connectInstance() { throw new Error("not implemented"); },
+      async sendText() {
+        throw new Error("should not be called");
+      },
+      async deleteInstance() { throw new Error("not implemented"); },
+    };
+
+    const sender = new MessageSender(evoClient, manager);
+    const result = await sender.sendText("serena-main", "5491111111111", "Hola!");
+
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.status, 502);
+      assert.equal(result.error, "evolution_unreachable");
+    }
+  });
+
+  it("does NOT query Evolution API when manager says connected", async () => {
+    let getStateCalled = false;
+
+    const manager: InstanceManager = {
+      exists() { return true; },
+      get() {
+        return { name: "serena-main", status: "connected", qr: null, connectedAt: null };
+      },
+      updateStatus() {},
+    } as unknown as InstanceManager;
+
+    const evoClient: EvolutionClient = {
+      async createInstance() { throw new Error("not implemented"); },
+      async getConnectionState() {
+        getStateCalled = true;
+        return { state: "open" };
+      },
+      async connectInstance() { throw new Error("not implemented"); },
+      async sendText() {
+        return {
+          key: { id: "wamid-001", remoteJid: "x@s.whatsapp.net", fromMe: true },
+          message: { conversation: "test" },
+          messageTimestamp: "1",
+          status: "sent",
+        };
+      },
+      async deleteInstance() { throw new Error("not implemented"); },
+    };
+
+    const sender = new MessageSender(evoClient, manager);
+    const result = await sender.sendText("serena-main", "5491111111111", "Hola!");
+
+    assert.equal(getStateCalled, false, "Should NOT query Evolution when manager says connected");
+    assert.ok(result.ok);
+  });
+
+  it("does NOT query Evolution API when manager says open", async () => {
+    let getStateCalled = false;
+
+    const manager: InstanceManager = {
+      exists() { return true; },
+      get() {
+        return { name: "serena-main", status: "open", qr: null, connectedAt: null };
+      },
+      updateStatus() {},
+    } as unknown as InstanceManager;
+
+    const evoClient: EvolutionClient = {
+      async createInstance() { throw new Error("not implemented"); },
+      async getConnectionState() {
+        getStateCalled = true;
+        return { state: "open" };
+      },
+      async connectInstance() { throw new Error("not implemented"); },
+      async sendText() {
+        return {
+          key: { id: "wamid-001", remoteJid: "x@s.whatsapp.net", fromMe: true },
+          message: { conversation: "test" },
+          messageTimestamp: "1",
+          status: "sent",
+        };
+      },
+      async deleteInstance() { throw new Error("not implemented"); },
+    };
+
+    const sender = new MessageSender(evoClient, manager);
+    const result = await sender.sendText("serena-main", "5491111111111", "Hola!");
+
+    assert.equal(getStateCalled, false, "Should NOT query Evolution when manager says open");
+    assert.ok(result.ok);
   });
 });

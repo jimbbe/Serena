@@ -130,9 +130,10 @@ export function mapEvolutionError(err: unknown): EvolutionApiError {
 }
 
 // ---------------------------------------------------------------------------
-// Webhook payload types (from Evolution API MESSAGES_UPSERT event)
+// Webhook payload types (from Evolution API events)
 // ---------------------------------------------------------------------------
 
+/** MESSAGES_UPSERT event — inbound text messages. */
 export type EvolutionWebhookPayload = {
   event: string;
   instance: string;
@@ -157,3 +158,39 @@ export type EvolutionWebhookPayload = {
     };
   };
 };
+
+/** CONNECTION_UPDATE event — instance connection state changes. */
+export type EvolutionConnectionUpdatePayload = {
+  event: "connection.update";
+  instance: string;
+  data: {
+    state: "open" | "connecting" | "close" | "loggedOut" | string;
+    statusReason?: number;
+  };
+};
+
+/** Union of all webhook payload types the gateway accepts. */
+export type EvolutionWebhookEvent =
+  | EvolutionWebhookPayload
+  | EvolutionConnectionUpdatePayload;
+
+/** Map Evolution API state strings to gateway InstanceStatus. */
+export function mapEvolutionStateToGatewayStatus(
+  state: string,
+): "disconnected" | "connecting" | "connected" | "open" {
+  switch (state) {
+    case "open":
+      return "open";
+    case "connecting":
+      return "connecting";
+    case "connected":
+      return "connected";
+    case "close":
+    case "closed":
+    case "disconnected":
+    case "loggedOut":
+      return "disconnected";
+    default:
+      return "connecting"; // unknown states treated as transitional
+  }
+}

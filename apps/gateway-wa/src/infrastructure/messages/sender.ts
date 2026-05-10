@@ -81,10 +81,17 @@ export class MessageSender {
    *
    * Steps:
    * 1. Validate fields (instanceId, to, text)
-   * 2. Check instance exists
-   * 3. Check instance is connected
+   * 2. Check instance exists in manager
+   * 3. Check instance is connected (with stale state fallback)
    * 4. Call Evolution API sendText
    * 5. Map response
+   *
+   * Stale state handling (Step 3):
+   * - If manager says connected/open → send directly
+   * - If manager says disconnected/connecting → query Evolution API for real state
+   *   - If Evolution says open/connected → update manager, proceed to send
+   *   - If Evolution says disconnected/closed → block with instance_not_connected
+   *   - If Evolution API unreachable → return 502 evolution_unreachable
    */
   async sendText(
     instanceId: string,
@@ -102,31 +109,44 @@ export class MessageSender {
       };
     }
 
+    const trimmedId = instanceId.trim();
+
     // Step 2: Check instance exists
-    if (!this.manager.exists(instanceId.trim())) {
+    if (!this.manager.exists(trimmedId)) {
       return {
         ok: false,
         status: 404,
         error: "instance_not_found",
-        name: instanceId.trim(),
+        name: trimmedId,
       };
     }
 
-    // Step 3: Check instance is connected
-    const instance = this.manager.get(instanceId.trim());
-    if (!instance || (instance.status !== "connected" && instance.status !== "open")) {
+    // Step 3: Check instance is connected (with stale state fallback)
+    const instance = this.manager.get(trimmedId);
+    if (!instance) {
       return {
         ok: false,
-        status: 400,
-        error: "instance_not_connected",
-        name: instanceId.trim(),
+        status: 404,
+        error: "instance_not_found",
+        name: trimmedId,
       };
+    }
+
+    if (instance.status !== "connected" && instance.status !== "open") {
+      // Manager says disconnected/connecting — check Evolution API for real state
+      const evoState = await this.checkEvolutionState(trimmedId);
+      if (!evoState.ok) {
+        return evoState.result;
+      }
+
+      // Evolution says connected — update manager and proceed
+      this.manager.updateStatus(trimmedId, evoState.status);
     }
 
     // Step 4: Call Evolution API
     try {
       const response = await this.evoClient.sendText(
-        instanceId.trim(),
+        trimmedId,
         to.trim(),
         text.trim(),
       );
@@ -147,6 +167,50 @@ export class MessageSender {
         status: 502,
         error: "evolution_unreachable",
         message,
+      };
+    }
+  }
+
+  /**
+   * Check the real connection state from Evolution API.
+   * Returns ok:true with status if connected, or ok:false with error result.
+   */
+  private async checkEvolutionState(
+    instanceId: string,
+  ): Promise<
+    | { ok: true; status: "connected" | "open" }
+    | { ok: false; result: SendResult }
+  > {
+    try {
+      const evoState = await this.evoClient.getConnectionState(instanceId);
+      const state = evoState.state.toLowerCase();
+
+      if (state === "open" || state === "connected") {
+        const gatewayStatus = state === "open" ? "open" : "connected";
+        return { ok: true, status: gatewayStatus };
+      }
+
+      // Evolution confirms disconnected
+      return {
+        ok: false,
+        result: {
+          ok: false,
+          status: 400,
+          error: "instance_not_connected",
+          name: instanceId,
+          message: `Evolution API reports state: ${evoState.state}`,
+        },
+      };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      return {
+        ok: false,
+        result: {
+          ok: false,
+          status: 502,
+          error: "evolution_unreachable",
+          message: `Cannot verify instance state: ${message}`,
+        },
       };
     }
   }

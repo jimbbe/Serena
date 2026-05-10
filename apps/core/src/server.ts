@@ -3,11 +3,15 @@ import { loadAppEnv } from "./config/env.ts";
 import { createInMemoryPipeline } from "./bootstrap/create-in-memory-pipeline.ts";
 import { createLlmProvider } from "./modules/ai-guide/infrastructure/create-llm-provider.ts";
 import { createPipelineHandler } from "./bootstrap/internal-pipeline-handler.ts";
-import { createSimulationHandler } from "./bootstrap/simulation-handler.ts";
+import { createSimulationHandler, createOutboundDeliveryHandler } from "./bootstrap/simulation-handler.ts";
 import { createScenarioHandler } from "./bootstrap/scenario-handler.ts";
 import { SimulationScenarioRunner } from "./bootstrap/scenario-runner.ts";
 import { ProcessChannelInboundMessage } from "./modules/channel-inbound/application/use-cases/process-channel-inbound-message.ts";
 import { InMemoryMediationFlowStore } from "./modules/mediation-flow/adapter/in-memory-mediation-flow-store.ts";
+import { InMemoryOutboundDraftStore } from "./modules/outbound-draft/adapter/in-memory-outbound-draft-store.ts";
+import { RequestOutboundDelivery } from "./modules/outbound-delivery/application/use-cases/request-outbound-delivery.ts";
+import { FakeDeliveryPort } from "./modules/outbound-delivery/adapter/fake-delivery-port.ts";
+import { resolveOutboundRecipient, CreateOutboundDraftFromMediation } from "./modules/outbound-draft/index.ts";
 
 const env = loadAppEnv();
 
@@ -25,10 +29,20 @@ const pipelineHandler = createPipelineHandler(orchestrator, processedMessageStor
 
 // Conditionally wire simulation and scenario handlers (dev-only, disabled by default)
 let simulationHandler: ReturnType<typeof createSimulationHandler> | undefined;
+let outboundDeliveryHandler: ReturnType<typeof createOutboundDeliveryHandler> | undefined;
 let scenarioHandler: ReturnType<typeof createScenarioHandler> | undefined;
 if (env.enableSimulationEndpoints) {
     // T32 — In-memory mediation flow store shared across simulation requests
     const mediationFlowStore = new InMemoryMediationFlowStore();
+    // T34 — Shared outbound draft store for simulation
+    const outboundDraftStore = new InMemoryOutboundDraftStore();
+    // T35 — Delivery port and use case for simulation
+    const deliveryPort = new FakeDeliveryPort();
+    const createOutboundDraft = new CreateOutboundDraftFromMediation();
+    const requestOutboundDelivery = new RequestOutboundDelivery({
+      outboundDraftStore,
+      deliveryPort,
+    });
     const processChannelInboundMessage = new ProcessChannelInboundMessage({
       processInboundMessage,
       aiGuideService,
@@ -36,8 +50,15 @@ if (env.enableSimulationEndpoints) {
       conversationStore,
       contactDirectory,
       mediationFlowStore,
+      resolveOutboundRecipient,
+      outboundDraftStore,
+      createOutboundDraft,
     });
-  simulationHandler = createSimulationHandler(processChannelInboundMessage);
+  simulationHandler = createSimulationHandler(processChannelInboundMessage, {
+    outboundDraftStore,
+    requestOutboundDelivery,
+  });
+  outboundDeliveryHandler = createOutboundDeliveryHandler(requestOutboundDelivery);
 
   const scenarioRunner = new SimulationScenarioRunner({
     processChannelInboundMessage,
@@ -45,7 +66,7 @@ if (env.enableSimulationEndpoints) {
   scenarioHandler = createScenarioHandler(scenarioRunner);
 }
 
-const server = createHttpServer(env.environment, pipelineHandler, env.internalToken, simulationHandler, scenarioHandler);
+const server = createHttpServer(env.environment, pipelineHandler, env.internalToken, simulationHandler, scenarioHandler, outboundDeliveryHandler);
 
 server.listen(env.port, env.host, () => {
   console.log(`serena-core listening on http://${env.host}:${env.port}`);
@@ -53,6 +74,7 @@ server.listen(env.port, env.host, () => {
   console.log(`  POST /internal/pipeline/process${env.internalToken ? "" : " (token NOT configured)"}`);
   if (env.enableSimulationEndpoints) {
     console.log(`  POST /dev/simulate/inbound-message (simulation enabled)`);
+    console.log(`  POST /dev/simulate/outbound-delivery (delivery simulation enabled)`);
     console.log(`  POST /dev/simulate/scenario (scenario runner enabled)`);
   }
 });

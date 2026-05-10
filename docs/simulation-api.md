@@ -771,6 +771,100 @@ curl -X POST http://localhost:3000/dev/simulate/scenario \
 
 All 3 steps are executed regardless of individual failures.
 
+---
+
+## Outbound Delivery Handoff (`POST /dev/simulate/outbound-delivery`)
+
+### Overview
+
+T35 introduces a **DeliveryPort** abstraction that allows Serena to request delivery of a confirmed `OutboundDraft` without coupling the core to any specific transport (WhatsApp, Evolution API, etc.). The simulation endpoint uses a `FakeDeliveryPort` that returns successful delivery results without making any real external calls.
+
+**Key principles**:
+- T35 does **NOT** send real WhatsApp messages.
+- T35 creates a `DeliveryPort` contract that future WhatsApp Gateway implementations will fulfill.
+- `FakeDeliveryPort` tests the full delivery state cycle in memory.
+- **Confirming a mediation does NOT automatically trigger delivery.** Confirmation only creates an `OutboundDraft` with status `confirmed_pending_delivery`. Delivery requires a separate explicit action.
+- Delivery is a **separate action** from confirmation.
+
+### Request
+
+```
+POST /dev/simulate/outbound-delivery
+Content-Type: application/json
+
+{
+  "outboundDraftId": "od_<uuid>"
+}
+```
+
+### Response — Success (200)
+
+```json
+{
+  "delivery": {
+    "status": "delivered",
+    "providerMessageId": "fake_msg_<uuid>",
+    "deliveredAt": "2026-05-10T10:00:00.000Z"
+  },
+  "outboundDraft": {
+    "id": "od_<uuid>",
+    "status": "delivered"
+  }
+}
+```
+
+### Response — Draft Not Ready (409)
+
+When the draft status is not `confirmed_pending_delivery` (e.g., `needs_recipient_resolution`, `cancelled`, `delivered`):
+
+```json
+{
+  "error": "draft_not_ready",
+  "detail": "Outbound draft status is \"needs_recipient_resolution\", cannot deliver. Expected \"confirmed_pending_delivery\"."
+}
+```
+
+### Response — Draft Not Found (404)
+
+```json
+{
+  "error": "draft_not_found",
+  "detail": "Outbound draft not found: od_unknown"
+}
+```
+
+### Response — Invalid Request (400)
+
+```json
+{
+  "error": "invalid_payload",
+  "detail": "outboundDraftId is required and must be a non-empty string"
+}
+```
+
+### Full Flow Example
+
+1. **Start mediation**: `POST /dev/simulate/inbound-message` with `"avisale a Carlos que llego tarde"`
+2. **Confirm**: `POST /dev/simulate/inbound-message` with `"sí"` → returns `preparedOutbound.id`
+3. **Deliver**: `POST /dev/simulate/outbound-delivery` with `{ "outboundDraftId": "<id>" }` → returns `delivery.status: "delivered"`
+
+### Acceptance Test Script
+
+Run the full acceptance suite:
+
+```bash
+ENABLE_SIMULATION_ENDPOINTS=true AI_PROVIDER=mock npm run start:simulation
+node --experimental-strip-types scripts/simulations/run-t35-delivery-port-acceptance.ts
+```
+
+The script tests:
+1. Mediation confirm → preparedOutbound → delivery fake delivered
+2. Unresolved recipient → delivery rejected (409)
+3. Cancel → no preparedOutbound → no delivery possible
+4. Risk signal → no preparedOutbound → no delivery
+5. Unknown sender → no mediation flow → no delivery
+6. Delivery endpoint validation (missing outboundDraftId → 400)
+
 ## Limitations (Phase 1)
 
 - **Mock LLM by default** — AI responses are deterministic (hash-based) unless a real provider is configured. Set `AI_PROVIDER=openai-compatible` and the required env vars to use a real LLM (see `docs/evals/manual-simulation-testing.md`). The scenario runner always uses whichever provider is configured at startup.

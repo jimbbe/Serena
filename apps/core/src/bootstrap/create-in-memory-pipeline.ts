@@ -49,6 +49,8 @@ import {
   resolveOutboundRecipient,
 } from "../modules/outbound-draft/index.ts";
 
+import { FakeDeliveryPort, RequestOutboundDelivery } from "../modules/outbound-delivery/index.ts";
+
 import { AiGuideService } from "../modules/ai-guide/application/use-cases/ai-guide-service.ts";
 import { UseCaseRegistry } from "../modules/ai-guide/application/use-cases/use-case-registry.ts";
 import type { LlmProvider } from "../modules/ai-guide/application/ports/llm-provider.ts";
@@ -82,6 +84,8 @@ export async function createInMemoryPipeline(options?: {
   mediationFlowStore: InMemoryMediationFlowStore;
   processChannelInboundMessage: ProcessChannelInboundMessage;
   outboundDraftStore: InMemoryOutboundDraftStore;
+  deliveryPort: FakeDeliveryPort;
+  requestOutboundDelivery: RequestOutboundDelivery;
 }> {
   const contacts = await loadContactsFromSeed();
 
@@ -200,6 +204,13 @@ export async function createInMemoryPipeline(options?: {
   const outboundDraftStore = new InMemoryOutboundDraftStore();
   const createOutboundDraft = new CreateOutboundDraftFromMediation();
 
+  // T35 — Delivery port and use case
+  const deliveryPort = new FakeDeliveryPort();
+  const requestOutboundDelivery = new RequestOutboundDelivery({
+    outboundDraftStore,
+    deliveryPort,
+  });
+
   // T32 — ProcessChannelInboundMessage with flow store wired
   const processChannelInboundMessage = new ProcessChannelInboundMessage({
     processInboundMessage,
@@ -225,5 +236,7 @@ export async function createInMemoryPipeline(options?: {
     mediationFlowStore,
     processChannelInboundMessage,
     outboundDraftStore,
+    deliveryPort,
+    requestOutboundDelivery,
   };
 }

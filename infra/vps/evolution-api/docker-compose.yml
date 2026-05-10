@@ -1,0 +1,81 @@
+name: evolution-api
+
+services:
+  evolution-api:
+    image: evolutionapi/evolution-api:latest
+    container_name: evolution-api
+    restart: unless-stopped
+    environment:
+      - SERVER_URL=${EVOLUTION_SERVER_URL:-http://evolution-api:8080}
+      - AUTHENTICATION_API_KEY=${AUTHENTICATION_API_KEY:?AUTHENTICATION_API_KEY is required}
+      - AUTHENTICATION_TYPE=apikey
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://${POSTGRES_USER:-evo}:${POSTGRES_PASSWORD:-evo}@evo-postgres:5432/${POSTGRES_DB:-evolution}?schema=public
+      - DATABASE_SAVE_DATA_INSTANCE=true
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=true
+      - DATABASE_SAVE_MESSAGE_UPDATE=true
+      - DATABASE_SAVE_DATA_CONTACTS=true
+      - DATABASE_SAVE_DATA_CHATS=true
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://redis:6379/1
+      - WEBHOOK_GLOBAL_URL=${WEBHOOK_GLOBAL_URL:-http://whatsapp-gateway:3001/webhook/evolution}
+      - WEBHOOK_ENABLED=true
+      - WEBHOOK_EVENTS=messages.upsert,messages.update,connection.update,qrcode.updated
+    expose:
+      - "8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      evo-postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - evolution-private
+
+  evo-postgres:
+    image: postgres:16-alpine
+    container_name: evo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-evolution}
+      POSTGRES_USER: ${POSTGRES_USER:-evo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - evo-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - evolution-private
+
+  redis:
+    image: redis:7-alpine
+    container_name: evo-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - evo-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - evolution-private
+
+networks:
+  evolution-private:
+    name: evolution-private
+    driver: bridge
+
+volumes:
+  evo-postgres-data:
+    name: evo-postgres-data
+  evo-redis-data:
+    name: evo-redis-data

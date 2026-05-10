@@ -14,7 +14,7 @@
 | Tasks complete | 14 |
 | Tasks incomplete | 0 |
 
-All tasks in `openspec/changes/t33-channel-aware-identity-policy/tasks.md` are checked complete. `state.yaml` still says `status: spec-complete` and `phase: apply`; this is an artifact-state warning, not a behavior failure.
+All tasks in the archived T33 task list are checked complete. `state.yaml` now reflects the archived state correctly: `status: complete` and `phase: archive`.
 
 ---
 
@@ -31,12 +31,18 @@ typecheck:contracts passed
 typecheck:scripts passed
 ```
 
-**Tests**: ✅ 794 passed / ❌ 0 failed / ⚠️ 0 skipped
+**Tests**: ✅ 795 passed / ❌ 0 failed / ⚠️ 0 skipped
 ```text
 npm test
-Core: 735 passed, 0 failed, 0 skipped
+Core: 736 passed, 0 failed, 0 skipped
 Gateway WA: 59 passed, 0 failed, 0 skipped
 Exit code: 0
+```
+
+**Endpoint acceptance simulation**: ✅ Passed
+```text
+node --experimental-strip-types scripts/simulations/run-t33-identity-acceptance.ts
+T33 endpoint acceptance: 7/7 passed, 0 failed
 ```
 
 **Coverage**: ➖ Not available — no coverage script/tool is configured in `package.json`.
@@ -50,7 +56,7 @@ Exit code: 0
 | TDD Evidence reported | ✅ | Engram `sdd/t33-channel-aware-identity-policy/apply-progress` contains TDD Cycle Evidence table |
 | All tasks have tests | ✅ | T33 test files exist for resolver, contact directory, process-channel-inbound, simulation endpoint, and mediation integration |
 | RED confirmed (tests exist) | ✅ | Referenced test files exist |
-| GREEN confirmed (tests pass) | ✅ | Full `npm test` passed: 794/794 |
+| GREEN confirmed (tests pass) | ✅ | Full `npm test` passed: 795/795 |
 | Triangulation adequate | ✅ | Multiple resolver, gate, integration, risk, and regression cases are covered |
 | Safety Net for modified files | ✅ | Apply-progress reports targeted baseline passing before alignment fixes and full suite now passes |
 
@@ -65,7 +71,7 @@ Exit code: 0
 | Unit | T33 resolver/contact/use-case tests + related regressions | 4 | `node:test` |
 | Integration | T33 mediation-flow and simulation endpoint tests + T32 regression suite | 2 | `node:test` |
 | E2E | 0 | 0 | not installed |
-| **Total** | **794 executed suite-wide** | **changed/related files inspected** | |
+| **Total** | **795 executed suite-wide** | **changed/related files inspected** | |
 
 ---
 
@@ -102,7 +108,7 @@ Coverage analysis skipped — no coverage tool detected.
 | DR4 Unknown local device restriction | unrecognized voice device | `integration-scenarios.test.ts > T33: unknown voice sender cannot create mediation flow` | ✅ COMPLIANT |
 | DR4 Unknown local device restriction | unrecognized web_chat session | `integration-scenarios.test.ts > T33: unknown web_chat sender cannot create mediation flow` | ✅ COMPLIANT |
 | DR5 Risk from authorized local device | elder risk via authorized voice device | `integration-scenarios.test.ts > T33: authorized elder voice device with risk message routes to risk_review` | ✅ COMPLIANT |
-| DR5 Risk from authorized local device | elder risk via WhatsApp | `simulation-endpoint.test.ts > risk message with HARD signal returns risk_review profile` + elder WhatsApp resolution test | ⚠️ PARTIAL — risk routing and elder WhatsApp resolution are covered separately, not in one dedicated elder-WhatsApp-risk test |
+| DR5 Risk from authorized local device | elder risk via WhatsApp | `simulation-endpoint.test.ts > Marta (elder) on whatsapp with HARD risk routes to risk_review` | ✅ COMPLIANT |
 | DR6 No hardcoded Marta logic in pipeline | pipeline uses resolver for identity decisions | Source inspection + grep in `ProcessChannelInboundMessage` found no `Marta`, `marta`, `serena_device_001`, or channel identity mapping | ✅ COMPLIANT |
 | DR7 Channel policy gate | resolved identity enters mediation | `integration-scenarios.test.ts > T33: authorized elder voice device starts mediation flow` + T32 mediation tests | ✅ COMPLIANT |
 | DR7 Channel policy gate | unknown identity blocked from mediation | `integration-scenarios.test.ts` unknown WhatsApp/voice/web_chat tests | ✅ COMPLIANT |
@@ -113,7 +119,7 @@ Coverage analysis skipped — no coverage tool detected.
 | DR9 Existing channel behavior preserved | simulation channel known/unknown | Simulation endpoint/channel tests and resolver behavior | ✅ COMPLIANT |
 | DR9 Existing channel behavior preserved | system channel behavior preserved | Simulation endpoint/channel tests and generic resolver unknown path | ✅ COMPLIANT |
 
-**Compliance summary**: 19/20 scenarios compliant, 1 partial, 0 failing.
+**Compliance summary**: 20/20 scenarios compliant, 0 partial, 0 failing.
 
 ---
 
@@ -125,7 +131,7 @@ Coverage analysis skipped — no coverage tool detected.
 | DR2 | ✅ Implemented | Unknown WhatsApp resolves unknown and cannot create mediation flow. |
 | DR3 | ✅ Implemented | Voice `serena_device_001` and web_chat `session_abc` resolve as elder Marta. |
 | DR4 | ✅ Implemented | Unknown voice and unknown web_chat cannot create mediation flow. |
-| DR5 | ⚠️ Partial | Authorized voice risk has dedicated committed integration coverage; elder WhatsApp risk is covered only by separate risk + identity tests. |
+| DR5 | ✅ Implemented | Authorized voice risk and elder WhatsApp risk both have dedicated committed coverage. |
 | DR6 | ✅ Implemented | `ProcessChannelInboundMessage` delegates identity resolution to resolver and does not hardcode Marta/channel identity mapping. |
 | DR7 | ✅ Implemented | Unknown sensitive mediation is gated; blocked identity short-circuits. |
 | DR8 | ✅ Implemented | `ChannelBinding`, `externalBindings`, and `findByChannelBinding` are present. |
@@ -151,8 +157,7 @@ Coverage analysis skipped — no coverage tool detected.
 - None.
 
 **WARNING** (should fix):
-- No single dedicated committed test combines elder WhatsApp identity (`+5492600000000`) with risk routing; behavior is covered by separate elder WhatsApp resolution and risk routing tests.
-- `state.yaml` still says `status: spec-complete` and `phase: apply` despite task 5.2 being checked.
+- None.
 
 **SUGGESTION** (nice to have):
 - Expose/record `bindingKind` later if outbound delivery needs channel-targeted identity metadata.
@@ -161,6 +166,6 @@ Coverage analysis skipped — no coverage tool detected.
 
 ### Verdict
 
-PASS WITH WARNINGS
+PASS — READY FOR MERGE
 
-The alignment fixes resolved the previous `personId`/`externalSenderId` mismatch and added committed coverage for authorized local-device risk routing plus unknown `web_chat` mediation blocking. `npm run check` and `npm test` both pass, T32 behavior remains intact, and no hardcoded Marta/channel identity mapping exists inside `ProcessChannelInboundMessage`.
+The alignment fixes resolved the previous `personId`/`externalSenderId` mismatch, `state.yaml` correctly reflects the archived state, and committed coverage now includes authorized local-device risk routing, elder WhatsApp risk routing, unknown `web_chat` mediation blocking, and the live endpoint acceptance runner. `npm run check`, `npm test`, and the T33 endpoint acceptance simulation pass. T32 behavior remains intact, and no hardcoded Marta/channel identity mapping exists inside `ProcessChannelInboundMessage`.

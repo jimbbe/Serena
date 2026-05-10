@@ -611,6 +611,26 @@ describe("POST /dev/simulate/inbound-message", () => {
     assert.equal(identity.authorized, true);
   });
 
+  it("Marta (elder) on whatsapp with HARD risk routes to risk_review", async () => {
+    const { status, body } = await request("POST", "/dev/simulate/inbound-message", port, {
+      channel: "whatsapp",
+      externalSenderId: "+5492600000000",
+      text: "me caí y no puedo levantarme",
+    });
+
+    assert.equal(status, 200);
+    const obj = body as Record<string, unknown>;
+
+    const identity = obj.identity as Record<string, unknown> | undefined;
+    assert.ok(identity !== undefined, "identity field must be present");
+    assert.equal(identity.status, "resolved");
+    assert.equal(identity.personId, "marta");
+    assert.equal(identity.role, "elder");
+    assert.equal(obj.profileId, "risk_review");
+    assert.equal(obj.useCaseId, "serena.risk.review");
+    assert.equal(obj.flowState, undefined);
+  });
+
   it("Marta (elder) on voice resolves with identity.resolved", async () => {
     const { status, body } = await request("POST", "/dev/simulate/inbound-message", port, {
       channel: "voice",

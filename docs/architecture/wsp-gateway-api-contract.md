@@ -44,9 +44,11 @@ Response: 200 { "status": "ok", "service": "whatsapp-gateway" }
 ```
 POST /instances
 Auth: Admin key
-Body: { "name": "serena-main", "webhookUrl": "http://whatsapp-gateway:3001/webhook/evolution" }
-Response: 201 { "name": "serena-main", "qr": "base64...", "status": "disconnected", "apiKey": "<app-key>" }
+Body: { "name": "serena-main" }
+Response: 201 { "name": "serena-main", "qr": "pairing-code-string", "status": "disconnected", "apiKey": "<app-key>" }
 ```
+> **QR Format Note**: The `qr` field contains a pairing code string from Evolution API,
+> NOT base64 image data. See §3.4 for details.
 
 ### 3.3 List Instances
 
@@ -61,9 +63,14 @@ Response: 200 [{ "name": "serena-main", "status": "open", "connectedAt": "..." }
 ```
 GET /instances/:name/qr
 Auth: Admin key
-Response: 200 { "qr": "base64...", "status": "disconnected" }
-         or 200 { "status": "open", "message": "Already connected" }
+Response: 200 { "qr": "PAIR-CODE-1234", "status": "disconnected" }
+          or 200 { "status": "connected", "message": "Already connected" }
 ```
+
+> **QR Format Note (Phase 3)**: The `qr` field returns a pairing code string (e.g. `"ABCD1234"`),
+> NOT base64-encoded image data. Evolution API returns `{ pairingCode: "..." }` in the
+> connect response, and the gateway passes this value through unchanged.
+> Previous documentation showing base64 QR was incorrect.
 
 ### 3.5 Delete Instance
 

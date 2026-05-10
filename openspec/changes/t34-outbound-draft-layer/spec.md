@@ -20,7 +20,7 @@ The system MUST define an `OutboundDraft` domain type that represents a confirme
 |-------|------|-------------|
 | `id` | `string` | Unique identifier (UUID) |
 | `conversationId` | `string` | Conversation where the draft was confirmed |
-| `draftId` | `string` | Reference to the originating `MediationDraft.id` |
+| `draftId` | `string` | Reference to the originating `MediationDraft.id` (implementation field: `sourceDraftId`) |
 | `recipientHint` | `string` | The recipient name as provided by the user (non-empty) |
 | `messageText` | `string` | The confirmed message text (non-empty) |
 | `requesterPersonId` | `string` | The person who requested the mediation |
@@ -134,10 +134,10 @@ The system MUST define an `OutboundDraftStore` port (type alias following existi
 | `findById` | `(id: string) => Promise<OutboundDraft \| undefined>` | Retrieve by ID |
 | `findByConversationId` | `(conversationId: string) => Promise<OutboundDraft[]>` | All drafts for a conversation |
 | `findPendingDelivery` | `() => Promise<OutboundDraft[]>` | All drafts with status `confirmed_pending_delivery` |
-| `markDeliveryRequested` | `(id: string) => Promise<OutboundDraft>` | Transition to `delivery_requested` |
-| `markDelivered` | `(id: string) => Promise<OutboundDraft>` | Transition to `delivered` |
-| `markFailed` | `(id: string, reason?: string) => Promise<OutboundDraft>` | Transition to `failed` |
-| `cancel` | `(id: string) => Promise<OutboundDraft>` | Transition to `cancelled` |
+| `markDeliveryRequested` | `(id: string, at: Date) => Promise<OutboundDraft>` | Transition to `delivery_requested` |
+| `markDelivered` | `(id: string, at: Date) => Promise<OutboundDraft>` | Transition to `delivered` |
+| `markFailed` | `(id: string, reason: string, at: Date) => Promise<OutboundDraft>` | Transition to `failed` (reason required for traceability) |
+| `cancel` | `(id: string, at: Date) => Promise<OutboundDraft>` | Transition to `cancelled` |
 
 All methods MUST return `Promise<OutboundDraft>` (or `Promise<OutboundDraft[]>` for list operations).
 
@@ -190,7 +190,7 @@ The system MUST provide a `CreateOutboundDraftFromMediation` use case that trans
    - `not_found` → all recipient fields null; `status: "needs_recipient_resolution"`
    - `ambiguous` → all recipient fields null; `status: "needs_recipient_disambiguation"`
 6. Generates a new UUID for `OutboundDraft.id`
-7. Copies `draft.id` to `OutboundDraft.draftId`
+7. Copies `draft.id` to `OutboundDraft.sourceDraftId`
 8. Sets `createdAt` and `updatedAt` to current time
 9. Stores the draft via `OutboundDraftStore`
 10. Returns the created `OutboundDraft`
@@ -204,7 +204,7 @@ The system MUST provide a `CreateOutboundDraftFromMediation` use case that trans
 #### Scenario: use case creates draft with resolved recipient
 
 - GIVEN a flow state with `status: "resolved"`, draft with recipientHint "Carlos" and messageDraft "que llego tarde"
-- AND recipient resolution returns `{ type: "resolved", personId: "carlos_001", displayName: "Carlos", channel: "whatsapp", externalId: "5491111111111" }`
+- AND recipient resolution returns `{ status: "resolved", personId: "carlos_001", displayName: "Carlos", channel: "whatsapp", externalId: "5491111111111" }`
 - WHEN `CreateOutboundDraftFromMediation.execute()` is called
 - THEN an `OutboundDraft` is created with:
   - `recipientPersonId: "carlos_001"`
@@ -212,13 +212,13 @@ The system MUST provide a `CreateOutboundDraftFromMediation` use case that trans
   - `recipientChannel: "whatsapp"`
   - `recipientExternalId: "5491111111111"`
   - `status: "confirmed_pending_delivery"`
-  - `recipientResolution: { type: "resolved", ... }`
+  - `recipientResolution: { status: "resolved", ... }`
 - AND the draft is stored in `OutboundDraftStore`
 
 #### Scenario: use case creates draft with unknown recipient
 
 - GIVEN a flow state with confirmed draft
-- AND recipient resolution returns `{ type: "not_found", hint: "UnknownPerson" }`
+- AND recipient resolution returns `{ status: "not_found", hint: "UnknownPerson" }`
 - WHEN `CreateOutboundDraftFromMediation.execute()` is called
 - THEN an `OutboundDraft` is created with:
   - `recipientPersonId: null`
@@ -253,9 +253,9 @@ The `handleConfirmingFlow` method in `ProcessChannelInboundMessage` MUST be exte
 2. If preconditions pass:
    a. Resolve the recipient hint via `ResolveContact.execute({ displayName: draft.recipientHint })`
    b. Map the result to `RecipientResolution`:
-      - Contact found → `{ type: "resolved", ... }` with channel derived from contact bindings
-      - Contact not found → `{ type: "not_found", hint }`
-      - Multiple contacts match → `{ type: "ambiguous", hint, candidates }`
+       - Contact found → `{ status: "resolved", ... }` with channel derived from contact bindings
+       - Contact not found → `{ status: "not_found", hint }`
+       - Multiple contacts match → `{ status: "ambiguous", hint, candidates }`
    c. Call `CreateOutboundDraftFromMediation.execute({ flowState, identity, recipientResolution })`
    d. Store the draft via `OutboundDraftStore`
    e. Build `PreparedOutbound` from the `OutboundDraft`

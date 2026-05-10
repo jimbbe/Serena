@@ -55,4 +55,4 @@
 - [x] T24 Run `npm run check` — TypeScript strict mode, no `any` types, all tests pass
 - [x] T25 Verify no real WhatsApp/Evolution API/PostgreSQL calls in any new code (search for `evolution`, `whatsapp`, `pg`, `postgres` imports in outbound-draft module)
 - [x] T26 Verify module isolation: `outbound-draft` imports only from `shared/`, `mediation-flow/domain` (read-only), and `contact-directory` — no imports from `channel-inbound`, `inbound-gate`, or `ai-guide`
-- [ ] T27 Create PR branch `feat/t34-outbound-draft-layer`, commit all changes, push, and create PR for Marco review
+- [x] T27 Create PR branch `feat/t34-outbound-draft-prepared-delivery`, commit all changes, push, and create PR #42 for Marco review

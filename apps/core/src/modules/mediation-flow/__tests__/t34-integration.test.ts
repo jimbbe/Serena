@@ -7,6 +7,8 @@ import type { PromptId } from "../../ai-guide/domain/prompt-id.ts";
 import { InMemoryContactDirectory } from "../../contact-directory/infrastructure/memory/in-memory-contact-directory.ts";
 import { ProcessChannelInboundMessage } from "../../channel-inbound/application/use-cases/process-channel-inbound-message.ts";
 import { CreateOutboundDraftFromMediation, InMemoryOutboundDraftStore, resolveOutboundRecipient } from "../../outbound-draft/index.ts";
+import type { OutboundDraft } from "../../outbound-draft/domain/outbound-draft.ts";
+import type { OutboundDraftStore } from "../../outbound-draft/port/outbound-draft-store.ts";
 
 const ELDER_WHATSAPP = "+5492600000000";
 
@@ -244,4 +246,71 @@ test("S10: voice confirmation creates outbound draft with voice requester channe
 
   const stored = await pipeline.outboundDraftStore.findByConversationId(step1.conversation!.id);
   assert.equal(stored[0]?.requesterChannel, "voice");
+});
+
+class FailingOutboundDraftStore implements OutboundDraftStore {
+  async create(_draft: OutboundDraft): Promise<OutboundDraft> {
+    throw new Error("store unavailable");
+  }
+  async findById(_id: string): Promise<OutboundDraft | undefined> {
+    return undefined;
+  }
+  async findByConversationId(_conversationId: string): Promise<OutboundDraft[]> {
+    return [];
+  }
+  async findPendingDelivery(): Promise<OutboundDraft[]> {
+    return [];
+  }
+  async markDeliveryRequested(_id: string, _at: Date): Promise<OutboundDraft> {
+    throw new Error("store unavailable");
+  }
+  async markDelivered(_id: string, _at: Date): Promise<OutboundDraft> {
+    throw new Error("store unavailable");
+  }
+  async markFailed(_id: string, _reason: string, _at: Date): Promise<OutboundDraft> {
+    throw new Error("store unavailable");
+  }
+  async cancel(_id: string, _at: Date): Promise<OutboundDraft> {
+    throw new Error("store unavailable");
+  }
+}
+
+test("E4: OutboundDraftStore.create failure does not crash pipeline and adds warning", async () => {
+  const base = await freshPipeline();
+  const failingStore = new FailingOutboundDraftStore();
+  const useCase = new ProcessChannelInboundMessage({
+    processInboundMessage: base.processInboundMessage,
+    aiGuideService: base.aiGuideService,
+    identityResolver: base.identityResolver,
+    conversationStore: base.conversationStore,
+    contactDirectory: base.contactDirectory,
+    mediationFlowStore: base.mediationFlowStore,
+    resolveOutboundRecipient,
+    outboundDraftStore: failingStore,
+    createOutboundDraft: new CreateOutboundDraftFromMediation(),
+  });
+
+  const step1 = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: ELDER_WHATSAPP,
+    text: "avisale a Carlos que llego tarde",
+    tenantId: "demo",
+  });
+  const step2 = await useCase.execute({
+    channel: "whatsapp",
+    externalSenderId: ELDER_WHATSAPP,
+    text: "sí",
+    tenantId: "demo",
+    ...(step1.conversation?.id !== undefined ? { conversationId: step1.conversation.id } : {}),
+  });
+
+  assert.equal(step2.flowState?.status, "resolved");
+  assert.equal(step2.preparedOutbound, undefined);
+  assert.ok(
+    step2.warnings.some((w) => w.toLowerCase().includes("outbound") || w.toLowerCase().includes("draft")),
+    `Expected warning about outbound draft failure, got: ${JSON.stringify(step2.warnings)}`,
+  );
+  assert.ok(step2.promptText?.includes("no se envió") || step2.promptText?.includes("preparado") || step2.promptText?.includes("confirmado"),
+    `Expected prompt to clarify no real send, got: ${step2.promptText}`,
+  );
 });

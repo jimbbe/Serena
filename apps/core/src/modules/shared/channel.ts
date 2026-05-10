@@ -14,3 +14,13 @@ export type InboundChannel =
   | "telegram"
   | "system"
   | "simulation";
+
+export type ChannelBinding = {
+  channel: InboundChannel;
+  externalId: string;
+  ownerPersonId: string;
+  role: "elder" | "contact" | "system";
+  displayName: string;
+  authorized: boolean;
+  bindingKind: "whatsapp_sender" | "local_device" | "web_session";
+};

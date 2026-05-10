@@ -249,9 +249,9 @@ The in-memory resolver is seeded with demo identities covering Marta (the elder)
 
 | Channel | externalSenderId | personId | role | displayName | Status |
 |---------|-----------------|----------|------|-------------|--------|
-| `whatsapp` | `+5492600000000` | `elder_001` | `elder` | Marta | resolved |
-| `voice` | `device_marta_livingroom` | `elder_001` | `elder` | Marta | resolved |
-| `web_chat` | `session_abc` | `elder_001` | `elder` | Marta | resolved |
+| `whatsapp` | `+5492600000000` | `marta` | `elder` | Marta | resolved |
+| `voice` | `serena_device_001` | `marta` | `elder` | Marta | resolved |
+| `web_chat` | `session_abc` | `marta` | `elder` | Marta | resolved |
 | `whatsapp` | `+5499999999999` | — | — | — | blocked |
 
 Additionally, contacts from the seed data (María, Carlos, Juan, José, José María) are registered as `role: "contact"` on the `whatsapp` channel.
@@ -279,8 +279,8 @@ curl -X POST http://localhost:3000/dev/simulate/inbound-message \
     "tenantId": "demo",
     "channel": "whatsapp",
     "externalSenderId": "+5492600000000",
-    "personId": "elder_001",
-    "actorId": "elder_001",
+    "personId": "marta",
+    "actorId": "marta",
     "role": "elder",
     "displayName": "Marta",
     "authorized": true

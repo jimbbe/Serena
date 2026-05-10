@@ -13,48 +13,43 @@
 import type { ExternalIdentityResolver } from "../../application/ports/external-identity-resolver.ts";
 import type { ResolvedInboundActor } from "../../../channel-inbound/application/results/resolved-inbound-actor.ts";
 import type { InboundMessageCommand } from "../../domain/inbound-message-command.ts";
+import type { ChannelBinding } from "../../../shared/channel.ts";
 
 // ---------------------------------------------------------------------------
 // Default demo data
 // ---------------------------------------------------------------------------
 
-const DEMO_DATA: Record<string, ResolvedInboundActor> = {
-  // Marta (elder) on WhatsApp
-  "demo:whatsapp:+5492600000000": {
-    status: "resolved",
-    tenantId: "demo",
+const DEMO_BINDINGS: ChannelBinding[] = [
+  {
     channel: "whatsapp",
-    externalSenderId: "+5492600000000",
-    personId: "elder_001",
-    actorId: "elder_001",
+    externalId: "+5492600000000",
+    ownerPersonId: "marta",
     role: "elder",
     displayName: "Marta",
     authorized: true,
+    bindingKind: "whatsapp_sender",
   },
-  // Marta (elder) on voice device
-  "demo:voice:device_marta_livingroom": {
-    status: "resolved",
-    tenantId: "demo",
+  {
     channel: "voice",
-    externalSenderId: "device_marta_livingroom",
-    personId: "elder_001",
-    actorId: "elder_001",
+    externalId: "serena_device_001",
+    ownerPersonId: "marta",
     role: "elder",
     displayName: "Marta",
     authorized: true,
+    bindingKind: "local_device",
   },
-  // Marta (elder) on web chat
-  "demo:web_chat:session_abc": {
-    status: "resolved",
-    tenantId: "demo",
+  {
     channel: "web_chat",
-    externalSenderId: "session_abc",
-    personId: "elder_001",
-    actorId: "elder_001",
+    externalId: "session_abc",
+    ownerPersonId: "marta",
     role: "elder",
     displayName: "Marta",
     authorized: true,
+    bindingKind: "web_session",
   },
+];
+
+const DEFAULT_BLOCKED: Record<string, ResolvedInboundActor> = {
   // Blocked sender (testing)
   "demo:whatsapp:+5499999999999": {
     status: "blocked",
@@ -73,19 +68,37 @@ const DEMO_DATA: Record<string, ResolvedInboundActor> = {
 export class InMemoryExternalIdentityResolver implements ExternalIdentityResolver {
   private readonly registry: Map<string, ResolvedInboundActor>;
 
-  constructor(extraEntries?: Record<string, ResolvedInboundActor>) {
+  constructor(input?: Record<string, ResolvedInboundActor> | { bindings?: ChannelBinding[]; overrides?: Record<string, ResolvedInboundActor> }) {
     this.registry = new Map();
 
-    // Prime with demo defaults
-    for (const [key, entry] of Object.entries(DEMO_DATA)) {
+    for (const [key, entry] of Object.entries(DEFAULT_BLOCKED)) {
       this.registry.set(key, entry);
     }
 
-    // Override/extend with caller-provided entries
-    if (extraEntries) {
-      for (const [key, entry] of Object.entries(extraEntries)) {
+    const bindings = Array.isArray((input as { bindings?: ChannelBinding[] } | undefined)?.bindings)
+      ? (input as { bindings?: ChannelBinding[] }).bindings ?? []
+      : DEMO_BINDINGS;
+
+    for (const binding of bindings) {
+      const key = `demo:${binding.channel}:${binding.externalId}`;
+      this.registry.set(key, {
+        status: "resolved",
+        tenantId: "demo",
+        channel: binding.channel,
+        externalSenderId: binding.externalId,
+        personId: binding.ownerPersonId,
+        actorId: binding.ownerPersonId,
+        role: binding.role,
+        displayName: binding.displayName,
+        authorized: binding.authorized,
+      });
+    }
+
+    const overrides = isLegacyOverrides(input)
+      ? input
+      : ((input as { overrides?: Record<string, ResolvedInboundActor> } | undefined)?.overrides ?? {});
+    for (const [key, entry] of Object.entries(overrides)) {
         this.registry.set(key, entry);
-      }
     }
   }
 
@@ -121,4 +134,10 @@ export class InMemoryExternalIdentityResolver implements ExternalIdentityResolve
       };
     }
   }
+}
+
+function isLegacyOverrides(
+  input: Record<string, ResolvedInboundActor> | { bindings?: ChannelBinding[]; overrides?: Record<string, ResolvedInboundActor> } | undefined,
+): input is Record<string, ResolvedInboundActor> {
+  return input !== undefined && !("bindings" in input) && !("overrides" in input);
 }

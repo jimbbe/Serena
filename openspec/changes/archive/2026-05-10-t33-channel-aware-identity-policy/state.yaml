@@ -1,0 +1,38 @@
+change: t33-channel-aware-identity-policy
+status: complete
+phase: archive
+created: 2026-05-10
+archived: 2026-05-10
+artifacts:
+  - openspec/changes/archive/2026-05-10-t33-channel-aware-identity-policy/exploration.md
+  - openspec/changes/archive/2026-05-10-t33-channel-aware-identity-policy/proposal.md
+  - openspec/changes/archive/2026-05-10-t33-channel-aware-identity-policy/spec.md
+  - openspec/changes/archive/2026-05-10-t33-channel-aware-identity-policy/design.md
+  - openspec/changes/archive/2026-05-10-t33-channel-aware-identity-policy/tasks.md
+  - openspec/changes/archive/2026-05-10-t33-channel-aware-identity-policy/verify-report.md
+  - openspec/changes/archive/2026-05-10-t33-channel-aware-identity-policy/archive-report.md
+  - docs/simulation-api.md
+  - apps/core/src/modules/shared/channel.ts
+  - apps/core/src/modules/contact-directory/domain/contact.ts
+  - apps/core/src/modules/contact-directory/application/ports/contact-directory.ts
+  - apps/core/src/modules/contact-directory/infrastructure/memory/in-memory-contact-directory.ts
+  - apps/core/src/modules/contact-directory/infrastructure/seed/contacts.seed.json
+  - apps/core/src/modules/inbound-gate/infrastructure/memory/in-memory-external-identity-resolver.ts
+  - apps/core/src/bootstrap/create-in-memory-pipeline.ts
+  - apps/core/src/modules/channel-inbound/application/use-cases/process-channel-inbound-message.ts
+  - apps/core/src/modules/inbound-gate/tests/identity-resolution.test.ts
+  - apps/core/src/modules/inbound-gate/tests/in-memory-external-identity-resolver.test.ts
+  - apps/core/src/modules/mediation-flow/__tests__/integration-scenarios.test.ts
+  - apps/core/src/bootstrap/tests/simulation-endpoint.test.ts
+  - engram: sdd/t33-channel-aware-identity-policy/explore (obs-8529105199bf5dc3)
+  - engram: sdd/t33-channel-aware-identity-policy/proposal (obs-750)
+  - engram: sdd/t33-channel-aware-identity-policy/spec (obs-754)
+  - engram: sdd/t33-channel-aware-identity-policy/design (obs-752)
+  - engram: sdd/t33-channel-aware-identity-policy/tasks (obs-755)
+  - engram: sdd/t33-channel-aware-identity-policy/apply-progress (obs-757)
+  - engram: sdd/t33-channel-aware-identity-policy/verify-report (obs-758)
+  - engram: sdd/t33-channel-aware-identity-policy/archive-report (current)
+synced_specs:
+  - openspec/specs/external-identity-resolution/spec.md — Updated seed data (personId, device IDs), added channel-aware resolution rules (DR1-DR4, DR6-DR7)
+  - openspec/specs/mediation-flow/spec.md — Added identity gate requirement R15 with resolved/unknown/blocked scenarios (DR2, DR4, DR5, DR7)
+  - openspec/specs/contact-directory-integration/spec.md — Added channel binding support requirement: ChannelBinding type, findByChannelBinding port (DR8)

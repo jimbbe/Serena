@@ -198,6 +198,24 @@ test("findByWhatsAppId is case-insensitive on the whatsappId field", async () =>
   assert.equal(result.id, "c1");
 });
 
+test("findByChannelBinding resolves known whatsapp binding", async () => {
+  const contacts = await loadContactsFromSeed();
+  const directory = new InMemoryContactDirectory(contacts);
+
+  const result = await directory.findByChannelBinding("whatsapp", "5491111111111");
+  assert.ok(result);
+  assert.equal(result.id, "c1");
+});
+
+test("findByChannelBinding resolves marta voice device", async () => {
+  const contacts = await loadContactsFromSeed();
+  const directory = new InMemoryContactDirectory(contacts);
+
+  const result = await directory.findByChannelBinding("voice", "serena_device_001");
+  assert.ok(result);
+  assert.equal(result.id, "marta");
+});
+
 test("ResolveContact with name that doesn't exist returns undefined", async () => {
   const contacts = [
     { id: "c1", displayName: "María", whatsappId: "5491111111111" },

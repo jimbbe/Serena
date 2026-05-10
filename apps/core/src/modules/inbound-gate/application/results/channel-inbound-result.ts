@@ -18,6 +18,7 @@ import type {
   PendingAction,
   MissingMediationField,
 } from "../../../mediation-flow/domain/mediation-flow-state.ts";
+import type { OutboundDraftStatus } from "../../../outbound-draft/domain/outbound-draft.ts";
 
 /**
  * Simulated outbound draft included in the simulation result when
@@ -39,6 +40,17 @@ export type SimulatedOutbound = {
   reason?: string;
   /** Additional channel-specific metadata. */
   metadata?: Record<string, unknown>;
+};
+
+export type PreparedOutbound = {
+  id: string;
+  status: OutboundDraftStatus;
+  recipientPersonId: string | null;
+  recipientDisplayName: string | null;
+  recipientChannel: InboundChannel | null;
+  recipientExternalId: string | null;
+  messageText: string;
+  deliveryReady: boolean;
 };
 
 /**
@@ -63,6 +75,8 @@ export type ChannelInboundResult = {
   guideError?: { message: string; code?: string };
   /** Simulated outbound draft when mediation is involved. */
   simulatedOutbound?: SimulatedOutbound;
+  /** Confirmed outbound draft prepared for future delivery. */
+  preparedOutbound?: PreparedOutbound;
   /** Resolved identity from external identity resolution (optional for backward compatibility). */
   identity?: ResolvedInboundActor;
   /** Conversation info — set when identity is resolved and a conversation exists. */

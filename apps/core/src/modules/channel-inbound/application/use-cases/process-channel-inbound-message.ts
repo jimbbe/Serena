@@ -17,6 +17,7 @@ import { randomUUID } from "node:crypto";
 
 import type { InboundMessageCommand } from "../../../inbound-gate/domain/inbound-message-command.ts";
 import type { ChannelInboundResult } from "../../../inbound-gate/application/results/channel-inbound-result.ts";
+import type { PreparedOutbound } from "../../../inbound-gate/application/results/channel-inbound-result.ts";
 import type { ResolvedInboundActor } from "../results/resolved-inbound-actor.ts";
 import type { GuideUseCaseId } from "../../../ai-guide/domain/guide-use-case-id.ts";
 import type { GuideResult } from "../../../ai-guide/domain/guide-result.ts";
@@ -35,6 +36,11 @@ import type { MediationFlowStore } from "../../../mediation-flow/port/mediation-
 import type { MediationFlowState, PendingAction, MissingMediationField } from "../../../mediation-flow/domain/mediation-flow-state.ts";
 import { resolveConfirmationInput } from "../../../mediation-flow/application/resolve-confirmation-input.ts";
 import { hasHardRiskSignal } from "../../../inbound-gate/domain/risk-signals.ts";
+import type { OutboundDraftStore } from "../../../outbound-draft/port/outbound-draft-store.ts";
+import type { CreateOutboundDraftFromMediation } from "../../../outbound-draft/application/use-cases/create-outbound-draft-from-mediation.ts";
+import type { OutboundDraftRequesterIdentity } from "../../../outbound-draft/application/use-cases/create-outbound-draft-from-mediation.ts";
+import type { RecipientResolution } from "../../../outbound-draft/application/resolve-outbound-recipient.ts";
+import type { OutboundDraft } from "../../../outbound-draft/domain/outbound-draft.ts";
 
 // ---------------------------------------------------------------------------
 // Dependencies
@@ -56,6 +62,9 @@ export type ProcessChannelInboundMessageDependencies = {
   contactDirectory?: ContactDirectory;
   /** T32 — Optional mediation flow store. When undefined, falls back to current no-flow behavior. */
   mediationFlowStore?: MediationFlowStore;
+  resolveOutboundRecipient?: (hint: string, contactDirectory: ContactDirectory) => Promise<RecipientResolution>;
+  outboundDraftStore?: OutboundDraftStore;
+  createOutboundDraft?: CreateOutboundDraftFromMediation;
 };
 
 // ---------------------------------------------------------------------------
@@ -70,6 +79,10 @@ export class ProcessChannelInboundMessage {
   private readonly generateTraceId: () => string;
   private readonly contactDirectory: ContactDirectory | undefined;
   private readonly mediationFlowStore: MediationFlowStore | undefined;
+  private readonly resolveOutboundRecipient:
+    ((hint: string, contactDirectory: ContactDirectory) => Promise<RecipientResolution>) | undefined;
+  private readonly outboundDraftStore: OutboundDraftStore | undefined;
+  private readonly createOutboundDraft: CreateOutboundDraftFromMediation | undefined;
 
   constructor(deps: ProcessChannelInboundMessageDependencies) {
     this.processInboundMessage = deps.processInboundMessage;
@@ -79,6 +92,9 @@ export class ProcessChannelInboundMessage {
     this.generateTraceId = deps.generateTraceId ?? (() => randomUUID());
     this.contactDirectory = deps.contactDirectory;
     this.mediationFlowStore = deps.mediationFlowStore;
+    this.resolveOutboundRecipient = deps.resolveOutboundRecipient;
+    this.outboundDraftStore = deps.outboundDraftStore;
+    this.createOutboundDraft = deps.createOutboundDraft;
   }
 
   async execute(cmd: InboundMessageCommand): Promise<ChannelInboundResult> {
@@ -469,6 +485,7 @@ export class ProcessChannelInboundMessage {
     guideError?: { message: string; code?: string };
     flowState?: ChannelInboundResult["flowState"];
     promptText?: string;
+    preparedOutbound?: PreparedOutbound;
     /** For confirming flow: the inbound decision from gate evaluation. */
     inboundDecision?: InboundDecision;
   }): ChannelInboundResult {
@@ -505,6 +522,7 @@ export class ProcessChannelInboundMessage {
     };
     if (args.flowState !== undefined) result.flowState = args.flowState;
     if (args.promptText !== undefined) result.promptText = args.promptText;
+    if (args.preparedOutbound !== undefined) result.preparedOutbound = args.preparedOutbound;
     return result;
   }
 
@@ -524,7 +542,6 @@ export class ProcessChannelInboundMessage {
     const { flow, resolution, userText } = args;
 
     if (resolution.action === "confirm") {
-      // Confirm the mediation
       const updatedDraft = flow.draft !== null ? { ...flow.draft, status: "confirmed" as const } : null;
       const resolvedFlow: MediationFlowState = {
         ...flow,
@@ -536,6 +553,48 @@ export class ProcessChannelInboundMessage {
       };
       await this.mediationFlowStore!.updateFlow(resolvedFlow);
 
+      let preparedOutbound: PreparedOutbound | undefined;
+      let promptText = "Perfecto, dejo este mensaje confirmado para envío futuro. Todavía no se envía por ningún canal real.";
+
+      const preconditionFailure = this.getOutboundDraftPreconditionFailure({
+        flowState: resolvedFlow,
+        identity: args.identity,
+      });
+
+      if (preconditionFailure !== undefined) {
+        args.warnings.push(preconditionFailure);
+      } else if (
+        this.contactDirectory !== undefined &&
+        this.resolveOutboundRecipient !== undefined &&
+        this.outboundDraftStore !== undefined &&
+        this.createOutboundDraft !== undefined
+      ) {
+        try {
+          const recipientResolution = await this.resolveOutboundRecipient(
+            resolvedFlow.draft!.recipientHint!,
+            this.contactDirectory,
+          );
+
+          const outboundDraft = await this.createOutboundDraft.execute({
+            flowState: resolvedFlow,
+            identity: {
+              status: "resolved",
+              tenantId: args.identity.tenantId,
+              channel: args.channel,
+              ...(args.identity.personId !== undefined ? { personId: args.identity.personId } : {}),
+            } satisfies OutboundDraftRequesterIdentity,
+            recipientResolution,
+            store: this.outboundDraftStore,
+          });
+
+          preparedOutbound = toPreparedOutbound(outboundDraft);
+          promptText = buildPreparedOutboundPrompt(outboundDraft.status);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          args.warnings.push(`Outbound draft not created: ${message}`);
+        }
+      }
+
       return this.buildFlowResult({
         ...args,
         flowState: {
@@ -546,7 +605,8 @@ export class ProcessChannelInboundMessage {
           draftMessageDraft: flow.draft?.messageDraft ?? null,
           version: flow.draft?.version ?? 0,
         },
-        promptText: "Perfecto, dejo este mensaje confirmado para envío futuro. Todavía no se envía por ningún canal real.",
+        promptText,
+        ...(preparedOutbound !== undefined ? { preparedOutbound } : {}),
       });
     }
 
@@ -786,6 +846,64 @@ export class ProcessChannelInboundMessage {
       promptText: buildPromptText(flow),
     });
   }
+
+  private getOutboundDraftPreconditionFailure(args: {
+    flowState: MediationFlowState;
+    identity: ResolvedInboundActor;
+  }): string | undefined {
+    const { flowState, identity } = args;
+
+    if (flowState.draft === null) {
+      return "Outbound draft not created: mediation draft missing";
+    }
+
+    if (flowState.draft.recipientHint === null || flowState.draft.recipientHint.trim().length === 0) {
+      return "Outbound draft not created: recipientHint is empty";
+    }
+
+    if (flowState.draft.messageDraft === null || flowState.draft.messageDraft.trim().length === 0) {
+      return "Outbound draft not created: messageDraft is empty";
+    }
+
+    if (flowState.conversationId.trim().length === 0) {
+      return "Outbound draft not created: conversationId missing";
+    }
+
+    if (identity.status !== "resolved") {
+      return "Outbound draft not created: identity not resolved";
+    }
+
+    if (flowState.status === "paused") {
+      return "Outbound draft not created: flow paused";
+    }
+
+    return undefined;
+  }
+}
+
+function toPreparedOutbound(outboundDraft: OutboundDraft): PreparedOutbound {
+  return {
+    id: outboundDraft.id,
+    status: outboundDraft.status,
+    recipientPersonId: outboundDraft.recipientPersonId,
+    recipientDisplayName: outboundDraft.recipientDisplayName,
+    recipientChannel: outboundDraft.recipientChannel,
+    recipientExternalId: outboundDraft.recipientExternalId,
+    messageText: outboundDraft.messageText,
+    deliveryReady: outboundDraft.status === "confirmed_pending_delivery",
+  };
+}
+
+function buildPreparedOutboundPrompt(status: OutboundDraft["status"]): string {
+  if (status === "needs_recipient_resolution") {
+    return "Perfecto, dejo este mensaje preparado. Todavía no se envía por ningún canal real y falta resolver el destinatario.";
+  }
+
+  if (status === "needs_recipient_disambiguation") {
+    return "Perfecto, dejo este mensaje preparado. Todavía no se envía por ningún canal real y falta desambiguar el destinatario.";
+  }
+
+  return "Perfecto, dejo este mensaje confirmado para envío futuro. Todavía no se envía por ningún canal real.";
 }
 
 // -----------------------------------------------------------------------

@@ -7,6 +7,7 @@ import { createSimulationHandler } from "./bootstrap/simulation-handler.ts";
 import { createScenarioHandler } from "./bootstrap/scenario-handler.ts";
 import { SimulationScenarioRunner } from "./bootstrap/scenario-runner.ts";
 import { ProcessChannelInboundMessage } from "./modules/channel-inbound/application/use-cases/process-channel-inbound-message.ts";
+import { InMemoryMediationFlowStore } from "./modules/mediation-flow/adapter/in-memory-mediation-flow-store.ts";
 
 const env = loadAppEnv();
 
@@ -26,12 +27,15 @@ const pipelineHandler = createPipelineHandler(orchestrator, processedMessageStor
 let simulationHandler: ReturnType<typeof createSimulationHandler> | undefined;
 let scenarioHandler: ReturnType<typeof createScenarioHandler> | undefined;
 if (env.enableSimulationEndpoints) {
+    // T32 — In-memory mediation flow store shared across simulation requests
+    const mediationFlowStore = new InMemoryMediationFlowStore();
     const processChannelInboundMessage = new ProcessChannelInboundMessage({
       processInboundMessage,
       aiGuideService,
       identityResolver,
       conversationStore,
       contactDirectory,
+      mediationFlowStore,
     });
   simulationHandler = createSimulationHandler(processChannelInboundMessage);
 

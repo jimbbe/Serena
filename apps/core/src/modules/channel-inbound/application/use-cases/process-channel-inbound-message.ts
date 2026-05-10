@@ -246,8 +246,16 @@ export class ProcessChannelInboundMessage {
     // 6. LLM profile required — resolve profile and execute AI guide
     let profileId = route.profileId;
 
+    // T32 — Confirmation/cancellation/edit words only have meaning when an active
+    // mediation flow exists. Without a pending draft, keep them conversational.
+    const skipSemanticClassifier = isStandaloneFlowControlInput(cmd.text);
+    if (skipSemanticClassifier) {
+      profileId = "conversation";
+    }
+
     // === Semantic classifier for authorized senders ===
-    try {
+    if (!skipSemanticClassifier) {
+      try {
       const classification = await this.aiGuideService.execute(
         "serena.inbound.classify_intent",
         {
@@ -270,8 +278,9 @@ export class ProcessChannelInboundMessage {
         );
       }
       // If classifier fails → profileId stays deterministic
-    } catch {
-      // Safe degradation: use deterministic route
+      } catch {
+        // Safe degradation: use deterministic route
+      }
     }
 
     const useCaseId: GuideUseCaseId = profileToUseCaseId(profileId);
@@ -325,7 +334,9 @@ export class ProcessChannelInboundMessage {
         const draftId = randomUUID();
         const missingFields = mediationOutput.missingFields;
         const status: MediationFlowState["status"] = missingFields.length === 0 || (missingFields.length === 1 && missingFields[0] === "confirmation") ? "confirming" : "clarifying";
-        const pendingAction = derivePendingAction(missingFields);
+        // T32 fix: ensure pendingAction is never null in confirming state
+        const rawAction = derivePendingAction(missingFields);
+        const pendingAction = status === "confirming" ? "confirm_mediation" : rawAction;
 
         const draft: MediationFlowState["draft"] = {
           id: draftId,
@@ -653,22 +664,56 @@ export class ProcessChannelInboundMessage {
       args.errors.push(`Clarification AI guide failed: ${message}`);
     }
 
-    // Parse clarification result for updated fields
-    if (guideResult !== undefined) {
-      const clarificationOutput = parseMediationGuideOutput(guideResult);
-      if (clarificationOutput !== undefined) {
-        const updatedDraft = flow.draft !== null
-          ? {
-              ...flow.draft,
-              recipientHint: clarificationOutput.recipientHint ?? flow.draft.recipientHint,
-              messageDraft: clarificationOutput.messageDraft ?? flow.draft.messageDraft,
-              version: (flow.draft.version ?? 0) + 1,
-            }
-          : null;
+    // Apply user input to draft based on pending action, then re-check fields.
+    // Priority: AI guide output (when it has mediation fields) > direct extraction from user input.
+    {
+      const aiOutput = guideResult !== undefined ? parseMediationGuideOutput(guideResult) : undefined;
 
-        const remainingFields = clarificationOutput.missingFields;
+      const updatedDraft = flow.draft !== null
+        ? { ...flow.draft, version: (flow.draft.version ?? 0) + 1 }
+        : null;
+
+      if (updatedDraft !== null) {
+        if (aiOutput !== undefined) {
+          // AI guide provided mediation fields — use those (backward compatible with canned tests)
+          if (aiOutput.recipientHint !== null) updatedDraft.recipientHint = aiOutput.recipientHint;
+          if (aiOutput.messageDraft !== null) updatedDraft.messageDraft = aiOutput.messageDraft;
+        } else if (flow.pendingAction !== null) {
+          // No AI mediation fields — extract directly from user input
+          const userText = cmd.text.trim();
+          let didExtractRecipient = false;
+
+          if (flow.pendingAction === "clarify_recipient" || flow.pendingAction === "clarify_both") {
+            const extracted = extractRecipientFromClarification(userText);
+            if (extracted !== null) {
+              updatedDraft.recipientHint = extracted;
+              didExtractRecipient = true;
+            }
+          }
+
+          if (flow.pendingAction === "clarify_message" || (flow.pendingAction === "clarify_both" && !didExtractRecipient)) {
+            const extracted = extractMessageFromClarification(userText);
+            if (extracted !== null) {
+              updatedDraft.messageDraft = extracted;
+            }
+          }
+        }
+
+        // Re-check missing fields after applying updates
+        const remainingFields: MissingMediationField[] = [];
+        if (flow.missingFields.includes("recipient") && updatedDraft.recipientHint === null) {
+          remainingFields.push("recipient");
+        }
+        if (flow.missingFields.includes("message") && updatedDraft.messageDraft === null) {
+          remainingFields.push("message");
+        }
+        if (flow.missingFields.includes("confirmation")) {
+          remainingFields.push("confirmation");
+        }
+
         const newStatus: MediationFlowState["status"] = remainingFields.length === 0 || (remainingFields.length === 1 && remainingFields[0] === "confirmation") ? "confirming" : "clarifying";
-        const newPendingAction = derivePendingAction(remainingFields);
+        const rawAction = derivePendingAction(remainingFields);
+        const newPendingAction = newStatus === "confirming" ? "confirm_mediation" : rawAction;
 
         const updatedFlow: MediationFlowState = {
           ...flow,
@@ -683,7 +728,7 @@ export class ProcessChannelInboundMessage {
         const promptText = buildPromptText(updatedFlow);
         return this.buildFlowResult({
           ...args,
-          profileId: "mediation_understanding",
+          profileId: "clarification",
           useCaseId: "serena.mediation.clarify",
           guideResult,
           ...(guideError !== undefined ? { guideError } : {}),
@@ -700,7 +745,7 @@ export class ProcessChannelInboundMessage {
       }
     }
 
-    // Fallback — keep flow as-is
+    // Fallback — keep flow as-is (should not normally reach here)
     return this.buildFlowResult({
       ...args,
       profileId: "mediation_understanding",
@@ -893,4 +938,76 @@ function extractEditMessage(matchedKeyword: string, userText: string, existingDr
 
   // No new content found — keep existing draft
   return existingDraft;
+}
+
+/**
+ * Extracts a message from user input during clarification.
+ * Looks for patterns like "que X", "decile que X", or just takes the whole text.
+ */
+function extractMessageFromClarification(text: string): string | null {
+  const trimmed = text.trim();
+
+  // "que voy a llegar tarde" → "voy a llegar tarde"
+  const queMatch = trimmed.match(/^que\s+(.+)/i);
+  if (queMatch && queMatch[1] && queMatch[1].trim().length > 0) {
+    return queMatch[1].trim();
+  }
+
+  // "decile que X" / "dile que X"
+  const decileMatch = trimmed.match(/(?:dec[íi]le|d[íi]le)\s+que\s+(.+)/i);
+  if (decileMatch && decileMatch[1] && decileMatch[1].trim().length > 0) {
+    return decileMatch[1].trim();
+  }
+
+  // Take the whole text as the message if it's substantial
+  if (trimmed.length > 2) return trimmed;
+
+  return null;
+}
+
+/**
+ * Extracts a recipient from user input during clarification.
+ * Looks for patterns like "a Carlos", "para Carlos", "a mi hijo Juan".
+ * Stops extraction at common message-start markers like "que".
+ */
+function extractRecipientFromClarification(text: string): string | null {
+  const trimmed = text.trim();
+
+  // "a Carlos" / "para Carlos" / "al doctor"
+  const aMatch = trimmed.match(/^(?:a|para|al)\s+(.+)/i);
+  if (aMatch && aMatch[1] && aMatch[1].trim().length > 0) {
+    const raw = aMatch[1].trim();
+    // Stop at common message markers to avoid capturing the message part
+    const cutAt = raw.search(/\s+que\b/i);
+    const recipient = cutAt >= 0 ? raw.slice(0, cutAt).trim() : raw;
+    if (recipient.length > 0) return recipient;
+  }
+
+  // Just "Carlos" alone
+  if (trimmed.length > 1 && !trimmed.includes(" ") && /^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+$/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  return null;
+}
+
+function isStandaloneFlowControlInput(text: string): boolean {
+  const normalized = text.trim().toLocaleLowerCase();
+  return [
+    "sí",
+    "si",
+    "ok",
+    "dale",
+    "confirmo",
+    "mandalo",
+    "mandalo ya",
+    "envialo",
+    "envialo ya",
+    "mandale",
+    "no",
+    "mejor no",
+    "esperá",
+    "espera",
+    "no lo mandes",
+  ].includes(normalized);
 }

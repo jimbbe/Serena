@@ -29,8 +29,8 @@ Internet
   │    ├── hermes-agent:8642            (existente)
   │    └── whatsapp-gateway:3001        (nuevo)
   │         │
-  │         └── [evolution-internal]
-  │              ├── evolution-api:8080 (nuevo)
+  │         └── [evolution-private]
+  │              ├── evolution-api:8080 (nuevo, outbound internet ✅)
   │              └── evo-postgres:5432  (nuevo)
   │
   ├── [serena-internal]                 (existente)
@@ -39,6 +39,17 @@ Internet
   │
   └── [whatsapp-internal]               (nuevo)
        └── redis:6379
+```
+
+### Nota sobre redes de Evolution API
+
+La red `evolution-private` es un bridge normal (NO `internal: true`). Evolution API **necesita salida a internet** para conectarse a los servidores de WhatsApp (Baileys usa protocolo WhatsApp Web).
+
+Seguridad se logra con:
+- Sin `ports:` publicados al host
+- Sin ruta pública en Caddy
+- Docker DNS interno (solo contenedores en la misma red lo alcanzan)
+- WhatsApp Gateway como único punto de control
 ```
 
 ### Flujo de Mensajes
@@ -73,9 +84,19 @@ Internet
 | Regla | Motivo |
 |-------|--------|
 | Evolution API **NUNCA** expuesto públicamente | Controla sesiones de WhatsApp. Un leak = acceso al número |
+| Evolution API **SÍ** necesita salida a internet | Baileys conecta a servidores de WhatsApp (web.whatsapp.com) |
 | Gateway es el único que habla con Evolution API | Single point of control, audit, rate limiting |
 | Webhooks son tráfico interno Docker | No pasan por internet, no requieren TLS entre contenedores |
 | Apps consumidoras no conocen Evolution API | Solo conocen la API del Gateway. Si cambiamos Evolution por Baileys directo, las apps no se enteran |
+
+**Imagen Docker**: `evolutionapi/evolution-api:latest`
+
+**Variables de entorno clave**:
+- `DATABASE_CONNECTION_URI` → formato Prisma: `postgresql://user:pass@host:5432/db?schema=public`
+- `CACHE_REDIS_ENABLED=true` + `CACHE_REDIS_URI=redis://redis:6379/1`
+- `AUTHENTICATION_API_KEY` → API key de Evolution API
+- `WEBHOOK_GLOBAL_URL` → apunta al gateway interno
+- `EVOLUTION_SERVER_URL` → URL interna del servicio (`http://evolution-api:8080`)
 
 ---
 
@@ -248,8 +269,8 @@ Capacidad VPS: 2 vCPU, 8GB RAM, 100GB disk → **Sobra espacio**.
 - [ ] Evolution API SIN ruta pública en Caddy
 - [ ] `.env` con permisos 600 en VPS, nunca commitear
 - [ ] API keys generadas con `openssl rand -hex 32`
-- [ ] PostgreSQL de Evolution API en red interna (`evolution-internal`)
-- [ ] Redis en red interna (`whatsapp-internal`)
+- [ ] PostgreSQL de Evolution API en red privada (`evolution-private`)
+- [ ] Redis en red privada (`evolution-private`)
 - [ ] API keys distintas para cada app consumidora
 
 ---

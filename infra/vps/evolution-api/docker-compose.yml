@@ -6,7 +6,7 @@ services:
     container_name: evolution-api
     restart: unless-stopped
     environment:
-      - SERVER_URL=http://localhost:8080
+      - SERVER_URL=${EVOLUTION_SERVER_URL:-http://evolution-api:8080}
       - AUTHENTICATION_API_KEY=${AUTHENTICATION_API_KEY:?AUTHENTICATION_API_KEY is required}
       - AUTHENTICATION_TYPE=apikey
       - DATABASE_PROVIDER=postgresql
@@ -34,7 +34,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - evolution-internal
+      - evolution-private
 
   evo-postgres:
     image: postgres:16-alpine
@@ -52,7 +52,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - evolution-internal
+      - evolution-private
 
   redis:
     image: redis:7-alpine
@@ -67,12 +67,12 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - evolution-internal
+      - evolution-private
 
 networks:
-  evolution-internal:
-    name: evolution-internal
-    internal: true
+  evolution-private:
+    name: evolution-private
+    driver: bridge
 
 volumes:
   evo-postgres-data:

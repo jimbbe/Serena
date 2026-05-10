@@ -19,10 +19,10 @@ These questions are intentionally left open until a task needs the decision.
 
 ## Architecture (T10 Open Questions)
 
-- **Which WhatsApp number will Serena use?** — Resuelto: primeras pruebas con el numero de Marco, despues un chip dedicado por cada cuenta que necesite WhatsApp.
+- **Which WhatsApp number will Serena use?** — Needs a real WhatsApp Business API number. Currently only contracts exist for `whatsapp-gateway`.
 - **One-session-per-pair rule details** — The `SessionResolver` port expects to resolve one active session per participant pair. Edge cases: what if the pair has a historical closed session and starts a new one? Should closed sessions be archived or deleted?
-- **Evolution API hosting** — ✅ Resuelto: misma VPS (`177.7.32.90`), via Docker Compose en `/docker/evolution-api/`, con su propio PostgreSQL y Redis. Plan: `docs/architecture/whatsapp-gateway-implementation-plan.md`.
-- **Persistence strategy** — ✅ Decidido: WhatsApp real primero, PostgreSQL adapters despues (despues de tener el ciclo completo WhatsApp → Serena → WhatsApp funcionando).
+- **Evolution API hosting** — Where will the Evolution API instance run? On the same VPS? Separate service? The `whatsapp-gateway` adapter will need this URL.
+- **Persistence strategy** — Current modules use in-memory stores. When do we switch to PostgreSQL? Should we implement repositories alongside in-memory adapters, or defer the real DB until after the pipeline works end-to-end?
 
 ## Architecture (T17A / T17B Open Questions)
 
@@ -50,11 +50,11 @@ Idempotencia in-memory implementada en T17B. Preguntas abiertas para futuras tar
 
 ## Estrategia de Integracion Futura
 
-- **¿Estrategia PostgreSQL concreta?** — Sigue pendiente pero post-WhatsApp. Preguntas abiertas: ¿schema por modulo o unico? ¿migraciones con que herramienta? ¿repo pattern con interfaces separadas de los puertos de dominio?
-- **¿Estrategia Evolution API?** — ✅ Resuelto: Evolution API desplegada en VPS via Docker Compose en `/docker/evolution-api/`, con instancia `serena-main`. Primera prueba con numero de Marco via QR (Baileys/WhatsApp Web). El mock gateway T18 se mantiene como herramienta de testing. Plan: `docs/architecture/whatsapp-gateway-implementation-plan.md`.
+- **¿Estrategia PostgreSQL concreta?** — Sigue pendiente. Preguntas abiertas: ¿schema por modulo o unico? ¿migraciones con que herramienta? ¿repo pattern con interfaces separadas de los puertos de dominio?
+- **¿Estrategia Evolution API?** — Sigue pendiente. Preguntas: ¿instancia dedicada o compartida? ¿como manejar webhooks entrantes (autenticacion, rate limiting)? ¿el mock gateway T18 se mantiene como herramienta de testing?
 - **¿LLM provider real?** — Resuelto en T29: se implementó `OpenAICompatibleLlmProvider` que se comunica con cualquier API compatible con OpenAI (`POST /chat/completions`) usando `fetch` nativo. El default sigue siendo mock (`AI_PROVIDER=mock`). En producción, se configura vía `AI_PROVIDER=openai-compatible` con `AI_BASE_URL`, `AI_API_KEY` y `AI_MODEL`.
 - **¿knownContacts hacia AI Guide?** — Resuelto en T28: `knownContacts` ya está conectado desde `ContactDirectory` para contexto de mediación (`understand_request` y `clarify`). `conversation.reply` y `risk.review` no reciben contactos por privacidad. Sigue abierta la resolución operativa de contactos ambiguos (ver "Manejo de contactos ambiguos" abajo).
-- **¿Futuro repo separado para WhatsApp Gateway real?** — ✅ Decidido: se construye primero como `apps/gateway-whatsapp/` en el monorepo de Serena (agnostico, cero imports de Serena), y se extrae a repo propio cuando madure. El mock `gateway-wa` (T18) queda como herramienta de desarrollo/testing.
+- **¿Futuro repo separado para WhatsApp Gateway real?** — La arquitectura T17A preve un repo `whatsapp-gateway` independiente. ¿Cuando crear ese repo? ¿que codigo se mueve/duplica? ¿el mock gateway T18 migra a ese repo o queda en Serena como herramienta de desarrollo?
 - **¿Integracion futura de IA/LLM?** — El strategy actual es rules-first para mediation-understanding, LLM como fallback. ¿Cuando integrar LLM? ¿que proveedor? ¿que politicas de privacidad/costo aplican para el caso de uso de una persona mayor?
 
 ## Politicas de Revision Humana

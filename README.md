@@ -19,7 +19,6 @@ Este repositorio funciona como centro operativo del proyecto Serena. Contiene do
 | Seccion | Ubicacion |
 |---------|-----------|
 | Arquitectura y diseno | `docs/architecture/` |
-| 📋 Plan WhatsApp Gateway | `docs/architecture/whatsapp-gateway-implementation-plan.md` |
 | Operacion, deploy y VPS | `docs/ops/` |
 | Estado del proyecto | `docs/project-status.md` |
 | Preguntas abiertas | `docs/open-questions.md` |
@@ -251,19 +250,14 @@ Runbook operativo: `docs/ops/deployment-t04.md`.
 
 ## Proximos Pasos
 
-Fase completada: **logica de negocio con pipeline channel-agnostic, structural cleanup y readiness local post-T29** (T06-T30B). Pipeline end-to-end funciona con 578 tests (519 core + 59 gateway-wa).
+Fase completada: **logica de negocio con pipeline channel-agnostic, structural cleanup y readiness local post-T29** (T06-T30B). Pipeline end-to-end funciona con 578 tests (519 core + 59 gateway-wa). Endpoint HTTP interno con hardening (T17B), AI guide agnostico (T19), canal inbound multi-channel con resolucion de identidad (T20), Simulation API con single-step y scenario runner, historial de conversacion activo en AI guide (T27), contactos conocidos en contexto de mediacion (T28), provider OpenAI-compatible configurable (T29), validaciones locales/gateway endurecidas (T30A) y structural cleanup con contratos compartidos (`@serena/contracts`) y modulo `channel-inbound` (T30B).
 
-**Camino decidido (2026-05-10): Modulo WhatsApp real como primer paso.**
+**Proximo paso**: decidir entre dos caminos:
 
-Se eligio construir el WhatsApp Gateway (agnostico, multi-proyecto) + Evolution API en la VPS antes que la persistencia conversacional. El plan completo con tareas, fases y criterios de aceptacion esta en:
+1. **Persistencia conversacional** — reemplazar stores in-memory con PostgreSQL adapters para que sesiones, contactos y auditoria sobrevivan restarts.
+2. **Adapter WhatsApp real** — integrar Evolution API / Baileys como adapter de canal real, respetando el contrato T17A y sin acoplar el core a WhatsApp.
 
-📋 **`docs/architecture/whatsapp-gateway-implementation-plan.md`** ← Plan vivo de implementacion
-
-- 6 fases, 25+ tareas con checkboxes
-- Arquitectura objetivo, recursos estimados en VPS, checklist de seguridad
-- F2 (Evolution API deploy) y F3 (Gateway codigo) pueden ejecutarse en paralelo
-
-La persistencia conversacional (PostgreSQL adapters) queda como siguiente fase despues de tener WhatsApp real funcionando.
+La decision depende de si queremos primero produccion real (WhatsApp) o primero datos durables (PostgreSQL).
 
 Ver tambien:
 

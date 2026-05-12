@@ -154,8 +154,8 @@ describe("handleWebhook", () => {
 
     assert.equal(result.status, 200);
     assert.deepEqual(result.body, {
-      ignored: true,
-      reason: "duplicate",
+      received: true,
+      duplicate: true,
     });
   });
 
@@ -187,12 +187,12 @@ describe("handleWebhook", () => {
     // 2nd call — duplicate
     const ctx2: RequestContext = { body: validTextPayload, params: {} };
     const result2 = await handleWebhook(ctx2, validConfig, makeFakeManager());
-    assert.deepEqual(result2.body, { ignored: true, reason: "duplicate" });
+    assert.deepEqual(result2.body, { received: true, duplicate: true });
 
     // 3rd call — still duplicate
     const ctx3: RequestContext = { body: validTextPayload, params: {} };
     const result3 = await handleWebhook(ctx3, validConfig, makeFakeManager());
-    assert.deepEqual(result3.body, { ignored: true, reason: "duplicate" });
+    assert.deepEqual(result3.body, { received: true, duplicate: true });
   });
 
   it("routes valid text message to Serena Core", async () => {

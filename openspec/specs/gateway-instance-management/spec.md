@@ -118,3 +118,28 @@ The system MUST expose `DELETE /instances/:name` to remove a WhatsApp instance.
 
 - WHEN `DELETE /instances/nonexistent` is called
 - THEN response is `404` with `{ "error": "instance_not_found", "name": "nonexistent" }`
+
+### Requirement: Phase 3 In-Memory Instance Tracking
+
+The system MUST document and treat `InstanceManager` as in-memory only for Phase 3.
+
+| Aspect | Phase 3 behavior |
+|--------|------------------|
+| Local storage | JavaScript `Map` in the gateway process |
+| Restart behavior | Local instance tracking is lost |
+| Source of truth | Evolution API remains source of truth for WhatsApp sessions |
+| Rehydration | Out of scope for Phase 3 |
+
+#### Scenario: Gateway restart loses local instance tracking
+
+- GIVEN Evolution API still has a WhatsApp session after gateway restart
+- WHEN the gateway process restarts
+- THEN `InstanceManager` starts empty
+- AND the operator must recreate or revalidate local instance tracking for MVP/demo use
+
+#### Scenario: Rehydration remains future work
+
+- GIVEN Phase 3 is deployed or tested
+- WHEN the gateway starts
+- THEN it does NOT rehydrate local instances from Evolution API
+- AND durable persistence or startup rehydration is reserved for a future phase

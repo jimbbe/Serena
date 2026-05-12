@@ -2,7 +2,7 @@
 
 ## Intent
 
-Evolve `apps/gateway-wa/` from mock to production WhatsApp Gateway via Evolution API. Dry-run mode preserved.
+Evolve `apps/gateway-wa/` from mock/dry-run adapter to production WhatsApp Gateway via Evolution API. Dry-run mode preserved; no separate `apps/gateway-whatsapp/` workspace is created in this phase.
 
 ## Scope
 
@@ -10,6 +10,8 @@ Evolve `apps/gateway-wa/` from mock to production WhatsApp Gateway via Evolution
 - `infrastructure/` layer: HTTP server, routing, middleware
 - Evolution API client: instances CRUD, QR, send text
 - Webhook receiver: normalization + self-message filtering
+- Webhook receiver: `connection.update` updates in-memory instance state
+- `/send` stale-state fallback: refresh from Evolution API before blocking stale disconnected/connecting instances
 - 3-tier API key auth
 - Instance management + message sending endpoints
 - Health check, hardcoded routing, integration tests
@@ -17,6 +19,8 @@ Evolve `apps/gateway-wa/` from mock to production WhatsApp Gateway via Evolution
 ### Out of Scope
 - Docker deployment (Phase 2), QR image generation, media messages
 - HMAC validation, configurable routing, retry backoff
+- Durable instance persistence / rehydration from Evolution API on gateway startup
+- Serena Core inbound webhook endpoint (`POST /internal/webhook/whatsapp`) — reserved for T36
 
 ## Capabilities
 
@@ -38,9 +42,10 @@ Evolve `apps/gateway-wa/` from mock to production WhatsApp Gateway via Evolution
 3. Evolution client via fetch
 4. **QR format**: Evolution returns pairing code, not base64. Return as-is
 5. Webhook: filter `fromMe:true`, discard non-text
-6. Hardcoded routing to Serena Core
+6. Hardcoded routing to Serena Core (`POST /internal/webhook/whatsapp`, implemented by T36 later)
 7. 3 API keys from env vars
 8. `node:test` integration tests
+9. Reuse `apps/gateway-wa` for dry_run + production modes
 
 ## Affected Areas
 
@@ -61,6 +66,8 @@ Evolve `apps/gateway-wa/` from mock to production WhatsApp Gateway via Evolution
 | Auth key exposure | Medium | Env var only; never logged |
 | Docker network bridging | Medium | Phase 2 |
 | Breaking dry-run tests | Low | Additive only |
+| Local instance state lost on restart | Medium | Document in-memory limitation; Evolution API remains source of truth; rehydration future work |
+| Serena Core webhook endpoint missing until T36 | High | Document dependency; gateway accepts Evolution webhook but cannot complete inbound E2E until T36 |
 
 ## Rollback Plan
 
@@ -73,7 +80,7 @@ Evolve `apps/gateway-wa/` from mock to production WhatsApp Gateway via Evolution
 - Phase 1 (specs): ✅ Complete
 - Phase 2 (deploy): NOT required for build
 - Evolution API running (`EVOLUTION_API_URL` + `EVOLUTION_API_KEY`)
-- Serena Core with `/internal/webhook/whatsapp`
+- Serena Core with `/internal/webhook/whatsapp` — **pending T36**, required for end-to-end inbound processing
 
 ## Success Criteria
 
@@ -81,7 +88,9 @@ Evolve `apps/gateway-wa/` from mock to production WhatsApp Gateway via Evolution
 - [ ] `POST /instances` creates instance, returns QR
 - [ ] `GET /instances/:name/qr` returns code or "connected"
 - [ ] `POST /send` sends text
+- [ ] `POST /send` refreshes stale local connection state from Evolution before blocking
 - [ ] `POST /webhook/evolution` normalizes and routes
+- [ ] `connection.update` updates `InstanceManager`
 - [ ] Self-messages discarded
 - [ ] Auth rejects unauthorized (401/403)
 - [ ] All 59 dry-run tests pass

@@ -5,7 +5,7 @@
  * via globalThis.fetch injection, and validates auth rejection.
  */
 
-import { describe, it, after } from "node:test";
+import { describe, it, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { loadConfig, type GatewayRuntimeConfig } from "../infrastructure/config.ts";
 import type { Server } from "node:http";
@@ -32,6 +32,14 @@ type CapturedRequest = {
 };
 
 let lastEvoRequest: CapturedRequest = { url: "", method: "", headers: {} };
+let evoRequestLog: CapturedRequest[] = [];
+let connectionStateByInstance: Record<string, string> = {};
+
+beforeEach(() => {
+  lastEvoRequest = { url: "", method: "", headers: {} };
+  evoRequestLog = [];
+  connectionStateByInstance = {};
+});
 
 function setupFakeEvolution(): void {
   globalThis.fetch = ((url: string | URL | Request, init?: RequestInit): Promise<Response> => {
@@ -47,6 +55,7 @@ function setupFakeEvolution(): void {
     const body = init?.body as string | undefined;
 
     lastEvoRequest = { url: urlStr, method, headers, body: body ?? "" };
+    evoRequestLog.push(lastEvoRequest);
 
     // Instance creation
     if (urlStr.includes("/instance/create")) {
@@ -79,9 +88,19 @@ function setupFakeEvolution(): void {
 
     // Connection state
     if (urlStr.includes("/instance/connectionState/")) {
+      const instanceName = decodeURIComponent(urlStr.split("/instance/connectionState/")[1] ?? "");
+      const state = connectionStateByInstance[instanceName] ?? "open";
+      if (state === "__fail__") {
+        return Promise.resolve({
+          ok: false, status: 503, statusText: "Service Unavailable",
+          json: () => Promise.resolve({ error: "evolution_down" }),
+          text: () => Promise.resolve(JSON.stringify({ error: "evolution_down" })),
+        } as Response);
+      }
+
       return Promise.resolve({
         ok: true, status: 200, statusText: "OK",
-        json: () => Promise.resolve({ instance: { state: "open" } }),
+        json: () => Promise.resolve({ instance: { state } }),
         text: () => Promise.resolve("{}"),
       } as Response);
     }
@@ -378,6 +397,149 @@ describe("POST /send", () => {
     const body = await res.json();
     assert.equal(body.error, "instance_not_found");
   });
+
+  it("allows send when manager state is stale disconnected but Evolution reports open", async () => {
+    await fetch(`${baseUrl}/instances`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Gateway-Admin-Key": "test-admin-key",
+      },
+      body: JSON.stringify({ name: "stale-send" }),
+    });
+
+    connectionStateByInstance["stale-send"] = "open";
+
+    const res = await fetch(`${baseUrl}/send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Gateway-App-Key": "test-app-key",
+      },
+      body: JSON.stringify({
+        instanceId: "stale-send",
+        to: "5491111111111",
+        text: "Hello after QR scan!",
+      }),
+    });
+
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.status, "sent");
+    assert.ok(evoRequestLog.some((req) => req.url.includes("/instance/connectionState/stale-send")));
+    assert.ok(evoRequestLog.some((req) => req.url.includes("/message/sendText/stale-send")));
+  });
+
+  it("blocks send when manager is disconnected and Evolution reports close", async () => {
+    await fetch(`${baseUrl}/instances`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Gateway-Admin-Key": "test-admin-key",
+      },
+      body: JSON.stringify({ name: "closed-send" }),
+    });
+
+    connectionStateByInstance["closed-send"] = "close";
+
+    const res = await fetch(`${baseUrl}/send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Gateway-App-Key": "test-app-key",
+      },
+      body: JSON.stringify({
+        instanceId: "closed-send",
+        to: "5491111111111",
+        text: "Should not send",
+      }),
+    });
+
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.equal(body.error, "instance_not_connected");
+    assert.ok(evoRequestLog.some((req) => req.url.includes("/instance/connectionState/closed-send")));
+    assert.equal(
+      evoRequestLog.some((req) => req.url.includes("/message/sendText/closed-send")),
+      false,
+    );
+  });
+
+  it("returns controlled error when Evolution state check fails", async () => {
+    await fetch(`${baseUrl}/instances`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Gateway-Admin-Key": "test-admin-key",
+      },
+      body: JSON.stringify({ name: "state-fail-send" }),
+    });
+
+    connectionStateByInstance["state-fail-send"] = "__fail__";
+
+    const res = await fetch(`${baseUrl}/send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Gateway-App-Key": "test-app-key",
+      },
+      body: JSON.stringify({
+        instanceId: "state-fail-send",
+        to: "5491111111111",
+        text: "Should return controlled error",
+      }),
+    });
+
+    assert.equal(res.status, 502);
+    const body = await res.json();
+    assert.equal(body.error, "evolution_unreachable");
+    assert.ok(String(body.message).includes("Cannot verify instance state"));
+  });
+
+  it("does not query Evolution state when manager was updated to open by connection.update", async () => {
+    await fetch(`${baseUrl}/instances`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Gateway-Admin-Key": "test-admin-key",
+      },
+      body: JSON.stringify({ name: "open-send" }),
+    });
+
+    await fetch(`${baseUrl}/webhook/evolution`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Gateway-Evo-Key": "test-evo-key",
+      },
+      body: JSON.stringify({
+        event: "connection.update",
+        instance: "open-send",
+        data: { state: "open" },
+      }),
+    });
+
+    evoRequestLog = [];
+    const res = await fetch(`${baseUrl}/send`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Gateway-App-Key": "test-app-key",
+      },
+      body: JSON.stringify({
+        instanceId: "open-send",
+        to: "5491111111111",
+        text: "Send while cached open",
+      }),
+    });
+
+    assert.equal(res.status, 200);
+    assert.equal(
+      evoRequestLog.some((req) => req.url.includes("/instance/connectionState/open-send")),
+      false,
+    );
+    assert.ok(evoRequestLog.some((req) => req.url.includes("/message/sendText/open-send")));
+  });
 });
 
 describe("POST /webhook/evolution", () => {
@@ -432,6 +594,87 @@ describe("POST /webhook/evolution", () => {
     const body = await res.json();
     assert.equal(body.ignored, true);
     assert.equal(body.reason, "self_message");
+  });
+
+  it("updates instance status from connection.update open and disconnected events", async () => {
+    await fetch(`${baseUrl}/instances`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Gateway-Admin-Key": "test-admin-key",
+      },
+      body: JSON.stringify({ name: "webhook-state" }),
+    });
+
+    const openRes = await fetch(`${baseUrl}/webhook/evolution`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Gateway-Evo-Key": "test-evo-key",
+      },
+      body: JSON.stringify({
+        event: "connection.update",
+        instance: "webhook-state",
+        data: { state: "open" },
+      }),
+    });
+
+    assert.equal(openRes.status, 200);
+    const openBody = await openRes.json();
+    assert.equal(openBody.status, "open");
+
+    const qrWhileOpen = await fetch(`${baseUrl}/instances/webhook-state/qr`, {
+      headers: { "X-Gateway-Admin-Key": "test-admin-key" },
+    });
+    assert.equal(qrWhileOpen.status, 200);
+    const qrOpenBody = await qrWhileOpen.json();
+    assert.equal(qrOpenBody.status, "open");
+    assert.equal(qrOpenBody.message, "Already connected");
+
+    const closeRes = await fetch(`${baseUrl}/webhook/evolution`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Gateway-Evo-Key": "test-evo-key",
+      },
+      body: JSON.stringify({
+        event: "connection.update",
+        instance: "webhook-state",
+        data: { state: "close" },
+      }),
+    });
+
+    assert.equal(closeRes.status, 200);
+    const closeBody = await closeRes.json();
+    assert.equal(closeBody.status, "disconnected");
+
+    const qrAfterClose = await fetch(`${baseUrl}/instances/webhook-state/qr`, {
+      headers: { "X-Gateway-Admin-Key": "test-admin-key" },
+    });
+    assert.equal(qrAfterClose.status, 200);
+    const qrCloseBody = await qrAfterClose.json();
+    assert.equal(qrCloseBody.status, "disconnected");
+    assert.equal(qrCloseBody.qr, "PAIR-CODE-123");
+  });
+
+  it("accepts connection.update for an unregistered instance without crashing", async () => {
+    const res = await fetch(`${baseUrl}/webhook/evolution`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Gateway-Evo-Key": "test-evo-key",
+      },
+      body: JSON.stringify({
+        event: "connection.update",
+        instance: "unknown-webhook-state",
+        data: { state: "open" },
+      }),
+    });
+
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.received, true);
+    assert.equal(body.status, "open");
   });
 
   it("returns 401 without evo key", async () => {

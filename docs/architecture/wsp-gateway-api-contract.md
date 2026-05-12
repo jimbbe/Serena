@@ -1,6 +1,6 @@
 # WhatsApp Gateway API Contract
 
-> **Status**: Draft — Phase 1 complete
+> **Status**: Phase 3 current contract — real Evolution API gateway implemented, inbound end-to-end with Serena pending T36
 > **Scope**: API contract for the agnostic WhatsApp Gateway service
 > **Image**: `evolutionapi/evolution-api:latest`
 
@@ -96,6 +96,7 @@ POST /webhook/evolution
 Auth: Evolution API key
 Body: Evolution API webhook payload
 Response: 200 { "received": true, "routedTo": "serena-core" }
+Duplicate response: 200 { "received": true, "duplicate": true }
 ```
 
 ---
@@ -151,6 +152,7 @@ Future: configurable routing table.
 | Evolution API error | 500 | Log + return error detail |
 | Self-message (fromMe: true) | 200 { "ignored": true } | Silently discard |
 | Non-text message | 200 { "ignored": true, "reason": "non-text" } | Log + discard |
+| Duplicate messageId within 5 minutes | 200 { "received": true, "duplicate": true } | Do not re-route |
 
 ### Timeouts
 

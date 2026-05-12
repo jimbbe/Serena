@@ -1,10 +1,31 @@
-# Mock WhatsApp Gateway / Dry-Run Adapter Specification
+# WhatsApp Gateway (`apps/gateway-wa`) Specification
 
 ## Purpose
 
-Define a self-contained mock WhatsApp Gateway (`apps/gateway-wa/`) that simulates how a future real gateway would call Serena Core. Enables end-to-end dry-run testing of the full pipeline (normalize → call core → map result → log action) without connecting to real WhatsApp, Evolution API, or sending real messages.
+Define the `apps/gateway-wa/` workspace as the WhatsApp Gateway module. It preserves the original dry-run adapter for deterministic testing and also hosts the Phase 3 production HTTP gateway backed by Evolution API.
+
+Phase 3 architectural decision: reuse `apps/gateway-wa/` as the real gateway workspace instead of creating a separate `apps/gateway-whatsapp/` workspace. `GATEWAY_MODE=dry_run` keeps mock behavior; `GATEWAY_MODE=production` enables real Evolution API integration.
 
 ## Requirements
+
+### Requirement: Workspace Reuse Decision
+
+The system MUST use `apps/gateway-wa/` for both dry-run and production gateway modes in Phase 3.
+
+| Mode | Behavior |
+|------|----------|
+| `dry_run` | Preserve T18 mock/dry-run adapter. No real WhatsApp or Evolution API calls. |
+| `production` | Start HTTP gateway and use Evolution API for instance management, state checks, webhooks, and sends. |
+
+#### Scenario: No separate gateway workspace is created
+
+- GIVEN Phase 3 real Evolution API integration
+- WHEN the gateway is implemented
+- THEN it lives in `apps/gateway-wa/`
+- AND no `apps/gateway-whatsapp/` workspace is created
+- AND dry-run imports/tests continue to work unchanged
+
+---
 
 ### Requirement: MockWhatsAppEvent Domain Type
 

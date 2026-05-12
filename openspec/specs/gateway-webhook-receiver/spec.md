@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Define the webhook endpoint that receives Evolution API webhooks, normalizes inbound messages, filters self-messages, and routes to Serena Core.
+Define the webhook endpoint that receives Evolution API webhooks, normalizes inbound messages, filters self-messages, updates connection state, and routes inbound text messages to Serena Core.
 
 ## Requirements
 
@@ -128,6 +128,8 @@ The system MUST route normalized messages to Serena Core's webhook endpoint.
 | Headers | `Content-Type: application/json`, `X-Serena-Internal-Token: <token>` |
 | Body | The `NormalizedInboundMessage` JSON |
 
+> Phase 3 dependency note: Serena Core does not expose `POST /internal/webhook/whatsapp` yet. That endpoint is reserved for T36. Until T36 is implemented, the gateway can accept and attempt to route inbound webhooks, but inbound processing is not end-to-end complete.
+
 | Configuration | Env Var |
 |---------------|---------|
 | Core URL | `SERENA_CORE_URL` |
@@ -148,3 +150,36 @@ The system MUST route normalized messages to Serena Core's webhook endpoint.
 - WHEN a webhook is received and normalized
 - THEN the message is NOT routed
 - AND an error is logged mentioning `SERENA_CORE_URL`
+
+### Requirement: Connection Update Handling
+
+The system MUST process Evolution API `connection.update` events to keep the in-memory instance status synchronized with Evolution API.
+
+| Evolution state | Gateway status |
+|----------------|----------------|
+| `open` | `open` |
+| `connected` | `connected` |
+| `connecting` | `connecting` |
+| `close`, `closed`, `disconnected`, `loggedOut` | `disconnected` |
+| Unknown state | `connecting` |
+
+#### Scenario: Open connection update changes instance status
+
+- GIVEN instance `"serena-main"` is tracked by `InstanceManager`
+- WHEN `POST /webhook/evolution` receives `{ "event": "connection.update", "instance": "serena-main", "data": { "state": "open" } }`
+- THEN response is `200` with `{ "received": true, "instance": "serena-main", "status": "open" }`
+- AND `InstanceManager` stores status `"open"`
+
+#### Scenario: Disconnected connection update changes instance status
+
+- GIVEN instance `"serena-main"` is tracked by `InstanceManager`
+- WHEN a `connection.update` event arrives with state `"close"`, `"closed"`, or `"disconnected"`
+- THEN `InstanceManager` stores status `"disconnected"`
+
+#### Scenario: Connection update for untracked instance is accepted
+
+- GIVEN no local instance exists for `"unknown-instance"`
+- WHEN a `connection.update` event arrives for that instance
+- THEN the gateway returns `200`
+- AND does not crash
+- AND does not create local instance tracking implicitly

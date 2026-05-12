@@ -78,8 +78,8 @@ export async function handleWebhook(
     return {
       status: 200,
       body: {
-        ignored: true,
-        reason: "duplicate",
+        received: true,
+        duplicate: true,
       },
     };
   }

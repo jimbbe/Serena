@@ -17,6 +17,7 @@ The system MUST expose `POST /send` to send a text message through a WhatsApp in
 | Success | `200` with message confirmation |
 | Instance not found | `404` with error |
 | Evolution API error | `502` with error detail |
+| Stale local state | Query Evolution connection state before blocking |
 
 | Request Field | Validation |
 |---------------|------------|
@@ -58,8 +59,32 @@ The system MUST expose `POST /send` to send a text message through a WhatsApp in
 - WHEN `POST /send` is called with valid body
 - THEN response is `502` with `{ "error": "evolution_unreachable", "message": "Evolution API is not reachable" }`
 
+#### Scenario: Send with stale disconnected manager state but Evolution is open
+
+- GIVEN instance `"serena-main"` exists locally with status `"disconnected"` or `"connecting"`
+- AND Evolution API `GET /instance/connectionState/serena-main` returns `"open"` or `"connected"`
+- WHEN `POST /send` is called
+- THEN the gateway updates `InstanceManager` to the connected/open status
+- AND sends the message via Evolution API
+- AND returns `200` with message confirmation
+
 #### Scenario: Send with disconnected instance
 
 - GIVEN instance `"serena-main"` exists but is in `"disconnected"` status
+- AND Evolution API confirms state `"close"`, `"closed"`, or `"disconnected"`
 - WHEN `POST /send` is called
-- THEN response is `400` with `{ "error": "instance_not_connected", "name": "serena-main", "status": "disconnected" }`
+- THEN response is `400` with `{ "error": "instance_not_connected", "name": "serena-main", ... }`
+
+#### Scenario: Evolution state check fails before send
+
+- GIVEN instance `"serena-main"` exists locally with status `"disconnected"` or `"connecting"`
+- AND Evolution API cannot be reached while checking connection state
+- WHEN `POST /send` is called
+- THEN response is `502` with `{ "error": "evolution_unreachable", ... }`
+- AND the message is NOT sent
+
+#### Scenario: Send with locally open instance skips state refresh
+
+- GIVEN instance `"serena-main"` exists locally with status `"open"` or `"connected"`
+- WHEN `POST /send` is called
+- THEN the gateway sends the message without first calling `GET /instance/connectionState/serena-main`

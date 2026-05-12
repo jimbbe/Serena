@@ -2,7 +2,9 @@
 
 ## Technical Approach
 
-Add `infrastructure/` layer alongside existing `domain/` and `application/` in `apps/gateway-wa/`. Zero changes to existing files — purely additive. `node:http` server, native `fetch`, zero npm deps. Dry-run mode preserved via `GATEWAY_MODE` env guard.
+Add `infrastructure/` layer alongside existing `domain/` and `application/` in `apps/gateway-wa/`. `node:http` server, native `fetch`, zero npm deps. Dry-run mode preserved via `GATEWAY_MODE` env guard.
+
+Phase 3 explicitly reuses `apps/gateway-wa/` as the real gateway workspace instead of creating `apps/gateway-whatsapp/`: `dry_run` preserves the T18 mock adapter, while `production` enables the Evolution API-backed HTTP gateway.
 
 ## Architecture Decisions
 
@@ -13,6 +15,7 @@ Add `infrastructure/` layer alongside existing `domain/` and `application/` in `
 | QR format | Pairing code string | Base64 image | **String as-is** | Evolution API returns `{ pairingCode: "ABCD1234" }`, not base64. Gateway returns code unchanged. |
 | Error strategy | Evolution errors → 502 | Evolution errors → passthrough | **502 + message** | Hide Evolution internals. Map connection errors → 502, Evolution status codes → mapped gateway codes. |
 | Test mocking | Fake fetch (existing pattern) | MSW/nock | **Fake fetch** | Follows existing pattern in `dry-run-gateway.test.ts`. Zero deps. Deterministic. |
+| Gateway workspace | Reuse `apps/gateway-wa` | Create `apps/gateway-whatsapp` | **Reuse `apps/gateway-wa`** | Keeps dry-run compatibility and avoids duplicating gateway contracts. Extraction can happen later if a separate repo/service boundary is justified. |
 
 ## Directory Structure
 
@@ -87,11 +90,19 @@ apps/gateway-wa/src/infrastructure/
 - In-memory `Map<string, InstanceState>` tracking name, status, qr, connectedAt.
 - `createInstance`: call Evolution create + connect, store state, return {name, qr, status}.
 - `getQrCode`: return cached code or "connected" if status=open.
+- `connection.update` webhooks update status in-place (`open`/`connected`/`connecting`/`disconnected`).
+- Phase 3 limitation: the map is process-local. Gateway restart loses local instance tracking; Evolution API remains source of truth and rehydration is future work.
 
 ### Message Sender (`messages/sender.ts`)
 - Validate: instanceId exists, `to` is non-empty, `text` is non-empty.
+- If local manager status is `disconnected` or `connecting`, call Evolution `getConnectionState()` before blocking. If Evolution reports `open`/`connected`, update manager and proceed; if Evolution reports disconnected/closed, block; if Evolution is unreachable, return a controlled `502 evolution_unreachable`.
 - Call Evolution `sendText`. Map response: `{messageId, status: "sent", timestamp}`.
 - Validation failures → 400. Instance not found → 404.
+
+### Serena Core Dependency (T36)
+- Webhook routing targets `POST /internal/webhook/whatsapp` on Serena Core.
+- That Core endpoint is not implemented in Phase 3 and is reserved for T36.
+- Until T36 lands, inbound webhooks can be accepted and normalized by the gateway, but inbound processing is not end-to-end complete.
 
 ## Configuration
 

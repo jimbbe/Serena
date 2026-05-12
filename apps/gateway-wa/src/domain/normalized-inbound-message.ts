@@ -34,6 +34,12 @@ export type NormalizedWhatsAppInboundMessage = {
   /** ISO 8601 timestamp when the message was received by the provider */
   receivedAt: string;
 
+  /** Communication channel — always "whatsapp" for this gateway. */
+  channel?: string;
+
+  /** Optional display name of the sender from the provider. */
+  senderName?: string;
+
   /** Raw provider payload for debugging and traceability.
    *  NOT sent to Serena Core. */
   raw: Record<string, unknown>;

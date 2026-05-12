@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "node --experimental-strip-types src/index.ts",
     "test": "node --experimental-strip-types --test src/**/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

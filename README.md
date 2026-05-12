@@ -6,7 +6,7 @@ La Fase 1 apunta a mediacion prudente por WhatsApp: Serena recibe un pedido, ide
 
 ## Estado Actual
 
-El repositorio tiene stack base desplegado en VPS (T04), arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), hardening interno completado (T17B), mock WhatsApp Gateway / dry-run adapter (T18), documentacion reorganizada (T18.1), modulo ai-guide con pipeline de ejecucion agnostico de LLM (T19), canal inbound channel-agnostic con resolucion de identidad externa (T20), Simulation API con single-step y scenario runner multi-step, historial de conversacion activo en AI guide (T27), contactos conocidos wireados en contexto de mediacion de AI guide (T28), LLM provider OpenAI-compatible configurable por variables de entorno (T29), readiness local post-T29 con validacion estricta de timestamps, timeout/validacion fuerte en gateway-wa y specs sincronizadas (T30A), y structural cleanup con contratos compartidos via `@serena/contracts` y modulo `channel-inbound` movido (T30B). **578 tests pasando** (519 core + 59 gateway-wa).
+El repositorio tiene stack base desplegado en VPS (T04), arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), hardening interno completado (T17B), mock WhatsApp Gateway / dry-run adapter (T18), documentacion reorganizada (T18.1), modulo ai-guide con pipeline de ejecucion agnostico de LLM (T19), canal inbound channel-agnostic con resolucion de identidad externa (T20), Simulation API con single-step y scenario runner multi-step, historial de conversacion activo en AI guide (T27), contactos conocidos wireados en contexto de mediacion de AI guide (T28), LLM provider OpenAI-compatible configurable por variables de entorno (T29), readiness local post-T29 con validacion estricta de timestamps, timeout/validacion fuerte en gateway-wa y specs sincronizadas (T30A), structural cleanup con contratos compartidos via `@serena/contracts` y modulo `channel-inbound` movido (T30B), y Phase 3 de WhatsApp Gateway real con Evolution API en `apps/gateway-wa` conservando `dry_run`. **1026 tests pasando** (776 core + 250 gateway-wa).
 
 ## 🔒 Centro Operativo del Proyecto
 
@@ -56,8 +56,8 @@ Este repositorio funciona como centro operativo del proyecto Serena. Contiene do
 - **channel-agnostic inbound** (T20): `InboundMessageCommand` normaliza mensajes de cualquier canal (whatsapp, voice, web_chat, telegram, system, simulation) en un solo contrato. `ProcessChannelInboundMessage` ejecuta el pipeline completo con resolucion de identidad → inbound gate → AI guide → `ChannelInboundResult`. La resolucion de identidad corre ANTES del gate.
 - **external identity resolution** (T20): `ExternalIdentityResolver` traduce identificadores externos de canal a identidad interna (`personId`, `role`, `authorized`). Bloquea actores bloqueados antes del gate. Soporta multi-canal: mismo `personId` puede llegar por WhatsApp, voz o web_chat. Adapter in-memory con seed data (Marta en 3 canales).
 
-**Mock WhatsApp Gateway (T18):**
-- `apps/gateway-wa/` workspace con mock gateway / dry-run adapter. Simula el flujo completo del WhatsApp Gateway sin enviar mensajes reales (`sent: false`). Copia tipos del contrato T17A. Desde T30A valida estrictamente timestamps UTC, aplica timeout configurable hacia Core y valida la forma de `PipelineResult`. 59 tests con fake `fetch`. Sin dependencias npm externas. Ver `docs/architecture/t18-mock-whatsapp-gateway.md`.
+**WhatsApp Gateway (`apps/gateway-wa`):**
+- Workspace con `dry_run` mock adapter (T18) y modo `production` real con Evolution API (Phase 3). Expone REST API con instancias, QR/pairing, `/send`, webhook Evolution, `connection.update` para estado de instancia y fallback de estado stale en `/send`. `InstanceManager` sigue in-memory en esta fase; Evolution API es source of truth y rehidratacion queda para una fase posterior. Inbound end-to-end requiere T36 en Serena Core (`POST /internal/webhook/whatsapp`). 250 tests con fake `fetch`. Sin dependencias npm externas. Ver `docs/architecture/wsp-gateway-api-contract.md`.
 
 **Simulation API (T20):**
 - Endpoint `POST /dev/simulate/inbound-message` — ejecuta el pipeline completo (inbound gate → AI guide) con mock LLM, sin WhatsApp real ni envio de mensajes. Devuelve traza completa: identidad resuelta, decision del gate, perfil LLM, resultado del AI guide. Solo habilitado con `ENABLE_SIMULATION_ENDPOINTS=true`.
@@ -86,13 +86,13 @@ InboundMessageCommand                     # comando channel-agnostic (whatsapp, 
   → ChannelInboundResult                  # traza completa: identity, decision, guideResult, errores
 ```
 
-- **WhatsApp sera un adapter futuro real**: el core no depende de WhatsApp. El `InboundMessageCommand` acepta cualquier canal. Cuando se integre Evolution API / Baileys, un `WhatsAppAdapter` normalizara el payload de WhatsApp a `InboundMessageCommand` y lo pasara al pipeline. El mock `gateway-wa` (T18) ya simula ese flujo.
+- **WhatsApp sigue desacoplado del core**: `apps/gateway-wa` ya puede operar como gateway real con Evolution API, pero Serena Core todavia necesita T36 para recibir `POST /internal/webhook/whatsapp` y completar inbound end-to-end.
 - **La Simulation API** (`POST /dev/simulate/inbound-message` y `POST /dev/simulate/scenario`) ejecuta exactamente este pipeline sin mensajes reales, sin WhatsApp real y sin LLM real.
 - Ver `docs/simulation-api.md` para el contrato completo de los endpoints de simulacion.
 
 ### Lo que no existe todavia
 
-- WhatsApp / Evolution API / Baileys real (solo contrato T17A y mock T18)
+- Serena Core inbound webhook real para WhatsApp (`POST /internal/webhook/whatsapp`, T36 pendiente). El gateway real con Evolution API ya esta preparado, pero inbound end-to-end todavia no esta completo.
 - **LLM real configurado en runtime**: el provider OpenAI-compatible existe desde T29, pero el default sigue siendo mock (`AI_PROVIDER=mock`). Para llamadas reales hay que configurar `AI_PROVIDER=openai-compatible`, `AI_BASE_URL`, `AI_API_KEY` y `AI_MODEL`.
 - Envio real de mensajes (el pipeline produce resultados, no envia; el mock simula `sent: false`)
 - Persistencia real de conversaciones (todo es in-memory, se pierde en restart)

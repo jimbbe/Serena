@@ -36,6 +36,7 @@ Node.js native HTTP server (no frameworks), TypeScript 5.9+ with `--experimental
 
 - `GET /health` — Health check returning service status and environment.
 - `POST /internal/pipeline/process` — Pipeline completo (gate → AI guide) con `X-Serena-Internal-Token`.
+- `POST /internal/webhook/whatsapp` — Webhook interno para payload normalizado de gateway WhatsApp; valida payload, mapea a `ProcessChannelInboundMessage` y devuelve `{ received, routedTo, result }`.
 - `POST /dev/simulate/inbound-message` — Single-step simulation (solo con `ENABLE_SIMULATION_ENDPOINTS=true`).
 - `POST /dev/simulate/scenario` — Multi-step scenario runner (solo con `ENABLE_SIMULATION_ENDPOINTS=true`).
 

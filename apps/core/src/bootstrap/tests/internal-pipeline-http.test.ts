@@ -515,8 +515,22 @@ describe("HTTP server — routing and pipeline", () => {
     assert.equal(obj.error, "not_found");
   });
 
-  it("GET /internal/pipeline/process returns 405", async () => {
+  it("GET /internal/pipeline/process without token returns 401", async () => {
     const { status, body } = await request("GET", "/internal/pipeline/process", port);
+
+    assert.equal(status, 401);
+    const obj = body as Record<string, unknown>;
+    assert.equal(obj.error, "missing_token");
+  });
+
+  it("GET /internal/pipeline/process with valid token returns 405", async () => {
+    const { status, body } = await request(
+      "GET",
+      "/internal/pipeline/process",
+      port,
+      undefined,
+      { "x-serena-internal-token": TEST_TOKEN },
+    );
 
     assert.equal(status, 405);
     const obj = body as Record<string, unknown>;

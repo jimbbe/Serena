@@ -1,14 +1,11 @@
-# Internal Auth Specification
+# Delta for internal-auth
 
-## Purpose
-
-Protect internal endpoints with a shared secret token (`X-Serena-Internal-Token`) to prevent unauthorized access to Serena Core internal routes. The health endpoint remains public.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Internal Token Authentication
 
-The system MUST validate the `X-Serena-Internal-Token` header on all `/internal/*` requests, including `/internal/pipeline/process` and `/internal/webhook/whatsapp`. The token value MUST be read from the `SERENA_INTERNAL_TOKEN` environment variable. If the variable is unset or empty, the system MUST reject internal requests with HTTP 500. Token values MUST NOT be logged.
+The system MUST validate the `X-Serena-Internal-Token` header on all `/internal/*` requests, including `/internal/pipeline/process` and `/internal/webhook/whatsapp`. The token value MUST be read from `SERENA_INTERNAL_TOKEN`. If the variable is unset or empty, the system MUST reject internal requests with HTTP 500. Token values MUST NOT be logged.
+(Previously: token authentication covered internal endpoints with scenarios focused on `/internal/pipeline/process`.)
 
 #### Scenario: Health endpoint is always public
 
@@ -69,26 +66,10 @@ The system MUST validate the `X-Serena-Internal-Token` header on all `/internal/
 
 #### Scenario: Missing env var causes 500 on internal endpoints
 
-- GIVEN `SERENA_INTERNAL_TOKEN` is NOT set (undefined or empty)
+- GIVEN `SERENA_INTERNAL_TOKEN` is NOT set or empty
 - WHEN a POST request is sent to any `/internal/*` endpoint
 - THEN the response is 500 with `{ error: "internal_token_not_configured" }`
 - AND no internal pipeline is executed
-
-#### Scenario: Known internal route with wrong method requires valid auth first
-
-- GIVEN `SERENA_INTERNAL_TOKEN` is set to `"secret-abc"`
-- WHEN a GET request is sent to `/internal/webhook/whatsapp` without token
-- THEN the response is 401 with `{ error: "missing_token" }`
-- WHEN a GET request is sent to `/internal/webhook/whatsapp` with a valid token
-- THEN the response is 405 with `{ error: "method_not_allowed" }`
-
-#### Scenario: Unknown internal route still requires auth
-
-- GIVEN `SERENA_INTERNAL_TOKEN` is set to `"secret-abc"`
-- WHEN a request is sent to `/internal/unknown` without token
-- THEN the response is 401 with `{ error: "missing_token" }`
-- WHEN the same request is sent with a valid token
-- THEN the response is 404 with `{ error: "not_found" }`
 
 ### Requirement: Token check before body parsing
 

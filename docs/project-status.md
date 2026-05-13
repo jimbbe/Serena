@@ -37,7 +37,6 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - Configurable instance-to-consumer routing table (currently hardcoded to Serena Core).
 - HMAC webhook signature validation between Evolution API and gateway.
 - Panel UI.
-- **T36: Serena Core inbound webhook endpoint** (`POST /internal/webhook/whatsapp`) — required for end-to-end inbound messaging from WhatsApp. Gateway is ready to route; Serena Core needs the receiving endpoint.
 - **Instance state persistence** — InstanceManager is in-memory; gateway restart loses local tracking. Evolution API remains source of truth for sessions. Rehydration from Evolution API on startup planned for a future phase.
 
 ## Repository Conventions

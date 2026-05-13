@@ -15,6 +15,10 @@ export type PipelineRequestHandler = (
   res: ServerResponse,
 ) => Promise<void>;
 
+type InternalAuthResult =
+  | { ok: true }
+  | { ok: false; statusCode: number; body: { error: string; detail: string } };
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -29,6 +33,47 @@ function sendJson(response: ServerResponse, statusCode: number, body: object): v
   response.end(payload);
 }
 
+function validateInternalToken(
+  req: IncomingMessage,
+  internalToken: string | undefined,
+): InternalAuthResult {
+  if (internalToken === undefined || internalToken === "") {
+    return {
+      ok: false,
+      statusCode: 500,
+      body: {
+        error: "internal_token_not_configured",
+        detail: "SERENA_INTERNAL_TOKEN is not set on the server",
+      },
+    };
+  }
+
+  const providedToken = req.headers["x-serena-internal-token"] as string | undefined;
+  if (!providedToken) {
+    return {
+      ok: false,
+      statusCode: 401,
+      body: {
+        error: "missing_token",
+        detail: "X-Serena-Internal-Token header is required",
+      },
+    };
+  }
+
+  if (providedToken !== internalToken) {
+    return {
+      ok: false,
+      statusCode: 403,
+      body: {
+        error: "invalid_token",
+        detail: "X-Serena-Internal-Token header does not match",
+      },
+    };
+  }
+
+  return { ok: true };
+}
+
 // ---------------------------------------------------------------------------
 // Server factory
 // ---------------------------------------------------------------------------
@@ -40,6 +85,7 @@ export function createHttpServer(
   simulationHandler?: PipelineRequestHandler,
   scenarioHandler?: PipelineRequestHandler,
   outboundDeliveryHandler?: PipelineRequestHandler,
+  whatsappWebhookHandler?: PipelineRequestHandler,
 ) {
   return createServer(async (req, res) => {
     const url = new URL(
@@ -58,56 +104,67 @@ export function createHttpServer(
       return;
     }
 
-    // POST /internal/pipeline/process — execute orchestrator pipeline
-    if (url.pathname === "/internal/pipeline/process") {
-      if (req.method !== "POST") {
-        sendJson(res, 405, {
-          error: "method_not_allowed",
-          detail: `Method ${req.method} not allowed. Use POST.`,
-        });
+    if (url.pathname.startsWith("/internal/")) {
+      const auth = validateInternalToken(req, internalToken);
+      if (!auth.ok) {
+        sendJson(res, auth.statusCode, auth.body);
         return;
       }
 
-      // Token check BEFORE body parsing (fail fast)
-      if (internalToken === undefined || internalToken === "") {
-        sendJson(res, 500, {
-          error: "internal_token_not_configured",
-          detail: "SERENA_INTERNAL_TOKEN is not set on the server",
-        });
-        return;
-      }
-
-      const providedToken = req.headers["x-serena-internal-token"] as string | undefined;
-
-      if (!providedToken) {
-        sendJson(res, 401, {
-          error: "missing_token",
-          detail: "X-Serena-Internal-Token header is required",
-        });
-        return;
-      }
-
-      if (providedToken !== internalToken) {
-        sendJson(res, 403, {
-          error: "invalid_token",
-          detail: "X-Serena-Internal-Token header does not match",
-        });
-        return;
-      }
-
-      if (pipelineHandler) {
-        try {
-          await pipelineHandler(req, res);
-        } catch {
-          // If handler throws unexpectedly, ensure we respond with 500
-          if (!res.writableEnded) {
-            sendJson(res, 500, { error: "internal_server_error" });
-          }
+      // POST /internal/pipeline/process — execute orchestrator pipeline
+      if (url.pathname === "/internal/pipeline/process") {
+        if (req.method !== "POST") {
+          sendJson(res, 405, {
+            error: "method_not_allowed",
+            detail: `Method ${req.method} not allowed. Use POST.`,
+          });
+          return;
         }
+
+        if (pipelineHandler) {
+          try {
+            await pipelineHandler(req, res);
+          } catch {
+            // If handler throws unexpectedly, ensure we respond with 500
+            if (!res.writableEnded) {
+              sendJson(res, 500, { error: "internal_server_error" });
+            }
+          }
+          return;
+        }
+
+        sendJson(res, 500, { error: "pipeline_not_configured" });
         return;
       }
 
-      sendJson(res, 500, { error: "pipeline_not_configured" });
+      if (url.pathname === "/internal/webhook/whatsapp") {
+        if (req.method !== "POST") {
+          sendJson(res, 405, {
+            error: "method_not_allowed",
+            detail: `Method ${req.method} not allowed. Use POST.`,
+          });
+          return;
+        }
+
+        if (whatsappWebhookHandler) {
+          try {
+            await whatsappWebhookHandler(req, res);
+          } catch {
+            if (!res.writableEnded) {
+              sendJson(res, 500, { error: "internal_server_error" });
+            }
+          }
+          return;
+        }
+
+        sendJson(res, 500, { error: "webhook_not_configured" });
+        return;
+      }
+
+      sendJson(res, 404, {
+        error: "not_found",
+        detail: `No route matches ${req.method} ${url.pathname}`,
+      });
       return;
     }
 

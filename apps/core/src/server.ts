@@ -3,6 +3,7 @@ import { loadAppEnv } from "./config/env.ts";
 import { createInMemoryPipeline } from "./bootstrap/create-in-memory-pipeline.ts";
 import { createLlmProvider } from "./modules/ai-guide/infrastructure/create-llm-provider.ts";
 import { createPipelineHandler } from "./bootstrap/internal-pipeline-handler.ts";
+import { createWhatsAppWebhookHandler } from "./bootstrap/whatsapp-webhook-handler.ts";
 import { createSimulationHandler, createOutboundDeliveryHandler } from "./bootstrap/simulation-handler.ts";
 import { createScenarioHandler } from "./bootstrap/scenario-handler.ts";
 import { SimulationScenarioRunner } from "./bootstrap/scenario-runner.ts";
@@ -20,12 +21,22 @@ const llmProvider = createLlmProvider(env);
 
 // Create orchestrator with shared in-memory dependencies.
 // Sessions survive across HTTP requests within the same process.
-const { orchestrator, processedMessageStore, aiGuideService, processInboundMessage, identityResolver, conversationStore, contactDirectory } = await createInMemoryPipeline({
+const {
+  orchestrator,
+  processedMessageStore,
+  aiGuideService,
+  processInboundMessage,
+  identityResolver,
+  conversationStore,
+  contactDirectory,
+  processChannelInboundMessage,
+} = await createInMemoryPipeline({
   llmProvider,
   providerName: env.aiProvider,
   configuredModel: env.aiModel ?? "mock-model-v1",
 });
 const pipelineHandler = createPipelineHandler(orchestrator, processedMessageStore);
+const whatsappWebhookHandler = createWhatsAppWebhookHandler(processChannelInboundMessage);
 
 // Conditionally wire simulation and scenario handlers (dev-only, disabled by default)
 let simulationHandler: ReturnType<typeof createSimulationHandler> | undefined;
@@ -63,12 +74,21 @@ if (env.enableSimulationEndpoints) {
   scenarioHandler = createScenarioHandler(scenarioRunner);
 }
 
-const server = createHttpServer(env.environment, pipelineHandler, env.internalToken, simulationHandler, scenarioHandler, outboundDeliveryHandler);
+const server = createHttpServer(
+  env.environment,
+  pipelineHandler,
+  env.internalToken,
+  simulationHandler,
+  scenarioHandler,
+  outboundDeliveryHandler,
+  whatsappWebhookHandler,
+);
 
 server.listen(env.port, env.host, () => {
   console.log(`serena-core listening on http://${env.host}:${env.port}`);
   console.log(`  GET  /health`);
   console.log(`  POST /internal/pipeline/process${env.internalToken ? "" : " (token NOT configured)"}`);
+  console.log(`  POST /internal/webhook/whatsapp${env.internalToken ? "" : " (token NOT configured)"}`);
   if (env.enableSimulationEndpoints) {
     console.log(`  POST /dev/simulate/inbound-message (simulation enabled)`);
     console.log(`  POST /dev/simulate/outbound-delivery (delivery simulation enabled)`);

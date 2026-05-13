@@ -128,7 +128,7 @@ The system MUST route normalized messages to Serena Core's webhook endpoint.
 | Headers | `Content-Type: application/json`, `X-Serena-Internal-Token: <token>` |
 | Body | The `NormalizedInboundMessage` JSON |
 
-> Phase 3 dependency note: Serena Core does not expose `POST /internal/webhook/whatsapp` yet. That endpoint is reserved for T36. Until T36 is implemented, the gateway can accept and attempt to route inbound webhooks, but inbound processing is not end-to-end complete.
+> Phase 3 note: Serena Core exposes `POST /internal/webhook/whatsapp`; the gateway can route inbound webhooks end-to-end through the internal core adapter.
 
 | Configuration | Env Var |
 |---------------|---------|

@@ -57,7 +57,7 @@ Este repositorio funciona como centro operativo del proyecto Serena. Contiene do
 - **external identity resolution** (T20): `ExternalIdentityResolver` traduce identificadores externos de canal a identidad interna (`personId`, `role`, `authorized`). Bloquea actores bloqueados antes del gate. Soporta multi-canal: mismo `personId` puede llegar por WhatsApp, voz o web_chat. Adapter in-memory con seed data (Marta en 3 canales).
 
 **WhatsApp Gateway (`apps/gateway-wa`):**
-- Workspace con `dry_run` mock adapter (T18) y modo `production` real con Evolution API (Phase 3). Expone REST API con instancias, QR/pairing, `/send`, webhook Evolution, `connection.update` para estado de instancia y fallback de estado stale en `/send`. `InstanceManager` sigue in-memory en esta fase; Evolution API es source of truth y rehidratacion queda para una fase posterior. Inbound end-to-end requiere T36 en Serena Core (`POST /internal/webhook/whatsapp`). 250 tests con fake `fetch`. Sin dependencias npm externas. Ver `docs/architecture/wsp-gateway-api-contract.md`.
+- Workspace con `dry_run` mock adapter (T18) y modo `production` real con Evolution API (Phase 3). Expone REST API con instancias, QR/pairing, `/send`, webhook Evolution, `connection.update` para estado de instancia y fallback de estado stale en `/send`. `InstanceManager` sigue in-memory en esta fase; Evolution API es source of truth y rehidratacion queda para una fase posterior. Inbound end-to-end ya puede rutear a Serena Core via `POST /internal/webhook/whatsapp` (T36). 250 tests con fake `fetch`. Sin dependencias npm externas. Ver `docs/architecture/wsp-gateway-api-contract.md`.
 
 **Simulation API (T20):**
 - Endpoint `POST /dev/simulate/inbound-message` — ejecuta el pipeline completo (inbound gate → AI guide) con mock LLM, sin WhatsApp real ni envio de mensajes. Devuelve traza completa: identidad resuelta, decision del gate, perfil LLM, resultado del AI guide. Solo habilitado con `ENABLE_SIMULATION_ENDPOINTS=true`.
@@ -86,13 +86,12 @@ InboundMessageCommand                     # comando channel-agnostic (whatsapp, 
   → ChannelInboundResult                  # traza completa: identity, decision, guideResult, errores
 ```
 
-- **WhatsApp sigue desacoplado del core**: `apps/gateway-wa` ya puede operar como gateway real con Evolution API, pero Serena Core todavia necesita T36 para recibir `POST /internal/webhook/whatsapp` y completar inbound end-to-end.
+- **WhatsApp sigue desacoplado del core**: `apps/gateway-wa` opera como gateway real con Evolution API y Serena Core recibe inbound normalizado en `POST /internal/webhook/whatsapp`.
 - **La Simulation API** (`POST /dev/simulate/inbound-message` y `POST /dev/simulate/scenario`) ejecuta exactamente este pipeline sin mensajes reales, sin WhatsApp real y sin LLM real.
 - Ver `docs/simulation-api.md` para el contrato completo de los endpoints de simulacion.
 
 ### Lo que no existe todavia
 
-- Serena Core inbound webhook real para WhatsApp (`POST /internal/webhook/whatsapp`, T36 pendiente). El gateway real con Evolution API ya esta preparado, pero inbound end-to-end todavia no esta completo.
 - **LLM real configurado en runtime**: el provider OpenAI-compatible existe desde T29, pero el default sigue siendo mock (`AI_PROVIDER=mock`). Para llamadas reales hay que configurar `AI_PROVIDER=openai-compatible`, `AI_BASE_URL`, `AI_API_KEY` y `AI_MODEL`.
 - Envio real de mensajes (el pipeline produce resultados, no envia; el mock simula `sent: false`)
 - Persistencia real de conversaciones (todo es in-memory, se pierde en restart)

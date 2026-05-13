@@ -1,6 +1,6 @@
 # WhatsApp Gateway API Contract
 
-> **Status**: Phase 3 current contract — real Evolution API gateway implemented, inbound end-to-end with Serena pending T36
+> **Status**: Phase 3 current contract — real Evolution API gateway implemented, inbound webhook route in Serena Core available (`POST /internal/webhook/whatsapp`)
 > **Scope**: API contract for the agnostic WhatsApp Gateway service
 > **Image**: `evolutionapi/evolution-api:latest`
 
@@ -237,13 +237,13 @@ The gateway routes inbound messages to:
 POST http://serena-core:3000/internal/webhook/whatsapp
 ```
 
-**This endpoint does not exist in Serena Core yet.** It will be implemented in T36.
+**This endpoint exists in Serena Core** and is protected by `X-Serena-Internal-Token` using the same internal auth rules as `/internal/pipeline/process`.
 
 **Current behavior:**
 - If `SERENA_CORE_URL` is not configured, the gateway accepts the webhook but does not route it.
 - If Serena Core returns an error, the gateway logs the error but still returns `200 { "received": true }` to Evolution API (to prevent retry loops).
 
-**End-to-end inbound messaging requires T36 to be completed first.** Phase 3 delivers a fully functional gateway that is ready to route — the receiving endpoint on Serena Core is the missing piece.
+**End-to-end inbound routing gateway → core is now available** for normalized WhatsApp inbound payloads.
 
 ---
 

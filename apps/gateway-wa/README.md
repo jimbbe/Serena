@@ -46,11 +46,30 @@ MockWhatsAppEvent → normalizeMockEvent() → PipelineInput
 
 | Env Variable | Required | Description |
 |-------------|----------|-------------|
-| `SERENA_CORE_URL` | Yes | Base URL of Serena Core (e.g. `http://localhost:3000`) |
-| `SERENA_INTERNAL_TOKEN` | Yes | Shared secret token for internal authentication |
+| `SERENA_CORE_URL` | Conditional | Legacy single-target fallback (used when routing table is not configured) |
+| `SERENA_INTERNAL_TOKEN` | Conditional | Legacy single-target fallback token |
+| `GATEWAY_ROUTING_TABLE_PATH` | Recommended in production | Path to JSON routing table (`instanceId -> consumer`) |
+| `GATEWAY_ROUTING_TABLE_JSON` | Optional | Inline JSON routing table (mostly for tests) |
 | `GATEWAY_CORE_TIMEOUT_MS` | No | Timeout for Core calls in milliseconds. Defaults to `30000` |
 
 Production mode also requires gateway API keys and Evolution API configuration (`GATEWAY_ADMIN_KEY`, `GATEWAY_APP_KEY`, `GATEWAY_EVO_KEY`, `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`).
+
+### Routing table format
+
+```json
+{
+  "routes": [
+    {
+      "instanceId": "serena-main",
+      "consumerId": "serena-core",
+      "internalWebhookUrl": "http://serena-core:3000/internal/webhook/whatsapp",
+      "auth": { "header": "X-Serena-Internal-Token", "env": "SERENA_INTERNAL_TOKEN" }
+    }
+  ]
+}
+```
+
+Unknown instance IDs are accepted safely but not forwarded (`routing_not_configured`).
 
 Mock events require `timestamp` to be a strict UTC ISO timestamp (`YYYY-MM-DDTHH:mm:ss(.sss)Z`). Invalid or timezone-offset timestamps are rejected before calling Serena Core.
 

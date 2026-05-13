@@ -25,6 +25,8 @@ function clearEnv(): void {
   delete process.env["EVOLUTION_API_KEY"];
   delete process.env["SERENA_CORE_URL"];
   delete process.env["SERENA_INTERNAL_TOKEN"];
+  delete process.env["GATEWAY_ROUTING_TABLE_PATH"];
+  delete process.env["GATEWAY_ROUTING_TABLE_JSON"];
 }
 
 beforeEach(() => {
@@ -240,3 +242,17 @@ describe("loadConfig — dry_run mode", () => {
     );
   });
 });
+  it("allows missing SERENA_* in production when routing table path is configured", () => {
+    process.env["GATEWAY_ADMIN_KEY"] = "admin-key";
+    process.env["GATEWAY_APP_KEY"] = "app-key";
+    process.env["GATEWAY_EVO_KEY"] = "evo-key";
+    process.env["EVOLUTION_API_URL"] = "http://evo:8080";
+    process.env["EVOLUTION_API_KEY"] = "evo-api-key";
+    process.env["GATEWAY_ROUTING_TABLE_PATH"] = "/tmp/routes.json";
+
+    const config = loadConfig();
+    assert.equal(config.mode, "production");
+    assert.equal(config.routingTablePath, "/tmp/routes.json");
+    assert.equal(config.coreUrl, undefined);
+    assert.equal(config.internalToken, undefined);
+  });

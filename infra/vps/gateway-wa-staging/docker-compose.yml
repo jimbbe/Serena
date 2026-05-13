@@ -1,0 +1,50 @@
+services:
+  gateway-wa:
+    build:
+      context: ../../..
+      dockerfile: apps/gateway-wa/Dockerfile
+    env_file:
+      - .env
+    networks:
+      - proxy
+      - evolution-private
+    restart: unless-stopped
+
+  evolution-api:
+    image: atendai/evolution-api:latest
+    env_file:
+      - .env
+    depends_on:
+      - evo-postgres
+      - redis
+    networks:
+      - evolution-private
+    restart: unless-stopped
+
+  evo-postgres:
+    image: postgres:16-alpine
+    env_file:
+      - .env
+    volumes:
+      - evo-postgres-data:/var/lib/postgresql/data
+    networks:
+      - evolution-private
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - evo-redis-data:/data
+    networks:
+      - evolution-private
+    restart: unless-stopped
+
+networks:
+  proxy:
+    external: true
+  evolution-private:
+    driver: bridge
+
+volumes:
+  evo-postgres-data:
+  evo-redis-data:

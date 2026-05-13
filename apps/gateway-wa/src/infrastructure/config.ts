@@ -14,8 +14,10 @@ export type GatewayRuntimeConfig = {
   evoKey: string;
   evolutionApiUrl: string;
   evolutionApiKey: string;
-  coreUrl: string;
-  internalToken: string;
+  coreUrl: string | undefined;
+  internalToken: string | undefined;
+  routingTablePath: string | undefined;
+  routingTableJson: string | undefined;
 };
 
 const VALID_MODES = new Set(["dry_run", "production"]);
@@ -75,9 +77,21 @@ export function loadConfig(): GatewayRuntimeConfig {
   const appKey = req("GATEWAY_APP_KEY");
   const evoKey = req("GATEWAY_EVO_KEY");
 
-  // Serena core config is always required
-  const coreUrl = req("SERENA_CORE_URL");
-  const internalToken = req("SERENA_INTERNAL_TOKEN");
+  const routingTablePath = readString("GATEWAY_ROUTING_TABLE_PATH");
+  const routingTableJson = readString("GATEWAY_ROUTING_TABLE_JSON");
+
+  // Serena core config is still required in dry_run mode.
+  // In production, a routing table can replace the single-target fallback.
+  const coreUrl = readString("SERENA_CORE_URL");
+  const internalToken = readString("SERENA_INTERNAL_TOKEN");
+  if (mode === "dry_run") {
+    if (!coreUrl) missing.push("SERENA_CORE_URL");
+    if (!internalToken) missing.push("SERENA_INTERNAL_TOKEN");
+  }
+  if (mode === "production" && !routingTablePath && !routingTableJson) {
+    if (!coreUrl) missing.push("SERENA_CORE_URL");
+    if (!internalToken) missing.push("SERENA_INTERNAL_TOKEN");
+  }
 
   // Evolution API — required only in production mode
   let evolutionApiUrl = "";
@@ -104,7 +118,9 @@ export function loadConfig(): GatewayRuntimeConfig {
     evoKey,
     evolutionApiUrl,
     evolutionApiKey,
-    coreUrl,
-    internalToken,
+    coreUrl: coreUrl || undefined,
+    internalToken: internalToken || undefined,
+    routingTablePath: routingTablePath || undefined,
+    routingTableJson: routingTableJson || undefined,
   };
 }

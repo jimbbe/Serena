@@ -12,6 +12,7 @@ import { handleWebhook } from "./receiver.ts";
 import { InstanceManager } from "../instances/manager.ts";
 import type { GatewayRuntimeConfig } from "../config.ts";
 import { dedupTracker } from "./dedup.ts";
+import { loadRoutingTable } from "../routing/table.ts";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -27,7 +28,26 @@ const validConfig: GatewayRuntimeConfig = {
   evolutionApiKey: "evo-key",
   coreUrl: "http://core:3000",
   internalToken: "core-token",
+  routingTablePath: undefined,
+  routingTableJson: undefined,
 };
+
+function buildRoutingTable() {
+  process.env["SERENA_INTERNAL_TOKEN"] = "core-token";
+  return loadRoutingTable({
+    routingTablePath: undefined,
+    routingTableJson: JSON.stringify({
+      routes: [
+        {
+          instanceId: "serena-main",
+          consumerId: "serena-core",
+          internalWebhookUrl: "http://core:3000/internal/webhook/whatsapp",
+          auth: { header: "X-Serena-Internal-Token", env: "SERENA_INTERNAL_TOKEN" },
+        },
+      ],
+    }),
+  });
+}
 
 const validTextPayload = {
   event: "MESSAGES_UPSERT",
@@ -105,7 +125,7 @@ function makeTrackingManager(): InstanceManager {
 describe("handleWebhook", () => {
   it("discards self-message with 200 and reason", async () => {
     const ctx: RequestContext = { body: selfMessagePayload, params: {} };
-    const result = await handleWebhook(ctx, validConfig, makeFakeManager());
+    const result = await handleWebhook(ctx, validConfig, makeFakeManager(), buildRoutingTable());
 
     assert.equal(result.status, 200);
     assert.deepEqual(result.body, {
@@ -116,7 +136,7 @@ describe("handleWebhook", () => {
 
   it("discards image message with 200 and reason non-text", async () => {
     const ctx: RequestContext = { body: imagePayload, params: {} };
-    const result = await handleWebhook(ctx, validConfig, makeFakeManager());
+    const result = await handleWebhook(ctx, validConfig, makeFakeManager(), buildRoutingTable());
 
     assert.equal(result.status, 200);
     assert.deepEqual(result.body, {
@@ -136,7 +156,7 @@ describe("handleWebhook", () => {
         },
         params: {},
       };
-    const result = await handleWebhook(ctx, validConfig, makeFakeManager());
+    const result = await handleWebhook(ctx, validConfig, makeFakeManager(), buildRoutingTable());
 
     assert.equal(result.status, 200);
     assert.deepEqual(result.body, {
@@ -150,7 +170,7 @@ describe("handleWebhook", () => {
     dedupTracker.isDuplicate("wamid-001");
 
     const ctx: RequestContext = { body: validTextPayload, params: {} };
-    const result = await handleWebhook(ctx, validConfig, makeFakeManager());
+    const result = await handleWebhook(ctx, validConfig, makeFakeManager(), buildRoutingTable());
 
     assert.equal(result.status, 200);
     assert.deepEqual(result.body, {
@@ -173,7 +193,7 @@ describe("handleWebhook", () => {
     }) as typeof globalThis.fetch;
 
     const ctx: RequestContext = { body: validTextPayload, params: {} };
-    const result = await handleWebhook(ctx, validConfig, makeFakeManager());
+    const result = await handleWebhook(ctx, validConfig, makeFakeManager(), buildRoutingTable());
 
     assert.equal(result.status, 200);
     const body = result.body as Record<string, unknown>;
@@ -186,12 +206,12 @@ describe("handleWebhook", () => {
 
     // 2nd call — duplicate
     const ctx2: RequestContext = { body: validTextPayload, params: {} };
-    const result2 = await handleWebhook(ctx2, validConfig, makeFakeManager());
+    const result2 = await handleWebhook(ctx2, validConfig, makeFakeManager(), buildRoutingTable());
     assert.deepEqual(result2.body, { received: true, duplicate: true });
 
     // 3rd call — still duplicate
     const ctx3: RequestContext = { body: validTextPayload, params: {} };
-    const result3 = await handleWebhook(ctx3, validConfig, makeFakeManager());
+    const result3 = await handleWebhook(ctx3, validConfig, makeFakeManager(), buildRoutingTable());
     assert.deepEqual(result3.body, { received: true, duplicate: true });
   });
 
@@ -215,7 +235,7 @@ describe("handleWebhook", () => {
     }) as typeof globalThis.fetch;
 
     const ctx: RequestContext = { body: validTextPayload, params: {} };
-    const result = await handleWebhook(ctx, validConfig, makeFakeManager());
+    const result = await handleWebhook(ctx, validConfig, makeFakeManager(), buildRoutingTable());
 
     assert.equal(result.status, 200);
     assert.equal(capturedUrl, "http://core:3000/internal/webhook/whatsapp");
@@ -229,8 +249,24 @@ describe("handleWebhook", () => {
     assert.equal(body.channel, "whatsapp");
   });
 
-  it("logs error and does not route when SERENA_CORE_URL is missing", async () => {
-    const noCoreConfig = { ...validConfig, coreUrl: "" };
+  it("returns routing_not_configured for unknown instance in routing table mode", async () => {
+    const ctx: RequestContext = {
+      body: { ...validTextPayload, instance: "unknown-instance" },
+      params: {},
+    };
+
+    const result = await handleWebhook(ctx, validConfig, makeFakeManager(), buildRoutingTable());
+
+    assert.equal(result.status, 200);
+    assert.deepEqual(result.body, {
+      ignored: true,
+      reason: "routing_not_configured",
+      instanceId: "unknown-instance",
+    });
+  });
+
+  it("falls back to legacy SERENA_* routing when table is absent", async () => {
+    const noCoreConfig = { ...validConfig, coreUrl: "" as unknown as string };
     const ctx: RequestContext = { body: validTextPayload, params: {} };
 
     globalThis.fetch = (() => {
@@ -260,7 +296,7 @@ describe("handleWebhook — connection.update", () => {
       },
       params: {},
     };
-    const result = await handleWebhook(ctx, validConfig, manager);
+    const result = await handleWebhook(ctx, validConfig, manager, buildRoutingTable());
 
     assert.equal(result.status, 200);
     const body = result.body as Record<string, unknown>;
@@ -285,7 +321,7 @@ describe("handleWebhook — connection.update", () => {
       },
       params: {},
     };
-    const result = await handleWebhook(ctx, validConfig, manager);
+    const result = await handleWebhook(ctx, validConfig, manager, buildRoutingTable());
 
     assert.equal(result.status, 200);
     const body = result.body as Record<string, unknown>;
@@ -308,7 +344,7 @@ describe("handleWebhook — connection.update", () => {
       },
       params: {},
     };
-    const result = await handleWebhook(ctx, validConfig, manager);
+    const result = await handleWebhook(ctx, validConfig, manager, buildRoutingTable());
 
     // Should return 200 — untracked instances are silently ignored
     assert.equal(result.status, 200);
@@ -328,7 +364,7 @@ describe("handleWebhook — connection.update", () => {
       },
       params: {},
     };
-    const result = await handleWebhook(ctx, validConfig, manager);
+    const result = await handleWebhook(ctx, validConfig, manager, buildRoutingTable());
 
     assert.equal(result.status, 200);
     const body = result.body as Record<string, unknown>;

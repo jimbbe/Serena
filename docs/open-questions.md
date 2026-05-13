@@ -68,6 +68,12 @@ Idempotencia in-memory implementada en T17B. Preguntas abiertas para futuras tar
 
 - No open T04 infrastructure preflight questions remain. SSH, DNS, Docker/Compose, external network `proxy`, `/docker/serena` write access and Caddy backup were confirmed during T04.
 
+## T37 Staging Platform Follow-ups
+
+- Should gateway-wa staging stay private permanently, or do we need an explicit admin hostname behind Caddy in a future approved task?
+- Do we add durable routing/instance state persistence before enabling shared multi-consumer onboarding?
+- Should webhook authenticity add HMAC signature validation between Evolution API and gateway before first live staging deploy?
+
 ## Verified In T03.1
 
 - VPS identity: Hostinger VPS `1619520`, hostname `srv1619520.hstgr.cloud`, IPv4 `177.7.32.90`, IPv6 `2a02:4780:75:6109::1`.

@@ -19,6 +19,7 @@ import { shouldDiscard } from "./filter.ts";
 import { normalizeEvolutionPayload } from "./normalizer.ts";
 import { dedupTracker } from "./dedup.ts";
 import { mapEvolutionStateToGatewayStatus } from "../evolution/types.ts";
+import type { RoutingTable } from "../routing/table.ts";
 
 /**
  * Handle POST /webhook/evolution.
@@ -40,6 +41,7 @@ export async function handleWebhook(
   ctx: RequestContext,
   config: GatewayRuntimeConfig,
   manager: InstanceManager,
+  routingTable?: RoutingTable,
 ): Promise<HandlerResult> {
   const body = ctx.body as Record<string, unknown> | undefined;
 
@@ -100,23 +102,39 @@ export async function handleWebhook(
   const instanceId = payload.instance ?? "unknown";
   const normalized = normalizeEvolutionPayload(payload, instanceId);
 
-  // Step 5: Route to Serena Core
-  if (!config.coreUrl || config.coreUrl.trim() === "") {
-    console.error("[gateway-wa] SERENA_CORE_URL is not configured — cannot route webhook");
+  // Step 5: Route using instanceId -> consumer mapping
+  const route = routingTable?.findRoute(instanceId) ?? null;
+  if (!route && (!config.coreUrl || !config.internalToken)) {
+    console.error("[gateway-wa] No routing configured for webhook forwarding");
     return {
       status: 200,
       body: { received: true },
     };
   }
 
+  if (!route && routingTable) {
+    return {
+      status: 200,
+      body: {
+        ignored: true,
+        reason: "routing_not_configured",
+        instanceId,
+      },
+    };
+  }
+
   try {
-    const coreUrl = `${config.coreUrl}/internal/webhook/whatsapp`;
+    const coreUrl = route
+      ? route.internalWebhookUrl
+      : `${config.coreUrl}/internal/webhook/whatsapp`;
+    const authHeader = route ? route.authHeader : "X-Serena-Internal-Token";
+    const authValue = route ? route.authValue : (config.internalToken ?? "");
 
     const response = await fetch(coreUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Serena-Internal-Token": config.internalToken,
+        [authHeader]: authValue,
       },
       body: JSON.stringify(normalized),
     });
@@ -135,7 +153,7 @@ export async function handleWebhook(
       status: 200,
       body: {
         received: true,
-        routedTo: "serena-core",
+        routedTo: route?.consumerId ?? "serena-core",
       },
     };
   } catch (err: unknown) {

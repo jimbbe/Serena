@@ -1,0 +1,13 @@
+{
+  "routes": [
+    {
+      "instanceId": "serena-main",
+      "consumerId": "serena-core",
+      "internalWebhookUrl": "http://serena-core:3000/internal/webhook/whatsapp",
+      "auth": {
+        "header": "X-Serena-Internal-Token",
+        "env": "SERENA_INTERNAL_TOKEN"
+      }
+    }
+  ]
+}

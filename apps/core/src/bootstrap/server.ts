@@ -104,65 +104,67 @@ export function createHttpServer(
       return;
     }
 
-    // POST /internal/pipeline/process — execute orchestrator pipeline
-    if (url.pathname === "/internal/pipeline/process") {
-      if (req.method !== "POST") {
-        sendJson(res, 405, {
-          error: "method_not_allowed",
-          detail: `Method ${req.method} not allowed. Use POST.`,
-        });
-        return;
-      }
-
+    if (url.pathname.startsWith("/internal/")) {
       const auth = validateInternalToken(req, internalToken);
       if (!auth.ok) {
         sendJson(res, auth.statusCode, auth.body);
         return;
       }
 
-      if (pipelineHandler) {
-        try {
-          await pipelineHandler(req, res);
-        } catch {
-          // If handler throws unexpectedly, ensure we respond with 500
-          if (!res.writableEnded) {
-            sendJson(res, 500, { error: "internal_server_error" });
-          }
+      // POST /internal/pipeline/process — execute orchestrator pipeline
+      if (url.pathname === "/internal/pipeline/process") {
+        if (req.method !== "POST") {
+          sendJson(res, 405, {
+            error: "method_not_allowed",
+            detail: `Method ${req.method} not allowed. Use POST.`,
+          });
+          return;
         }
-        return;
-      }
 
-      sendJson(res, 500, { error: "pipeline_not_configured" });
-      return;
-    }
-
-    if (url.pathname === "/internal/webhook/whatsapp") {
-      if (req.method !== "POST") {
-        sendJson(res, 405, {
-          error: "method_not_allowed",
-          detail: `Method ${req.method} not allowed. Use POST.`,
-        });
-        return;
-      }
-
-      const auth = validateInternalToken(req, internalToken);
-      if (!auth.ok) {
-        sendJson(res, auth.statusCode, auth.body);
-        return;
-      }
-
-      if (whatsappWebhookHandler) {
-        try {
-          await whatsappWebhookHandler(req, res);
-        } catch {
-          if (!res.writableEnded) {
-            sendJson(res, 500, { error: "internal_server_error" });
+        if (pipelineHandler) {
+          try {
+            await pipelineHandler(req, res);
+          } catch {
+            // If handler throws unexpectedly, ensure we respond with 500
+            if (!res.writableEnded) {
+              sendJson(res, 500, { error: "internal_server_error" });
+            }
           }
+          return;
         }
+
+        sendJson(res, 500, { error: "pipeline_not_configured" });
         return;
       }
 
-      sendJson(res, 500, { error: "webhook_not_configured" });
+      if (url.pathname === "/internal/webhook/whatsapp") {
+        if (req.method !== "POST") {
+          sendJson(res, 405, {
+            error: "method_not_allowed",
+            detail: `Method ${req.method} not allowed. Use POST.`,
+          });
+          return;
+        }
+
+        if (whatsappWebhookHandler) {
+          try {
+            await whatsappWebhookHandler(req, res);
+          } catch {
+            if (!res.writableEnded) {
+              sendJson(res, 500, { error: "internal_server_error" });
+            }
+          }
+          return;
+        }
+
+        sendJson(res, 500, { error: "webhook_not_configured" });
+        return;
+      }
+
+      sendJson(res, 404, {
+        error: "not_found",
+        detail: `No route matches ${req.method} ${url.pathname}`,
+      });
       return;
     }
 

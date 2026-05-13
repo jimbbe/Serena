@@ -107,25 +107,27 @@ Evolution API webhook → NormalizedInboundMessage:
 
 | Evolution API field | Normalized field |
 |---------------------|------------------|
-| `data.key.remoteJid` | `from` (strip @s.whatsapp.net) |
+| `data.key.remoteJid` | `senderWhatsAppId` (strip @s.whatsapp.net) |
 | `data.key.id` | `messageId` |
 | `data.message.conversation` | `text` |
 | `data.key.fromMe` | **DISCARD if true** (self-message loop prevention) |
 | `data.pushName` | `senderName` (optional) |
-| `data.messageTimestamp` | `timestamp` (convert to ISO 8601) |
+| `data.messageTimestamp` | `receivedAt` (convert to ISO 8601) |
 | Instance name | `instanceId` |
 
 ### NormalizedInboundMessage
 
 ```typescript
 type NormalizedInboundMessage = {
+  provider: string;      // "evolution", "twilio", "meta", etc.
   instanceId: string;    // "serena-main"
   messageId: string;     // Evolution API message ID
-  from: string;          // WhatsApp ID (e.g. "5491111111111")
+  senderWhatsAppId: string; // WhatsApp ID (e.g. "5491111111111")
   text: string;          // Message content
-  timestamp: string;     // ISO 8601 UTC
+  receivedAt: string;    // ISO 8601 UTC
   channel: "whatsapp";
   senderName?: string;   // Optional display name
+  raw: Record<string, unknown>; // Raw provider payload for traceability
 };
 ```
 

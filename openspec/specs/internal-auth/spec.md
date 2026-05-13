@@ -74,6 +74,22 @@ The system MUST validate the `X-Serena-Internal-Token` header on all `/internal/
 - THEN the response is 500 with `{ error: "internal_token_not_configured" }`
 - AND no internal pipeline is executed
 
+#### Scenario: Known internal route with wrong method requires valid auth first
+
+- GIVEN `SERENA_INTERNAL_TOKEN` is set to `"secret-abc"`
+- WHEN a GET request is sent to `/internal/webhook/whatsapp` without token
+- THEN the response is 401 with `{ error: "missing_token" }`
+- WHEN a GET request is sent to `/internal/webhook/whatsapp` with a valid token
+- THEN the response is 405 with `{ error: "method_not_allowed" }`
+
+#### Scenario: Unknown internal route still requires auth
+
+- GIVEN `SERENA_INTERNAL_TOKEN` is set to `"secret-abc"`
+- WHEN a request is sent to `/internal/unknown` without token
+- THEN the response is 401 with `{ error: "missing_token" }`
+- WHEN the same request is sent with a valid token
+- THEN the response is 404 with `{ error: "not_found" }`
+
 ### Requirement: Token check before body parsing
 
 The system MUST validate the token BEFORE reading or parsing the request body on internal endpoints. Unauthorized requests MUST NOT consume the body stream.

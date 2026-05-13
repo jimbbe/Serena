@@ -155,9 +155,40 @@ describe("POST /internal/webhook/whatsapp", () => {
     }
   });
 
-  it("returns 405 for non-POST method", async () => {
+  it("returns 401 for non-POST method without token", async () => {
     const res = await request("GET", "/internal/webhook/whatsapp", port);
+    assert.equal(res.status, 401);
+    assert.equal((res.body as Record<string, unknown>).error, "missing_token");
+  });
+
+  it("returns 405 for non-POST method with valid token", async () => {
+    const res = await request(
+      "GET",
+      "/internal/webhook/whatsapp",
+      port,
+      undefined,
+      { "x-serena-internal-token": TEST_TOKEN },
+    );
     assert.equal(res.status, 405);
+    assert.equal((res.body as Record<string, unknown>).error, "method_not_allowed");
+  });
+
+  it("returns 401 for unknown internal route without token", async () => {
+    const res = await request("GET", "/internal/unknown", port);
+    assert.equal(res.status, 401);
+    assert.equal((res.body as Record<string, unknown>).error, "missing_token");
+  });
+
+  it("returns 404 for unknown internal route with valid token", async () => {
+    const res = await request(
+      "GET",
+      "/internal/unknown",
+      port,
+      undefined,
+      { "x-serena-internal-token": TEST_TOKEN },
+    );
+    assert.equal(res.status, 404);
+    assert.equal((res.body as Record<string, unknown>).error, "not_found");
   });
 
   it("returns 400 with field list for invalid payload", async () => {

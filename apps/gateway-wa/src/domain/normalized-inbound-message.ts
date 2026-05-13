@@ -6,12 +6,12 @@
  * T17A — Normalized WhatsApp Inbound Message.
  *
  * This is the shape a WhatsApp Gateway (separate repo) MUST normalise
- * provider payloads into before calling POST /internal/pipeline/process
+ * provider payloads into before calling POST /internal/webhook/whatsapp
  * on Serena Core.
  *
  * It extends IncomingWhatsAppMessage with gateway-level metadata
- * (provider, instanceId, messageId, raw) that Serena Core does NOT
- * receive — the gateway strips them when building PipelineInput.
+ * (provider, instanceId, messageId, raw) that Serena Core can receive
+ * as metadata for traceability/debugging in the inbound command mapping.
  */
 
 export type NormalizedWhatsAppInboundMessage = {
@@ -41,6 +41,6 @@ export type NormalizedWhatsAppInboundMessage = {
   senderName?: string;
 
   /** Raw provider payload for debugging and traceability.
-   *  NOT sent to Serena Core. */
+   *  May be forwarded to Serena Core as metadata.raw. */
   raw: Record<string, unknown>;
 };

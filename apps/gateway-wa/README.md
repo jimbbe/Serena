@@ -51,8 +51,13 @@ MockWhatsAppEvent → normalizeMockEvent() → PipelineInput
 | `GATEWAY_ROUTING_TABLE_PATH` | Preferred in production | Path to JSON routing table (`instanceId -> consumer`) |
 | `GATEWAY_ROUTING_TABLE_JSON` | Preferred alternative | Inline JSON routing table (`instanceId -> consumer`, mostly for tests) |
 | `GATEWAY_CORE_TIMEOUT_MS` | No | Timeout for Core calls in milliseconds. Defaults to `30000` |
+| `GATEWAY_ADMIN_KEY` | Production | Admin API key for `/instances*` routes |
+| `GATEWAY_APP_KEY` | Production | App API key for `/send` |
+| `GATEWAY_EVO_KEY` | Production | Evolution webhook API key for `/webhook/evolution` |
+| `EVOLUTION_API_URL` | Production | Base URL for the private Evolution API service |
+| `EVOLUTION_API_KEY` | Production | API key used by gateway-wa when calling Evolution API |
 
-Production mode also requires gateway API keys and Evolution API configuration (`GATEWAY_ADMIN_KEY`, `GATEWAY_APP_KEY`, `GATEWAY_EVO_KEY`, `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`).
+Production mode requires gateway API keys and Evolution API configuration. Evolution API should remain private by default; expose gateway routes only through an explicitly approved edge route or network path.
 
 ### Routing table format
 
@@ -107,9 +112,10 @@ npm test
 
 Tests use Node 22 built-in `node:test` with fake `fetch` for deterministic HTTP simulation. Zero external dependencies.
 
-## Phase 3 limitations
+## Current limitations
 
 - `InstanceManager` is in-memory. Restarting the gateway loses local instance tracking.
 - Evolution API remains the source of truth for WhatsApp sessions; startup rehydration is future work.
-- Inbound routing targets Serena Core `POST /internal/webhook/whatsapp`, which is reserved for T36 and is not implemented yet.
-- No VPS deployment is performed by this phase.
+- Serena Core `POST /internal/webhook/whatsapp` exists since T36 and is currently the first configured consumer in staging templates.
+- Routing is MVP/static: instance-to-consumer routes are loaded from `GATEWAY_ROUTING_TABLE_PATH` or `GATEWAY_ROUTING_TABLE_JSON`; durable routing persistence is future work.
+- No live VPS deployment is performed by T37.

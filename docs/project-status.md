@@ -34,10 +34,20 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - Real outbound message sending (pipeline produces results but does not send messages — gateway has the `POST /send` endpoint ready but the orchestrator pipeline does not yet trigger it automatically).
 - Docker deployment and VPS integration of the real gateway (`gateway-wa` service, Docker network wiring, env configuration for production `GATEWAY_MODE`).
 - HTTP API beyond `/health` and `/internal/pipeline/process` (simulation endpoints are dev-only, gated by `ENABLE_SIMULATION_ENDPOINTS`).
-- Configurable instance-to-consumer routing table (currently hardcoded to Serena Core).
+- Public/admin exposure policy for gateway-wa staging (T37 keeps it private by default).
 - HMAC webhook signature validation between Evolution API and gateway.
 - Panel UI.
 - **Instance state persistence** — InstanceManager is in-memory; gateway restart loses local tracking. Evolution API remains source of truth for sessions. Rehydration from Evolution API on startup planned for a future phase.
+
+## Prepared In T37: Shared gateway-wa staging platform (repo-only)
+
+- Added gateway routing table support (`instanceId -> consumer`) via file/JSON config in `apps/gateway-wa`.
+- Added routing table loader with env-resolved auth token per consumer route.
+- Updated webhook receiver to route by `instanceId`, return safe `routing_not_configured` on unknown routes, and keep legacy single-target fallback.
+- Added staging template under `infra/vps/gateway-wa-staging/` with `gateway-wa`, `evolution-api`, `evo-postgres`, `redis`, private network boundaries, and no host ports.
+- Added placeholder-only `.env.example` and routing table sample.
+- Added non-destructive smoke helper script and T37 runbook.
+- No live deploy, SSH mutation, Caddy mutation, or real WhatsApp pairing performed.
 
 ## Repository Conventions
 

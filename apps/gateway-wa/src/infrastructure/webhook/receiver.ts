@@ -1,7 +1,7 @@
 /**
  * T14 — Webhook receiver: full handler (dedup + filter + normalize + route).
  *
- * Chains dedup → filter → normalize → route to Serena Core for incoming
+ * Chains dedup → filter → normalize → route to configured consumer for incoming
  * Evolution API webhook payloads.
  *
  * Also handles connection.update events to keep InstanceManager state in sync.
@@ -19,6 +19,7 @@ import { shouldDiscard } from "./filter.ts";
 import { normalizeEvolutionPayload } from "./normalizer.ts";
 import { dedupTracker } from "./dedup.ts";
 import { mapEvolutionStateToGatewayStatus } from "../evolution/types.ts";
+import type { RoutingTable } from "../routing/table.ts";
 
 /**
  * Handle POST /webhook/evolution.
@@ -28,7 +29,7 @@ import { mapEvolutionStateToGatewayStatus } from "../evolution/types.ts";
  * 2. Dedup: silently accept duplicate messageIds (200 OK)
  * 3. Filter: discard self-messages and non-text
  * 4. Normalize: Evolution payload → NormalizedWhatsAppInboundMessage
- * 5. Route: POST to Serena Core /internal/webhook/whatsapp
+ * 5. Route: POST to configured consumer webhook
  *
  * Flow for connection.update:
  * 1. Parse body as connection update payload
@@ -40,6 +41,7 @@ export async function handleWebhook(
   ctx: RequestContext,
   config: GatewayRuntimeConfig,
   manager: InstanceManager,
+  routingTable?: RoutingTable,
 ): Promise<HandlerResult> {
   const body = ctx.body as Record<string, unknown> | undefined;
 
@@ -100,30 +102,46 @@ export async function handleWebhook(
   const instanceId = payload.instance ?? "unknown";
   const normalized = normalizeEvolutionPayload(payload, instanceId);
 
-  // Step 5: Route to Serena Core
-  if (!config.coreUrl || config.coreUrl.trim() === "") {
-    console.error("[gateway-wa] SERENA_CORE_URL is not configured — cannot route webhook");
+  // Step 5: Route using instanceId -> consumer mapping
+  const route = routingTable?.findRoute(instanceId) ?? null;
+  if (!route && (!config.coreUrl || !config.internalToken)) {
+    console.error("[gateway-wa] No routing configured for webhook forwarding");
     return {
       status: 200,
       body: { received: true },
     };
   }
 
+  if (!route && routingTable) {
+    return {
+      status: 200,
+      body: {
+        ignored: true,
+        reason: "routing_not_configured",
+        instanceId,
+      },
+    };
+  }
+
   try {
-    const coreUrl = `${config.coreUrl}/internal/webhook/whatsapp`;
+    const coreUrl = route
+      ? route.internalWebhookUrl
+      : `${config.coreUrl}/internal/webhook/whatsapp`;
+    const authHeader = route ? route.authHeader : "X-Serena-Internal-Token";
+    const authValue = route ? route.authValue : (config.internalToken ?? "");
 
     const response = await fetch(coreUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Serena-Internal-Token": config.internalToken,
+        [authHeader]: authValue,
       },
       body: JSON.stringify(normalized),
     });
 
     if (!response.ok) {
       console.error(
-        `[gateway-wa] Serena Core returned HTTP ${response.status} when routing webhook`,
+        `[gateway-wa] consumer webhook returned HTTP ${response.status} when routing webhook${route ? ` (consumerId=${route.consumerId})` : " (legacy Serena fallback)"}`,
       );
       return {
         status: 200,
@@ -135,12 +153,12 @@ export async function handleWebhook(
       status: 200,
       body: {
         received: true,
-        routedTo: "serena-core",
+        routedTo: route?.consumerId ?? "serena-core",
       },
     };
   } catch (err: unknown) {
     console.error(
-      `[gateway-wa] Failed to route webhook to Serena Core: ${err instanceof Error ? err.message : String(err)}`,
+      `[gateway-wa] Failed to route webhook to configured consumer${route ? ` (consumerId=${route.consumerId})` : " (legacy Serena fallback)"}: ${err instanceof Error ? err.message : String(err)}`,
     );
     return {
       status: 200,

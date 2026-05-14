@@ -22,6 +22,7 @@ import {
 import { sendMessageHandler } from "./infrastructure/messages/handler.ts";
 import { handleWebhook } from "./infrastructure/webhook/receiver.ts";
 import type { IncomingMessage } from "node:http";
+import { loadRoutingTable } from "./infrastructure/routing/table.ts";
 
 // ---------------------------------------------------------------------------
 // Bootstrap
@@ -47,6 +48,10 @@ async function main(): Promise<void> {
 
   const instanceManager = new InstanceManager(evoClient);
   const messageSender = new MessageSender(evoClient, instanceManager);
+  const routingTable = loadRoutingTable({
+    routingTablePath: config.routingTablePath,
+    routingTableJson: config.routingTableJson,
+  });
 
   // Build router
   const router = new Router<
@@ -85,7 +90,7 @@ async function main(): Promise<void> {
 
   // POST /webhook/evolution
   router.register("POST", "/webhook/evolution", async (ctx: RequestContext) => {
-    return handleWebhook(ctx, config, instanceManager);
+    return handleWebhook(ctx, config, instanceManager, routingTable);
   });
 
   // Create and start server

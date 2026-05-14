@@ -35,6 +35,9 @@ logs/
 # SDD artifacts
 .atl/
 
+# Staging runtime routing table (non-committed)
+infra/vps/gateway-wa-staging/routing-table.json
+
 # OS / editors
 .DS_Store
 Thumbs.db

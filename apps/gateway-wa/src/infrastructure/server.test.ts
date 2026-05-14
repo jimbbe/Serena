@@ -25,6 +25,8 @@ const validConfig: GatewayRuntimeConfig = {
   evolutionApiKey: "evo-key-1",
   coreUrl: "http://core:3000",
   internalToken: "token",
+  routingTablePath: undefined,
+  routingTableJson: undefined,
 };
 
 type HandlerResult = { status: number; body: unknown; headers?: Record<string, string> };

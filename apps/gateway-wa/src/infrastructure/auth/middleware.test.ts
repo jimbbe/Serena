@@ -24,6 +24,8 @@ const validConfig: GatewayRuntimeConfig = {
   evolutionApiKey: "evo-api-key",
   coreUrl: "http://core:3000",
   internalToken: "core-token",
+  routingTablePath: undefined,
+  routingTableJson: undefined,
 };
 
 function makeReq(headers: Record<string, string>): IncomingMessage {

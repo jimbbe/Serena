@@ -1,7 +1,7 @@
 /**
  * T14 — Webhook receiver tests.
  *
- * Tests for the webhook handler: dedup → filter → normalize → route to Serena Core.
+ * Tests for the webhook handler: dedup → filter → normalize → route to configured consumer.
  * Also tests connection.update event handling.
  */
 
@@ -215,7 +215,7 @@ describe("handleWebhook", () => {
     assert.deepEqual(result3.body, { received: true, duplicate: true });
   });
 
-  it("routes valid text message to Serena Core", async () => {
+  it("routes valid text message to configured consumer", async () => {
     let capturedUrl = "";
     let capturedBody: unknown;
     let capturedHeaders: Record<string, string> = {};

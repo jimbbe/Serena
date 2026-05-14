@@ -5,7 +5,7 @@ Self-contained WhatsApp Gateway workspace with two modes:
 - `dry_run`: preserves the original mock adapter and never sends real WhatsApp messages.
 - `production`: starts the real HTTP gateway backed by Evolution API.
 
-Phase 3 intentionally reuses `apps/gateway-wa/` as the real gateway workspace instead of creating `apps/gateway-whatsapp/`.
+Phase 3 intentionally reuses `apps/gateway-wa/` as a shared/reusable real gateway workspace instead of creating `apps/gateway-whatsapp/`.
 
 ## Purpose
 
@@ -46,10 +46,10 @@ MockWhatsAppEvent → normalizeMockEvent() → PipelineInput
 
 | Env Variable | Required | Description |
 |-------------|----------|-------------|
-| `SERENA_CORE_URL` | Conditional | Legacy single-target fallback (used when routing table is not configured) |
-| `SERENA_INTERNAL_TOKEN` | Conditional | Legacy single-target fallback token |
-| `GATEWAY_ROUTING_TABLE_PATH` | Recommended in production | Path to JSON routing table (`instanceId -> consumer`) |
-| `GATEWAY_ROUTING_TABLE_JSON` | Optional | Inline JSON routing table (mostly for tests) |
+| `SERENA_CORE_URL` | Conditional | Legacy/single-target fallback URL (compatibility path when routing table is not configured) |
+| `SERENA_INTERNAL_TOKEN` | Conditional | Legacy/single-target fallback token (compatibility path) |
+| `GATEWAY_ROUTING_TABLE_PATH` | Preferred in production | Path to JSON routing table (`instanceId -> consumer`) |
+| `GATEWAY_ROUTING_TABLE_JSON` | Preferred alternative | Inline JSON routing table (`instanceId -> consumer`, mostly for tests) |
 | `GATEWAY_CORE_TIMEOUT_MS` | No | Timeout for Core calls in milliseconds. Defaults to `30000` |
 
 Production mode also requires gateway API keys and Evolution API configuration (`GATEWAY_ADMIN_KEY`, `GATEWAY_APP_KEY`, `GATEWAY_EVO_KEY`, `EVOLUTION_API_URL`, `EVOLUTION_API_KEY`).
@@ -69,7 +69,7 @@ Production mode also requires gateway API keys and Evolution API configuration (
 }
 ```
 
-Unknown instance IDs are accepted safely but not forwarded (`routing_not_configured`).
+Serena is the first configured consumer in current fixtures/templates (`serena-main` -> `serena-core`). Unknown instance IDs are accepted safely but not forwarded (`routing_not_configured`).
 
 Mock events require `timestamp` to be a strict UTC ISO timestamp (`YYYY-MM-DDTHH:mm:ss(.sss)Z`). Invalid or timezone-offset timestamps are rejected before calling Serena Core.
 

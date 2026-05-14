@@ -8,6 +8,8 @@ services:
     networks:
       - proxy
       - evolution-private
+    volumes:
+      - ./routing-table.json:/app/config/routing-table.json:ro
     restart: unless-stopped
 
   evolution-api:

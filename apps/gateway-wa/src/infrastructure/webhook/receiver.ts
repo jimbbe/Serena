@@ -1,7 +1,7 @@
 /**
  * T14 — Webhook receiver: full handler (dedup + filter + normalize + route).
  *
- * Chains dedup → filter → normalize → route to Serena Core for incoming
+ * Chains dedup → filter → normalize → route to configured consumer for incoming
  * Evolution API webhook payloads.
  *
  * Also handles connection.update events to keep InstanceManager state in sync.
@@ -29,7 +29,7 @@ import type { RoutingTable } from "../routing/table.ts";
  * 2. Dedup: silently accept duplicate messageIds (200 OK)
  * 3. Filter: discard self-messages and non-text
  * 4. Normalize: Evolution payload → NormalizedWhatsAppInboundMessage
- * 5. Route: POST to Serena Core /internal/webhook/whatsapp
+ * 5. Route: POST to configured consumer webhook
  *
  * Flow for connection.update:
  * 1. Parse body as connection update payload
@@ -141,7 +141,7 @@ export async function handleWebhook(
 
     if (!response.ok) {
       console.error(
-        `[gateway-wa] Serena Core returned HTTP ${response.status} when routing webhook`,
+        `[gateway-wa] consumer webhook returned HTTP ${response.status} when routing webhook${route ? ` (consumerId=${route.consumerId})` : " (legacy Serena fallback)"}`,
       );
       return {
         status: 200,
@@ -158,7 +158,7 @@ export async function handleWebhook(
     };
   } catch (err: unknown) {
     console.error(
-      `[gateway-wa] Failed to route webhook to Serena Core: ${err instanceof Error ? err.message : String(err)}`,
+      `[gateway-wa] Failed to route webhook to configured consumer${route ? ` (consumerId=${route.consumerId})` : " (legacy Serena fallback)"}: ${err instanceof Error ? err.message : String(err)}`,
     );
     return {
       status: 200,

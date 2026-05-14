@@ -7,6 +7,7 @@
 
 const baseUrl = (process.env["GATEWAY_BASE_URL"] ?? "http://localhost:3001").trim();
 const appKey = (process.env["GATEWAY_APP_KEY"] ?? "").trim();
+const evoKey = (process.env["GATEWAY_EVO_KEY"] ?? "").trim();
 
 async function main(): Promise<void> {
   console.log(`[smoke] baseUrl=${baseUrl}`);
@@ -21,11 +22,13 @@ async function main(): Promise<void> {
 
 async function checkHealth(): Promise<void> {
   const response = await fetch(`${baseUrl}/health`);
+  assertStatus(response, 200, "/health");
   console.log(`[smoke] /health -> ${response.status}`);
 }
 
 async function checkAuthRejection(): Promise<void> {
   const response = await fetch(`${baseUrl}/instances`, { method: "POST" });
+  assertStatus(response, 401, "/instances without key");
   console.log(`[smoke] /instances without key -> ${response.status}`);
 }
 
@@ -34,7 +37,7 @@ async function checkUnknownRoute(): Promise<void> {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Gateway-Evo-Key": appKey || "placeholder",
+      "X-Gateway-Evo-Key": evoKey || "placeholder",
     },
     body: JSON.stringify({
       event: "MESSAGES_UPSERT",
@@ -51,8 +54,12 @@ async function checkUnknownRoute(): Promise<void> {
     }),
   });
 
-  const body = await response.text();
-  console.log(`[smoke] webhook unknown route -> ${response.status} ${body}`);
+  assertStatus(response, 200, "webhook unknown instance");
+  const body = await readJsonObject(response, "webhook unknown instance body");
+  assertEqual(body["ignored"], true, "webhook unknown instance ignored flag");
+  assertEqual(body["reason"], "routing_not_configured", "webhook unknown instance reason");
+  assertEqual(body["instanceId"], "unknown-instance", "webhook unknown instance id");
+  console.log(`[smoke] webhook unknown route -> ${response.status} ${JSON.stringify(body)}`);
 }
 
 async function checkSendPathAuthAndValidation(): Promise<void> {
@@ -63,6 +70,7 @@ async function checkSendPathAuthAndValidation(): Promise<void> {
     },
     body: JSON.stringify({ instance: "serena-main", to: "5491111111111", text: "smoke" }),
   });
+  assertStatus(noKeyResponse, 401, "/send without key");
   console.log(`[smoke] /send without key -> ${noKeyResponse.status}`);
 
   const malformedPayloadResponse = await fetch(`${baseUrl}/send`, {
@@ -73,7 +81,36 @@ async function checkSendPathAuthAndValidation(): Promise<void> {
     },
     body: JSON.stringify({ instance: "", to: "", text: "" }),
   });
+  assertStatus(malformedPayloadResponse, 400, "/send malformed payload with valid app key");
   console.log(`[smoke] /send malformed payload with key -> ${malformedPayloadResponse.status}`);
+}
+
+function assertStatus(response: Response, expected: number, label: string): void {
+  if (response.status !== expected) {
+    throw new Error(`${label}: expected HTTP ${expected}, got ${response.status}`);
+  }
+}
+
+function assertEqual(actual: unknown, expected: unknown, label: string): void {
+  if (actual !== expected) {
+    throw new Error(`${label}: expected ${String(expected)}, got ${String(actual)}`);
+  }
+}
+
+async function readJsonObject(response: Response, label: string): Promise<Record<string, unknown>> {
+  const raw = await response.text();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`${label}: expected JSON object body, got non-JSON`);
+  }
+
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${label}: expected JSON object body`);
+  }
+
+  return parsed as Record<string, unknown>;
 }
 
 main().catch((error) => {

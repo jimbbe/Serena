@@ -7,6 +7,7 @@ services:
       - .env
     networks:
       - proxy
+      - serena-internal
       - evolution-private
     volumes:
       - ./routing-table.json:/app/config/routing-table.json:ro
@@ -43,6 +44,8 @@ services:
 
 networks:
   proxy:
+    external: true
+  serena-internal:
     external: true
   evolution-private:
     driver: bridge

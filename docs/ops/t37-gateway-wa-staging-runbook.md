@@ -25,6 +25,8 @@ T37 does **not** deploy, mutate VPS, change Caddy, or pair real WhatsApp instanc
 - No direct public route to `evolution-api`.
 - Placeholder secrets only in repo.
 - Rollback must not touch `serena-core`.
+- `gateway-wa` must join the external `serena-internal` network before it can route to `http://serena-core:3000/internal/webhook/whatsapp`.
+- Do not deploy `gateway-wa` until `serena-core` has been updated from `main`, has `SERENA_INTERNAL_TOKEN` configured only on the VPS, and `POST /internal/webhook/whatsapp` has been verified.
 
 ## Suggested smoke checks (when explicitly approved)
 

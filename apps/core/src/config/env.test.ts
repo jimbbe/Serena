@@ -36,6 +36,83 @@ test("default config produces backward-compatible AppEnv", () => {
   assert.equal(env.aiApiKey, undefined);
   assert.equal(env.aiModel, undefined);
   assert.equal(env.aiTimeoutMs, 30000);
+  assert.equal(env.outboundDeliveryAdapter, "fake");
+  assert.equal(env.gatewayWaBaseUrl, undefined);
+  assert.equal(env.gatewayWaAppKey, undefined);
+  assert.equal(env.gatewayWaInstanceId, undefined);
+  assert.equal(env.gatewayWaTimeoutMs, 30000);
+});
+
+test("default outbound delivery adapter is fake", () => {
+  const env = loadAppEnv(makeEnv());
+  assert.equal(env.outboundDeliveryAdapter, "fake");
+});
+
+test("OUTBOUND_DELIVERY_ADAPTER=gateway-wa accepted with full config", () => {
+  const env = loadAppEnv(makeEnv({
+    OUTBOUND_DELIVERY_ADAPTER: "gateway-wa",
+    GATEWAY_WA_BASE_URL: "https://gateway.local",
+    GATEWAY_WA_APP_KEY: "app-key",
+    GATEWAY_WA_INSTANCE_ID: "serena-main",
+  }));
+  assert.equal(env.outboundDeliveryAdapter, "gateway-wa");
+});
+
+test("OUTBOUND_DELIVERY_ADAPTER unknown value throws", () => {
+  assert.throws(
+    () => loadAppEnv(makeEnv({ OUTBOUND_DELIVERY_ADAPTER: "real" })),
+    /OUTBOUND_DELIVERY_ADAPTER must be one of/,
+  );
+});
+
+test("gateway-wa adapter requires GATEWAY_WA_BASE_URL", () => {
+  assert.throws(
+    () => loadAppEnv(makeEnv({
+      OUTBOUND_DELIVERY_ADAPTER: "gateway-wa",
+      GATEWAY_WA_APP_KEY: "app-key",
+      GATEWAY_WA_INSTANCE_ID: "serena-main",
+    })),
+    /requires: GATEWAY_WA_BASE_URL/,
+  );
+});
+
+test("gateway-wa adapter requires GATEWAY_WA_APP_KEY", () => {
+  assert.throws(
+    () => loadAppEnv(makeEnv({
+      OUTBOUND_DELIVERY_ADAPTER: "gateway-wa",
+      GATEWAY_WA_BASE_URL: "https://gateway.local",
+      GATEWAY_WA_INSTANCE_ID: "serena-main",
+    })),
+    /requires:.*GATEWAY_WA_APP_KEY/,
+  );
+});
+
+test("gateway-wa adapter requires GATEWAY_WA_INSTANCE_ID", () => {
+  assert.throws(
+    () => loadAppEnv(makeEnv({
+      OUTBOUND_DELIVERY_ADAPTER: "gateway-wa",
+      GATEWAY_WA_BASE_URL: "https://gateway.local",
+      GATEWAY_WA_APP_KEY: "app-key",
+    })),
+    /requires:.*GATEWAY_WA_INSTANCE_ID/,
+  );
+});
+
+test("GATEWAY_WA_TIMEOUT_MS default is 30000", () => {
+  const env = loadAppEnv(makeEnv());
+  assert.equal(env.gatewayWaTimeoutMs, 30000);
+});
+
+test("GATEWAY_WA_TIMEOUT_MS custom value accepted", () => {
+  const env = loadAppEnv(makeEnv({ GATEWAY_WA_TIMEOUT_MS: "45000" }));
+  assert.equal(env.gatewayWaTimeoutMs, 45000);
+});
+
+test("GATEWAY_WA_TIMEOUT_MS invalid value throws", () => {
+  assert.throws(
+    () => loadAppEnv(makeEnv({ GATEWAY_WA_TIMEOUT_MS: "NaN" })),
+    /GATEWAY_WA_TIMEOUT_MS must be a positive integer/,
+  );
 });
 
 // ── AI_PROVIDER parsing ─────────────────────────────────────────────

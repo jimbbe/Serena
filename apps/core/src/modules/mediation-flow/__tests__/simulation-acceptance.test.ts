@@ -875,7 +875,7 @@ test("C10.1: Full happy path — understand → confirm → resolved", async () 
   assert.equal(s1.flowState?.status, "confirming");
   const s2 = await doStep(pipeline, "sí", s1.conversation?.id);
   assert.equal(s2.flowState?.status, "resolved");
-  assert.ok(s2.promptText?.includes("No se envió") || s2.promptText?.includes("Todavía no se envía"));
+  assert.ok(s2.promptText?.includes("ya fue entregado"));
 });
 
 test("C10.2: Understand → edit → confirm → resolved", async () => {

@@ -8,7 +8,7 @@ Define the internal Serena Core endpoint that receives gateway-normalized WhatsA
 
 ### Requirement: Internal WhatsApp Webhook Route
 
-Serena Core MUST expose `POST /internal/webhook/whatsapp` as an internal endpoint. The endpoint MUST NOT be gated by `ENABLE_SIMULATION_ENDPOINTS` and MUST NOT call Evolution API, send outbound messages, create workers, connect PostgreSQL, add dependencies, or introduce Italian-language behavior.
+Serena Core MUST expose `POST /internal/webhook/whatsapp` as an internal endpoint. The endpoint MUST NOT be gated by `ENABLE_SIMULATION_ENDPOINTS` and MUST NOT call Evolution API, create workers, connect PostgreSQL, add dependencies, or introduce Italian-language behavior. A valid inbound confirmation MAY indirectly cause delivery only by running the normal channel-inbound pipeline and its configured `DeliveryPort` boundary.
 
 #### Scenario: Route exists outside simulation mode
 
@@ -20,7 +20,8 @@ Serena Core MUST expose `POST /internal/webhook/whatsapp` as an internal endpoin
 
 - GIVEN the webhook receives a valid gateway-normalized payload
 - WHEN the request is processed
-- THEN Serena Core does not call Evolution API or any `DeliveryPort`
+- THEN Serena Core does not call Evolution API directly
+- AND any outbound delivery goes only through the configured delivery port
 
 ### Requirement: WhatsApp Webhook Payload Validation
 
@@ -40,7 +41,7 @@ The endpoint MUST require a JSON object with non-empty string fields `instanceId
 
 ### Requirement: WhatsApp Webhook Pipeline Mapping
 
-The endpoint MUST map the payload to the `ProcessChannelInboundMessage` equivalent: `channel: "whatsapp"`, `externalSenderId: senderWhatsAppId`, `text`, `occurredAt: receivedAt`, and `metadata` containing `provider`, `instanceId`, `messageId`, `senderName`, and `raw`. On success it MUST return `{ received: true, routedTo: "serena-core", result: ... }`.
+The endpoint MUST map the payload to the `ProcessChannelInboundMessage` equivalent: `channel: "whatsapp"`, `externalSenderId: senderWhatsAppId`, `text`, `occurredAt: receivedAt`, and `metadata` containing `provider`, `instanceId`, `messageId`, `senderName`, and `raw`. On success it MUST return `{ received: true, routedTo: "serena-core", result: ... }`. It MUST preserve the normal pipeline state machine; inbound webhooks MUST NOT bypass confirmation, draft creation, or `RequestOutboundDelivery`.
 
 #### Scenario: Happy path uses normal pipeline
 
@@ -58,7 +59,7 @@ The endpoint MUST map the payload to the `ProcessChannelInboundMessage` equivale
 
 - GIVEN a known sender asks Serena to message an allowed contact
 - WHEN the webhook processes the request
-- THEN the result MAY include current pipeline `preparedOutbound`/OutboundDraft data
+- THEN the result MAY include prepared outbound draft data
 - AND no outbound delivery is requested automatically
 
 #### Scenario: Risk request does not auto-send

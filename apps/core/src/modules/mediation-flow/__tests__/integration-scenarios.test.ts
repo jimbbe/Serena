@@ -98,7 +98,7 @@ test("S1: Complete mediation flow — understand → confirm → resolved", asyn
   assert.ok(step2.flowState !== undefined, "Step 2 should have flow state");
   assert.equal(step2.flowState.status, "resolved");
   assert.equal(step2.flowState.pendingAction, null);
-  assert.ok(step2.promptText?.includes("No se envió") || step2.promptText?.includes("Todavía no se envía"));
+  assert.ok(step2.promptText?.includes("ya fue entregado"));
 });
 
 // ---------------------------------------------------------------------------

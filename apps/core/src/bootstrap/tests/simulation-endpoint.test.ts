@@ -399,7 +399,7 @@ describe("POST /dev/simulate/inbound-message", () => {
     assert.equal(identity.status, "resolved");
   });
 
-  it("confirmation with known recipient returns preparedOutbound deliveryReady=true", async () => {
+  it("confirmation with known recipient returns preparedOutbound delivered", async () => {
     const first = await request("POST", "/dev/simulate/inbound-message", port, {
       channel: "whatsapp",
       externalSenderId: "+5492600000000",
@@ -420,8 +420,8 @@ describe("POST /dev/simulate/inbound-message", () => {
     const obj = second.body as Record<string, unknown>;
     const preparedOutbound = obj.preparedOutbound as Record<string, unknown> | undefined;
     assert.ok(preparedOutbound !== undefined);
-    assert.equal(preparedOutbound.status, "confirmed_pending_delivery");
-    assert.equal(preparedOutbound.deliveryReady, true);
+    assert.equal(preparedOutbound.status, "delivered");
+    assert.equal(preparedOutbound.deliveryReady, false);
     assert.equal(obj.simulatedOutbound, undefined);
   });
 

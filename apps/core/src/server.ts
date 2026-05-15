@@ -11,13 +11,14 @@ import { ProcessChannelInboundMessage } from "./modules/channel-inbound/applicat
 import { InMemoryMediationFlowStore } from "./modules/mediation-flow/adapter/in-memory-mediation-flow-store.ts";
 import { InMemoryOutboundDraftStore } from "./modules/outbound-draft/adapter/in-memory-outbound-draft-store.ts";
 import { RequestOutboundDelivery } from "./modules/outbound-delivery/application/use-cases/request-outbound-delivery.ts";
-import { FakeDeliveryPort } from "./modules/outbound-delivery/adapter/fake-delivery-port.ts";
+import { FakeDeliveryPort, createDeliveryPort } from "./modules/outbound-delivery/index.ts";
 import { resolveOutboundRecipient, CreateOutboundDraftFromMediation } from "./modules/outbound-draft/index.ts";
 
 const env = loadAppEnv();
 
 // Create the LLM provider based on environment config.
 const llmProvider = createLlmProvider(env);
+const runtimeDeliveryPort = createDeliveryPort(env);
 
 // Create orchestrator with shared in-memory dependencies.
 // Sessions survive across HTTP requests within the same process.
@@ -34,6 +35,7 @@ const {
   llmProvider,
   providerName: env.aiProvider,
   configuredModel: env.aiModel ?? "mock-model-v1",
+  deliveryPort: runtimeDeliveryPort,
 });
 const pipelineHandler = createPipelineHandler(orchestrator, processedMessageStore);
 const whatsappWebhookHandler = createWhatsAppWebhookHandler(processChannelInboundMessage);

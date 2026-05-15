@@ -41,6 +41,7 @@ import type { CreateOutboundDraftFromMediation } from "../../../outbound-draft/a
 import type { OutboundDraftRequesterIdentity } from "../../../outbound-draft/application/use-cases/create-outbound-draft-from-mediation.ts";
 import type { RecipientResolution } from "../../../outbound-draft/application/resolve-outbound-recipient.ts";
 import type { OutboundDraft } from "../../../outbound-draft/domain/outbound-draft.ts";
+import type { RequestOutboundDelivery } from "../../../outbound-delivery/application/use-cases/request-outbound-delivery.ts";
 
 // ---------------------------------------------------------------------------
 // Dependencies
@@ -65,6 +66,7 @@ export type ProcessChannelInboundMessageDependencies = {
   resolveOutboundRecipient?: (hint: string, contactDirectory: ContactDirectory) => Promise<RecipientResolution>;
   outboundDraftStore?: OutboundDraftStore;
   createOutboundDraft?: CreateOutboundDraftFromMediation;
+  requestOutboundDelivery?: RequestOutboundDelivery;
 };
 
 // ---------------------------------------------------------------------------
@@ -83,6 +85,7 @@ export class ProcessChannelInboundMessage {
     ((hint: string, contactDirectory: ContactDirectory) => Promise<RecipientResolution>) | undefined;
   private readonly outboundDraftStore: OutboundDraftStore | undefined;
   private readonly createOutboundDraft: CreateOutboundDraftFromMediation | undefined;
+  private readonly requestOutboundDelivery: RequestOutboundDelivery | undefined;
 
   constructor(deps: ProcessChannelInboundMessageDependencies) {
     this.processInboundMessage = deps.processInboundMessage;
@@ -95,6 +98,7 @@ export class ProcessChannelInboundMessage {
     this.resolveOutboundRecipient = deps.resolveOutboundRecipient;
     this.outboundDraftStore = deps.outboundDraftStore;
     this.createOutboundDraft = deps.createOutboundDraft;
+    this.requestOutboundDelivery = deps.requestOutboundDelivery;
   }
 
   async execute(cmd: InboundMessageCommand): Promise<ChannelInboundResult> {
@@ -586,9 +590,14 @@ export class ProcessChannelInboundMessage {
             recipientResolution,
             store: this.outboundDraftStore,
           });
+          let finalDraft = outboundDraft;
+          if (outboundDraft.status === "confirmed_pending_delivery" && this.requestOutboundDelivery !== undefined) {
+            const deliveryResult = await this.requestOutboundDelivery.execute({ outboundDraftId: outboundDraft.id });
+            finalDraft = deliveryResult.outboundDraft;
+          }
 
-          preparedOutbound = toPreparedOutbound(outboundDraft);
-          promptText = buildPreparedOutboundPrompt(outboundDraft.status);
+          preparedOutbound = toPreparedOutbound(finalDraft);
+          promptText = buildPreparedOutboundPrompt(finalDraft.status);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           args.warnings.push(`Outbound draft not created: ${message}`);
@@ -895,6 +904,14 @@ function toPreparedOutbound(outboundDraft: OutboundDraft): PreparedOutbound {
 }
 
 function buildPreparedOutboundPrompt(status: OutboundDraft["status"]): string {
+  if (status === "delivered") {
+    return "Perfecto, el recado ya fue entregado por el canal configurado.";
+  }
+
+  if (status === "failed") {
+    return "El recado quedó confirmado, pero la entrega falló en el gateway configurado.";
+  }
+
   if (status === "needs_recipient_resolution") {
     return "Perfecto, dejo este mensaje preparado. Todavía no se envía por ningún canal real y falta resolver el destinatario.";
   }

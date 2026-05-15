@@ -15,6 +15,8 @@ function makeEnv(overrides: Partial<AppEnv> = {}): AppEnv {
     enableSimulationEndpoints: false,
     aiProvider: "mock",
     aiTimeoutMs: 30000,
+    outboundDeliveryAdapter: "fake",
+    gatewayWaTimeoutMs: 30000,
   };
   // Apply overrides — skip optional fields with undefined to satisfy exactOptionalPropertyTypes
   const o = overrides as Record<string, unknown>;
@@ -28,6 +30,11 @@ function makeEnv(overrides: Partial<AppEnv> = {}): AppEnv {
   if (o.host !== undefined) env.host = o.host as string;
   if (o.port !== undefined) env.port = o.port as number;
   if (o.environment !== undefined) env.environment = o.environment as string;
+  if (o.outboundDeliveryAdapter !== undefined) env.outboundDeliveryAdapter = o.outboundDeliveryAdapter as "fake" | "gateway-wa";
+  if (o.gatewayWaBaseUrl !== undefined) env.gatewayWaBaseUrl = o.gatewayWaBaseUrl as string;
+  if (o.gatewayWaAppKey !== undefined) env.gatewayWaAppKey = o.gatewayWaAppKey as string;
+  if (o.gatewayWaInstanceId !== undefined) env.gatewayWaInstanceId = o.gatewayWaInstanceId as string;
+  if (o.gatewayWaTimeoutMs !== undefined) env.gatewayWaTimeoutMs = o.gatewayWaTimeoutMs as number;
   return env;
 }
 

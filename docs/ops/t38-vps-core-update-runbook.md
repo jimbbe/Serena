@@ -107,17 +107,17 @@ fi
 docker exec \
   -e SERENA_INTERNAL_TOKEN="$SERENA_INTERNAL_TOKEN" \
   serena-core \
-  node -e "fetch('http://127.0.0.1:3000/internal/webhook/whatsapp',{method:'POST',headers:{'content-type':'application/json','x-serena-internal-token':process.env.SERENA_INTERNAL_TOKEN},body:JSON.stringify({provider:'evolution',instanceId:'t38-probe',messageId:'t38-probe-' + Date.now(),from:'5491111111111',text:'hola',timestamp:new Date().toISOString()})}).then(async r => { console.log(r.status, await r.text()); process.exit(r.ok ? 0 : 1); }).catch(e => { console.error(e.message); process.exit(1); })"
+  node -e "fetch('http://127.0.0.1:3000/internal/webhook/whatsapp',{method:'POST',headers:{'content-type':'application/json','x-serena-internal-token':process.env.SERENA_INTERNAL_TOKEN},body:JSON.stringify({provider:'evolution',instanceId:'t38-probe',messageId:'t38-probe-' + Date.now(),senderWhatsAppId:'5491111111111',text:'hola',receivedAt:new Date().toISOString()})}).then(async r => { console.log(r.status, await r.text()); process.exit(r.ok ? 0 : 1); }).catch(e => { console.error(e.message); process.exit(1); })"
 
 unset TOKEN_LINE SERENA_INTERNAL_TOKEN
 ```
 
-Expected result: HTTP 200 with a JSON body including `received: true` and `routedTo: "channel-inbound"`.
+Expected result: HTTP 200 with a JSON body including `received: true` and `routedTo: "serena-core"`.
 
 Negative check (must NOT be treated as success):
 
 ```sh
-docker exec serena-core node -e "fetch('http://127.0.0.1:3000/internal/webhook/whatsapp',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({provider:'evolution',instanceId:'t38-probe-no-auth',messageId:'t38-probe-no-auth-' + Date.now(),from:'5491111111111',text:'hola',timestamp:new Date().toISOString()})}).then(async r => { console.log(r.status, await r.text()); process.exit(r.status === 200 ? 1 : 0); }).catch(e => { console.error(e.message); process.exit(1); })"
+docker exec serena-core node -e "fetch('http://127.0.0.1:3000/internal/webhook/whatsapp',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({provider:'evolution',instanceId:'t38-probe-no-auth',messageId:'t38-probe-no-auth-' + Date.now(),senderWhatsAppId:'5491111111111',text:'hola',receivedAt:new Date().toISOString()})}).then(async r => { console.log(r.status, await r.text()); process.exit(r.status === 200 ? 1 : 0); }).catch(e => { console.error(e.message); process.exit(1); })"
 ```
 
 Expected result: non-200 (typically 401/403). If this returns 200, stop and rollback.

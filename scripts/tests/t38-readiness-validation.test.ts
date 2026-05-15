@@ -31,6 +31,43 @@ test("T38: runbook contains authenticated and unauthenticated webhook checks", (
   assert.match(runbook, /process\.exit\(r\.status === 200 \? 1 : 0\)/);
 });
 
+test("T38: runbook verifies internal and public health after refresh", () => {
+  const runbook = read("docs/ops/t38-vps-core-update-runbook.md");
+  assert.match(runbook, /## Verify health/);
+  assert.match(runbook, /fetch\('http:\/\/127\.0\.0\.1:3000\/health'\)/);
+  assert.match(runbook, /curl -fsS https:\/\/serena\.goingmerry01\.tech\/health/);
+});
+
+test("T38: runbook webhook probe bodies match Core contract fields", () => {
+  const runbook = read("docs/ops/t38-vps-core-update-runbook.md");
+
+  const probeBodies = [...runbook.matchAll(/body:JSON\.stringify\(\{([\s\S]*?)\}\)/g)].map(
+    (match) => match[1] ?? "",
+  );
+
+  assert.ok(
+    probeBodies.length >= 2,
+    "expected authenticated and unauthenticated webhook probe bodies",
+  );
+
+  for (const body of probeBodies) {
+    assert.match(body, /instanceId:/);
+    assert.match(body, /messageId:/);
+    assert.match(body, /senderWhatsAppId:/);
+    assert.match(body, /text:/);
+    assert.match(body, /receivedAt:/);
+    assert.doesNotMatch(body, /\bfrom\s*:/);
+    assert.doesNotMatch(body, /\btimestamp\s*:/);
+  }
+});
+
+test("T38: runbook pins webhook success routing to serena-core", () => {
+  const runbook = read("docs/ops/t38-vps-core-update-runbook.md");
+  assert.match(runbook, /received:\s*true/);
+  assert.match(runbook, /routedTo:\s*"serena-core"/);
+  assert.doesNotMatch(runbook, /routedTo:\s*"channel-inbound"/);
+});
+
 test("T38: runbook keeps operational isolation and rollback preservation", () => {
   const runbook = read("docs/ops/t38-vps-core-update-runbook.md");
   assert.match(runbook, /Do not deploy `gateway-wa`\./);

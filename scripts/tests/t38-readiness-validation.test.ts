@@ -40,6 +40,33 @@ test("T38: runbook keeps operational isolation and rollback preservation", () =>
   assert.match(runbook, /Do not run `down -v`\./);
 });
 
+test("T38: runbook validates SERENA_INTERNAL_TOKEN before first core docker compose command", () => {
+  const runbook = read("docs/ops/t38-vps-core-update-runbook.md");
+
+  const firstCoreComposeIndex = runbook.indexOf(
+    "docker compose -f infra/vps/docker-compose.yml",
+  );
+  assert.notEqual(
+    firstCoreComposeIndex,
+    -1,
+    "expected at least one core docker compose command in runbook",
+  );
+
+  const tokenValidationIndex = runbook.indexOf(
+    "TOKEN_LINE=\"$(grep '^SERENA_INTERNAL_TOKEN=' .env || true)\"",
+  );
+  assert.notEqual(
+    tokenValidationIndex,
+    -1,
+    "expected SERENA_INTERNAL_TOKEN fail-fast block in preflight",
+  );
+
+  assert.ok(
+    tokenValidationIndex < firstCoreComposeIndex,
+    "SERENA_INTERNAL_TOKEN fail-fast validation must appear before any core docker compose command",
+  );
+});
+
 test("T38: staged gateway runbook is gated by core refresh precondition", () => {
   const runbook = read("docs/ops/t37-gateway-wa-staging-runbook.md");
   assert.match(runbook, /Do not deploy `gateway-wa` until `serena-core` has been updated from `main`/);

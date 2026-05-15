@@ -23,20 +23,6 @@ Run from the VPS:
 
 ```sh
 cd /docker/serena
-docker compose -f infra/vps/docker-compose.yml ps
-docker network inspect serena-internal >/dev/null
-```
-
-Confirm `.env` exists and contains the required variable names without printing values:
-
-```sh
-sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' .env | sort
-grep -q '^SERENA_INTERNAL_TOKEN=' .env && echo 'SERENA_INTERNAL_TOKEN present'
-```
-
-Fail fast if `SERENA_INTERNAL_TOKEN` is missing or empty (T38 must stop before update/verification):
-
-```sh
 TOKEN_LINE="$(grep '^SERENA_INTERNAL_TOKEN=' .env || true)"
 if [ -z "$TOKEN_LINE" ]; then
   echo 'ERROR: SERENA_INTERNAL_TOKEN is missing in /docker/serena/.env'
@@ -52,6 +38,16 @@ if [ -z "$TOKEN_VALUE" ]; then
 fi
 
 unset TOKEN_LINE TOKEN_VALUE
+
+docker compose -f infra/vps/docker-compose.yml ps
+docker network inspect serena-internal >/dev/null
+```
+
+Confirm `.env` exists and contains the required variable names without printing values:
+
+```sh
+sed -n 's/^\([A-Za-z_][A-Za-z0-9_]*\)=.*/\1/p' .env | sort
+grep -q '^SERENA_INTERNAL_TOKEN=' .env && echo 'SERENA_INTERNAL_TOKEN present'
 ```
 
 ## Update `/docker/serena` to `main`
@@ -96,16 +92,24 @@ curl -fsS https://serena.goingmerry01.tech/health
 Use the token from `.env` without printing it:
 
 ```sh
-set -a
-. ./.env
-set +a
+TOKEN_LINE="$(grep '^SERENA_INTERNAL_TOKEN=' .env || true)"
+if [ -z "$TOKEN_LINE" ]; then
+  echo 'ERROR: SERENA_INTERNAL_TOKEN line is missing in /docker/serena/.env'
+  exit 1
+fi
+
+SERENA_INTERNAL_TOKEN="${TOKEN_LINE#SERENA_INTERNAL_TOKEN=}"
+if [ -z "$SERENA_INTERNAL_TOKEN" ]; then
+  echo 'ERROR: SERENA_INTERNAL_TOKEN is empty in /docker/serena/.env'
+  exit 1
+fi
 
 docker exec \
   -e SERENA_INTERNAL_TOKEN="$SERENA_INTERNAL_TOKEN" \
   serena-core \
   node -e "fetch('http://127.0.0.1:3000/internal/webhook/whatsapp',{method:'POST',headers:{'content-type':'application/json','x-serena-internal-token':process.env.SERENA_INTERNAL_TOKEN},body:JSON.stringify({provider:'evolution',instanceId:'t38-probe',messageId:'t38-probe-' + Date.now(),from:'5491111111111',text:'hola',timestamp:new Date().toISOString()})}).then(async r => { console.log(r.status, await r.text()); process.exit(r.ok ? 0 : 1); }).catch(e => { console.error(e.message); process.exit(1); })"
 
-unset SERENA_INTERNAL_TOKEN
+unset TOKEN_LINE SERENA_INTERNAL_TOKEN
 ```
 
 Expected result: HTTP 200 with a JSON body including `received: true` and `routedTo: "channel-inbound"`.

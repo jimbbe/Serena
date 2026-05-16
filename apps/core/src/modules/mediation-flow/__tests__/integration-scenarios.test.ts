@@ -98,7 +98,23 @@ test("S1: Complete mediation flow — understand → confirm → resolved", asyn
   assert.ok(step2.flowState !== undefined, "Step 2 should have flow state");
   assert.equal(step2.flowState.status, "resolved");
   assert.equal(step2.flowState.pendingAction, null);
-  assert.ok(step2.promptText?.includes("ya fue entregado"));
+  assert.doesNotMatch(step2.promptText ?? "", /ya fue entregado/i);
+  assert.match(step2.promptText ?? "", /confirmado para envío futuro/i);
+});
+
+test("S1b: Complete mediation with explicit delivery enabled reports delivered", async () => {
+  const withDelivery = await createInMemoryPipeline({
+    llmProvider: new MockLlmProvider(),
+    providerName: "mock",
+    configuredModel: "mock-v1",
+    enableAutomaticOutboundDelivery: true,
+  });
+
+  const step1 = await doStep(withDelivery, "avisale a Carlos que llego tarde");
+  const step2 = await doStep(withDelivery, "sí", step1.conversation?.id);
+
+  assert.equal(step2.flowState?.status, "resolved");
+  assert.match(step2.promptText ?? "", /ya fue entregado/i);
 });
 
 // ---------------------------------------------------------------------------

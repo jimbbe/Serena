@@ -36,6 +36,7 @@ const {
   providerName: env.aiProvider,
   configuredModel: env.aiModel ?? "mock-model-v1",
   deliveryPort: runtimeDeliveryPort,
+  enableAutomaticOutboundDelivery: env.outboundDeliveryAdapter === "gateway-wa",
 });
 const pipelineHandler = createPipelineHandler(orchestrator, processedMessageStore);
 const whatsappWebhookHandler = createWhatsAppWebhookHandler(processChannelInboundMessage);

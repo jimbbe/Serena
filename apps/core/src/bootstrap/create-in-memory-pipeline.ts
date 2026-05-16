@@ -74,6 +74,8 @@ export async function createInMemoryPipeline(options?: {
   providerName?: string;
   configuredModel?: string;
   deliveryPort?: DeliveryPort;
+  requestOutboundDelivery?: RequestOutboundDelivery;
+  enableAutomaticOutboundDelivery?: boolean;
 }): Promise<{
   orchestrator: ProcessIncomingWhatsAppMessage;
   bridgeStore: InMemoryMediationBridgeSessionStore;
@@ -208,10 +210,13 @@ export async function createInMemoryPipeline(options?: {
 
   // T35 — Delivery port and use case
   const deliveryPort = options?.deliveryPort ?? new FakeDeliveryPort();
-  const requestOutboundDelivery = new RequestOutboundDelivery({
+  const requestOutboundDelivery = options?.requestOutboundDelivery ?? new RequestOutboundDelivery({
     outboundDraftStore,
     deliveryPort,
   });
+  const autoRequestOutboundDelivery = options?.enableAutomaticOutboundDelivery === true
+    ? requestOutboundDelivery
+    : undefined;
 
   // T32 — ProcessChannelInboundMessage with flow store wired
   const processChannelInboundMessage = new ProcessChannelInboundMessage({
@@ -224,7 +229,9 @@ export async function createInMemoryPipeline(options?: {
     resolveOutboundRecipient,
     outboundDraftStore,
     createOutboundDraft,
-    requestOutboundDelivery,
+    ...(autoRequestOutboundDelivery !== undefined
+      ? { requestOutboundDelivery: autoRequestOutboundDelivery }
+      : {}),
   });
 
   return {

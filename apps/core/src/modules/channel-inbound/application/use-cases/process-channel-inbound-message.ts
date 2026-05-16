@@ -10,7 +10,9 @@
  *   5. Execute AI guide
  *   6. Return structured ChannelInboundResult with identity
  *
- * No real messages are sent — this is a read-only pipeline.
+ * By default no real messages are sent.
+ * Real delivery occurs only when a real DeliveryPort is explicitly injected/configured
+ * for outbound delivery.
  */
 
 import { randomUUID } from "node:crypto";

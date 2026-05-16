@@ -45,20 +45,20 @@ async function doVoiceStep(
   });
 }
 
-test("S1: confirm with known recipient creates prepared outbound ready for delivery", async () => {
+test("S1: confirm with known recipient keeps prepared outbound pending delivery", async () => {
   const pipeline = await freshPipeline();
 
   const step1 = await doStep(pipeline, "avisale a Carlos que llego tarde");
   const step2 = await doStep(pipeline, "sí", step1.conversation?.id);
 
   assert.equal(step2.flowState?.status, "resolved");
-  assert.equal(step2.preparedOutbound?.status, "delivered");
-  assert.equal(step2.preparedOutbound?.deliveryReady, false);
+  assert.equal(step2.preparedOutbound?.status, "confirmed_pending_delivery");
+  assert.equal(step2.preparedOutbound?.deliveryReady, true);
   assert.equal(step2.preparedOutbound?.recipientDisplayName, "Carlos");
 
   const stored = await pipeline.outboundDraftStore.findByConversationId(step1.conversation!.id);
   assert.equal(stored.length, 1);
-  assert.equal(stored[0]?.status, "delivered");
+  assert.equal(stored[0]?.status, "confirmed_pending_delivery");
 });
 
 test("S2: confirm with unknown recipient creates unresolved prepared outbound", async () => {
@@ -242,7 +242,7 @@ test("S10: voice confirmation creates outbound draft with voice requester channe
   const step2 = await doVoiceStep(pipeline, "sí", step1.conversation?.id);
 
   assert.equal(step2.channel, "voice");
-  assert.equal(step2.preparedOutbound?.status, "delivered");
+  assert.equal(step2.preparedOutbound?.status, "confirmed_pending_delivery");
 
   const stored = await pipeline.outboundDraftStore.findByConversationId(step1.conversation!.id);
   assert.equal(stored[0]?.requesterChannel, "voice");

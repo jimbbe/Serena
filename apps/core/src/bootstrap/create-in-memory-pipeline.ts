@@ -50,6 +50,7 @@ import {
 } from "../modules/outbound-draft/index.ts";
 
 import { FakeDeliveryPort, RequestOutboundDelivery } from "../modules/outbound-delivery/index.ts";
+import type { DeliveryPort } from "../modules/outbound-delivery/index.ts";
 
 import { AiGuideService } from "../modules/ai-guide/application/use-cases/ai-guide-service.ts";
 import { UseCaseRegistry } from "../modules/ai-guide/application/use-cases/use-case-registry.ts";
@@ -72,6 +73,9 @@ export async function createInMemoryPipeline(options?: {
   llmProvider?: LlmProvider;
   providerName?: string;
   configuredModel?: string;
+  deliveryPort?: DeliveryPort;
+  requestOutboundDelivery?: RequestOutboundDelivery;
+  enableAutomaticOutboundDelivery?: boolean;
 }): Promise<{
   orchestrator: ProcessIncomingWhatsAppMessage;
   bridgeStore: InMemoryMediationBridgeSessionStore;
@@ -84,7 +88,7 @@ export async function createInMemoryPipeline(options?: {
   mediationFlowStore: InMemoryMediationFlowStore;
   processChannelInboundMessage: ProcessChannelInboundMessage;
   outboundDraftStore: InMemoryOutboundDraftStore;
-  deliveryPort: FakeDeliveryPort;
+  deliveryPort: DeliveryPort;
   requestOutboundDelivery: RequestOutboundDelivery;
 }> {
   const contacts = await loadContactsFromSeed();
@@ -205,11 +209,14 @@ export async function createInMemoryPipeline(options?: {
   const createOutboundDraft = new CreateOutboundDraftFromMediation();
 
   // T35 — Delivery port and use case
-  const deliveryPort = new FakeDeliveryPort();
-  const requestOutboundDelivery = new RequestOutboundDelivery({
+  const deliveryPort = options?.deliveryPort ?? new FakeDeliveryPort();
+  const requestOutboundDelivery = options?.requestOutboundDelivery ?? new RequestOutboundDelivery({
     outboundDraftStore,
     deliveryPort,
   });
+  const autoRequestOutboundDelivery = options?.enableAutomaticOutboundDelivery === true
+    ? requestOutboundDelivery
+    : undefined;
 
   // T32 — ProcessChannelInboundMessage with flow store wired
   const processChannelInboundMessage = new ProcessChannelInboundMessage({
@@ -222,6 +229,9 @@ export async function createInMemoryPipeline(options?: {
     resolveOutboundRecipient,
     outboundDraftStore,
     createOutboundDraft,
+    ...(autoRequestOutboundDelivery !== undefined
+      ? { requestOutboundDelivery: autoRequestOutboundDelivery }
+      : {}),
   });
 
   return {

@@ -45,7 +45,7 @@ async function doVoiceStep(
   });
 }
 
-test("S1: confirm with known recipient creates prepared outbound ready for delivery", async () => {
+test("S1: confirm with known recipient keeps prepared outbound pending delivery", async () => {
   const pipeline = await freshPipeline();
 
   const step1 = await doStep(pipeline, "avisale a Carlos que llego tarde");

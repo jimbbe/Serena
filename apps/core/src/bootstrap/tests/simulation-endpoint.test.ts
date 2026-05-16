@@ -399,7 +399,7 @@ describe("POST /dev/simulate/inbound-message", () => {
     assert.equal(identity.status, "resolved");
   });
 
-  it("confirmation with known recipient returns preparedOutbound deliveryReady=true", async () => {
+  it("confirmation with known recipient returns preparedOutbound pending delivery", async () => {
     const first = await request("POST", "/dev/simulate/inbound-message", port, {
       channel: "whatsapp",
       externalSenderId: "+5492600000000",

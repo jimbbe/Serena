@@ -6,7 +6,7 @@ La Fase 1 apunta a mediacion prudente por WhatsApp: Serena recibe un pedido, ide
 
 ## Estado Actual
 
-El repositorio tiene stack base desplegado en VPS (T04), arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), hardening interno completado (T17B), mock WhatsApp Gateway / dry-run adapter (T18), documentacion reorganizada (T18.1), modulo ai-guide con pipeline de ejecucion agnostico de LLM (T19), canal inbound channel-agnostic con resolucion de identidad externa (T20), Simulation API con single-step y scenario runner multi-step, historial de conversacion activo en AI guide (T27), contactos conocidos wireados en contexto de mediacion de AI guide (T28), LLM provider OpenAI-compatible configurable por variables de entorno (T29), readiness local post-T29 con validacion estricta de timestamps, timeout/validacion fuerte en gateway-wa y specs sincronizadas (T30A), structural cleanup con contratos compartidos via `@serena/contracts` y modulo `channel-inbound` movido (T30B), y Phase 3 de WhatsApp Gateway real con Evolution API en `apps/gateway-wa` conservando `dry_run`. **1026 tests pasando** (776 core + 250 gateway-wa).
+El repositorio tiene stack base desplegado en VPS (T04), arquitectura MVP definida (T10), modulos de logica de negocio implementados con testing (T06-T09, T11-T15), endpoint HTTP interno expuesto (T16), contrato WhatsApp Gateway especificado (T17A), hardening interno completado (T17B), mock WhatsApp Gateway / dry-run adapter (T18), documentacion reorganizada (T18.1), modulo ai-guide con pipeline de ejecucion agnostico de LLM (T19), canal inbound channel-agnostic con resolucion de identidad externa (T20), Simulation API con single-step y scenario runner multi-step, historial de conversacion activo en AI guide (T27), contactos conocidos wireados en contexto de mediacion de AI guide (T28), LLM provider OpenAI-compatible configurable por variables de entorno (T29), readiness local post-T29 con validacion estricta de timestamps, timeout/validacion fuerte en gateway-wa y specs sincronizadas (T30A), structural cleanup con contratos compartidos via `@serena/contracts` y modulo `channel-inbound` movido (T30B), Phase 3 de WhatsApp Gateway real con Evolution API en `apps/gateway-wa` conservando `dry_run`, core VPS actualizado con webhook WhatsApp interno y token runtime (T40), y adapter outbound configurable hacia `gateway-wa` manteniendo `fake` como default seguro (T39). **1026 tests pasando** (776 core + 250 gateway-wa).
 
 ## 🔒 Centro Operativo del Proyecto
 
@@ -28,7 +28,7 @@ Este repositorio funciona como centro operativo del proyecto Serena. Contiene do
 **Infraestructura (T02-T04):**
 
 - Docker Compose local con `postgres` y `serena-core`
-- Stack VPS en `/docker/serena` con `serena-core` y `serena-postgres` healthy
+- Stack VPS en `/docker/serena` con `serena-core` y `serena-postgres` healthy; `serena-core` esta actualizado desde `origin/main` post-T39 y expone `POST /internal/webhook/whatsapp` protegido por `SERENA_INTERNAL_TOKEN`
 - Ruta publica activa `https://serena.goingmerry01.tech/health` via Caddy
 - Workspace Node.js/TypeScript con estructura modular (apps/, packages/, docs/, scripts/)
 - `npm run check` valida estructura y typecheck sin levantar servicios
@@ -58,6 +58,7 @@ Este repositorio funciona como centro operativo del proyecto Serena. Contiene do
 
 **WhatsApp Gateway (`apps/gateway-wa`):**
 - Workspace con `dry_run` mock adapter (T18) y modo `production` real con Evolution API (Phase 3). Expone REST API con instancias, QR/pairing, `/send`, webhook Evolution, `connection.update` para estado de instancia y fallback de estado stale en `/send`. `InstanceManager` sigue in-memory en esta fase; Evolution API es source of truth y rehidratacion queda para una fase posterior. Inbound end-to-end ya puede rutear a Serena Core via `POST /internal/webhook/whatsapp` (T36). 250 tests con fake `fetch`. Sin dependencias npm externas. Ver `docs/architecture/wsp-gateway-api-contract.md`.
+- El deploy staging de `gateway-wa` todavia no esta levantado en VPS. El siguiente paso seguro es un staging privado con smoke interno, sin pairing WhatsApp ni envio real.
 
 **Simulation API (T20):**
 - Endpoint `POST /dev/simulate/inbound-message` — ejecuta el pipeline completo (inbound gate → AI guide) con mock LLM, sin WhatsApp real ni envio de mensajes. Devuelve traza completa: identidad resuelta, decision del gate, perfil LLM, resultado del AI guide. Solo habilitado con `ENABLE_SIMULATION_ENDPOINTS=true`.

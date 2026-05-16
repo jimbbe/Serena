@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), mock WhatsApp Gateway with dry-run adapter (T18), documentation reorganized (T18.1), AI guide module with deterministic mock provider (T19), channel-agnostic inbound with external identity resolution (T20), conversation store (T22), prompt registry with output contracts and runtime validation (T23), conversation history wired into AI guide context (T27), known contacts wired into AI guide mediation context (T28), configurable OpenAI-compatible LLM provider with env-based selection (T29), post-T29 local readiness/docs-spec sync completed (T30A), structural cleanup completed (T30B), and **Phase 3 of the WhatsApp Gateway — real Evolution API integration** — completed (wsp-phase3-real-gateway). The gateway now exposes a REST API with 7 endpoints, 3-tier API key auth, instance CRUD, message sending with stale-state fallback, webhook receiver with dedup and connection.update handling, and zero npm dependencies. **250 tests passing in gateway-wa** (was 59), 776 in core. Total: **1026 tests passing**.
+Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), mock WhatsApp Gateway with dry-run adapter (T18), documentation reorganized (T18.1), AI guide module with deterministic mock provider (T19), channel-agnostic inbound with external identity resolution (T20), conversation store (T22), prompt registry with output contracts and runtime validation (T23), conversation history wired into AI guide context (T27), known contacts wired into AI guide mediation context (T28), configurable OpenAI-compatible LLM provider with env-based selection (T29), post-T29 local readiness/docs-spec sync completed (T30A), structural cleanup completed (T30B), **Phase 3 of the WhatsApp Gateway — real Evolution API integration** completed (wsp-phase3-real-gateway), `gateway-wa` staging prepared repo-only (T37), VPS core refreshed with internal WhatsApp webhook verified (T40), and configurable outbound delivery adapter toward `gateway-wa` merged while keeping `fake` as the default safe adapter (T39). The gateway now exposes a REST API with 7 endpoints, 3-tier API key auth, instance CRUD, message sending with stale-state fallback, webhook receiver with dedup and connection.update handling, and zero npm dependencies. **250 tests passing in gateway-wa** (was 59), 776 in core. Total: **1026 tests passing**.
 
 ## Decided
 
@@ -32,7 +32,7 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - PostgreSQL connection usage in application code (current modules use in-memory stores).
 - Real LLM runtime configuration in deployed/local environments; OpenAI-compatible provider exists (T29) but requires env configuration. Mock remains the default.
 - Real outbound message sending (pipeline produces results but does not send messages — gateway has the `POST /send` endpoint ready but the orchestrator pipeline does not yet trigger it automatically).
-- Docker deployment and VPS integration of the real gateway (`gateway-wa` service, Docker network wiring, env configuration for production `GATEWAY_MODE`).
+- Docker deployment and VPS integration of the real gateway (`gateway-wa` service, Docker network wiring, env configuration for production `GATEWAY_MODE`) remains pending; core-side VPS readiness is complete.
 - HTTP API beyond `/health` and `/internal/pipeline/process` (simulation endpoints are dev-only, gated by `ENABLE_SIMULATION_ENDPOINTS`).
 - Public/admin exposure policy for gateway-wa staging (T37 keeps it private by default).
 - HMAC webhook signature validation between Evolution API and gateway.
@@ -48,6 +48,15 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - Added placeholder-only `.env.example` and routing table sample.
 - Added non-destructive smoke helper script and T37 runbook.
 - No live deploy, SSH mutation, Caddy mutation, or real WhatsApp pairing performed.
+
+## Executed In T40: VPS Core Readiness For gateway-wa
+
+- `/docker/serena` on the VPS was updated from `origin/main` after T39 using an operator-approved archive copy because the VPS directory is not a Git checkout.
+- Existing `.env` was preserved; `SERENA_INTERNAL_TOKEN` was generated on the VPS without printing or committing the secret.
+- Only `serena-core` was rebuilt and recreated; `serena-postgres` stayed running and Docker volumes were not deleted.
+- Validation passed: public `/health` returns 200, internal `POST /internal/webhook/whatsapp` returns 200 with the token, and the same webhook returns 401 without the token.
+- No `gateway-wa`, Evolution API, Redis, Caddy changes, port exposure, or WhatsApp pairing were performed.
+- Backup before update: `/docker/backups/serena-t40-preupdate-20260516-230859.tar.gz` (excludes `.env`).
 
 ## Repository Conventions
 
@@ -284,7 +293,7 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 
 ## Expected Next Task
 
-After T30B: decide between persistence (PostgreSQL adapters) and real WhatsApp adapter (Evolution API / Baileys).
+After T40: deploy `gateway-wa` staging privately and run non-destructive internal smoke checks before any Evolution startup, public route, WhatsApp pairing, or real message delivery.
 
 ### Repository note
 Este repositorio es el centro operativo del proyecto. Contiene documentación técnica (`docs/architecture/`) y operativa (`docs/ops/`) con datos reales de VPS, deploy, rutas de Caddy y backups. Debe hacerse privado antes de uso productivo o exposición pública prolongada.

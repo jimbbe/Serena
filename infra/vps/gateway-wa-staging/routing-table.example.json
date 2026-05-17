@@ -1,4 +1,8 @@
 {
+  "meta": {
+    "operatorOnly": true,
+    "notes": "Example only. Real routing-table.json stays out of Git and is managed by operator in VPS staging."
+  },
   "routes": [
     {
       "instanceId": "serena-main",

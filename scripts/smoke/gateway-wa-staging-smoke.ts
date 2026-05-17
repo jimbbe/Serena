@@ -1,15 +1,21 @@
 /**
- * T37 smoke helper (safe, non-destructive)
+ * T41 smoke helper (safe, non-destructive)
+ * Checks only: health, auth rejection, unknown route, malformed payload.
+ * Explicitly: no real pairing, no real send.
  *
  * Usage:
- *   GATEWAY_BASE_URL=http://localhost:3001 node --experimental-strip-types scripts/smoke/gateway-wa-staging-smoke.ts
+ *   GATEWAY_BASE_URL=http://gateway-wa:3001 node --experimental-strip-types scripts/smoke/gateway-wa-staging-smoke.ts
  */
 
-const baseUrl = (process.env["GATEWAY_BASE_URL"] ?? "http://localhost:3001").trim();
+const baseUrl = (process.env["GATEWAY_BASE_URL"] ?? "").trim();
 const appKey = (process.env["GATEWAY_APP_KEY"] ?? "").trim();
 const evoKey = (process.env["GATEWAY_EVO_KEY"] ?? "").trim();
 
 async function main(): Promise<void> {
+  if (!baseUrl) {
+    throw new Error("GATEWAY_BASE_URL is required (use a private reachable gateway endpoint)");
+  }
+
   console.log(`[smoke] baseUrl=${baseUrl}`);
 
   await checkHealth();

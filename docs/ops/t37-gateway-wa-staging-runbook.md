@@ -28,6 +28,7 @@ T41 keeps this as **operator-only** private staging readiness: no live deploy fr
 - Rollback must not touch `serena-core`.
 - `gateway-wa` must join the external `serena-internal` network before it can route to `http://serena-core:3000/internal/webhook/whatsapp`.
 - Do not deploy `gateway-wa` until `serena-core` has been updated from `main`, has `SERENA_INTERNAL_TOKEN` configured only on the VPS, and `POST /internal/webhook/whatsapp` has been verified.
+- Redis auth/password hardening is not wired in this staging template yet; do not add `REDIS_PASSWORD` placeholders unless Redis and Evolution are explicitly configured to use it.
 
 ## Suggested smoke checks (when explicitly approved)
 

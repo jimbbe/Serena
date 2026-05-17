@@ -56,7 +56,6 @@ test("t41 env template remains placeholder-only with private evolution endpoint"
   assert.match(envExample, /^GATEWAY_EVO_KEY=REPLACE_/m);
   assert.match(envExample, /^SERENA_INTERNAL_TOKEN=REPLACE_/m);
   assert.match(envExample, /^POSTGRES_PASSWORD=REPLACE_/m);
-  assert.match(envExample, /^REDIS_PASSWORD=REPLACE_/m);
 });
 
 test("t41 smoke helper stays non-destructive", () => {

@@ -21,7 +21,6 @@ These questions are intentionally left open until a task needs the decision.
 
 - **Which WhatsApp number will Serena use?** — Needs a real WhatsApp Business API number. Currently only contracts exist for `whatsapp-gateway`.
 - **One-session-per-pair rule details** — The `SessionResolver` port expects to resolve one active session per participant pair. Edge cases: what if the pair has a historical closed session and starts a new one? Should closed sessions be archived or deleted?
-- **Evolution API hosting** — Where will the Evolution API instance run? On the same VPS? Separate service? The `whatsapp-gateway` adapter will need this URL.
 - **Persistence strategy** — Current modules use in-memory stores. When do we switch to PostgreSQL? Should we implement repositories alongside in-memory adapters, or defer the real DB until after the pipeline works end-to-end?
 
 ## Architecture (T17A / T17B Open Questions)
@@ -73,6 +72,10 @@ Idempotencia in-memory implementada en T17B. Preguntas abiertas para futuras tar
 - Should gateway-wa staging stay private permanently, or do we need an explicit admin hostname behind Caddy in a future approved task?
 - Do we add durable routing/instance state persistence before enabling shared multi-consumer onboarding?
 - Should webhook authenticity add HMAC signature validation between Evolution API and gateway before first live staging deploy?
+
+## Resolved In T41
+
+- **Evolution API hosting model** — Resolved: Evolution API runs in its own private VPS Docker container; `gateway-wa` is the only adapter allowed to call it; Serena Core must not call Evolution directly.
 
 ## Verified In T03.1
 

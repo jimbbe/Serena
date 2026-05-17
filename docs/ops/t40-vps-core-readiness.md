@@ -80,7 +80,9 @@ This was an operational update only. It did not deploy `gateway-wa`, start Evolu
 
 ## Next Safe Step
 
-T41 should deploy `gateway-wa` staging privately and run non-destructive smoke checks.
+T41 is a **repository-only readiness** pass: update private staging templates/runbooks/smoke checks without deploying live infrastructure.
+
+Operational handoff after T41: when an explicitly approved ops task runs, `gateway-wa` remains the only component that talks to Evolution API over private Docker networking, while Serena Core remains unchanged and receives only internal webhook traffic.
 
 T41 should still avoid:
 

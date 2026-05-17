@@ -16,6 +16,7 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - The active VPS path is `serena-core` behind the existing Caddy edge on external Docker network `proxy`, without host port publication from the app container.
 - The VPS stack includes private PostgreSQL on `serena-internal`; `serena-postgres` is not exposed on host ports or the public proxy network.
 - `apps/gateway-wa` is intentionally reused as the real WhatsApp Gateway workspace for Phase 3: `dry_run` preserves the T18 mock adapter behavior, while `production` enables the Evolution API HTTP gateway. No separate `apps/gateway-whatsapp` workspace is created in this phase.
+- Evolution API hosting for staging is resolved: Evolution API runs in its own private VPS Docker container, reachable only by `gateway-wa` over private networking; no public admin exposure in T41 scope.
 
 ## Implemented In T27: AI Guide Conversation History
 
@@ -38,6 +39,13 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - HMAC webhook signature validation between Evolution API and gateway.
 - Panel UI.
 - **Instance state persistence** — InstanceManager is in-memory; gateway restart loses local tracking. Evolution API remains source of truth for sessions. Rehydration from Evolution API on startup planned for a future phase.
+
+## Prepared In T41: Evolution API private readiness (repo-only)
+
+- Confirmed and documented operator decision: Evolution API runs as its own private container on VPS and is never called directly by Serena Core.
+- Updated staging templates/runbook/env/routing placeholders for operator-only management of instances/numbers/configuration.
+- Tightened non-destructive smoke scope: health, auth rejection, unknown route and malformed send payload only; no pairing and no real delivery.
+- No live deploy, no Caddy mutation, no public admin route, no secrets committed.
 
 ## Prepared In T37: Shared gateway-wa staging platform (repo-only)
 

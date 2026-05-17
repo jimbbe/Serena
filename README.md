@@ -252,12 +252,12 @@ Runbook operativo: `docs/ops/deployment-t04.md`.
 
 Fase completada: **logica de negocio con pipeline channel-agnostic, structural cleanup y readiness local post-T29** (T06-T30B). Pipeline end-to-end funciona con 578 tests (519 core + 59 gateway-wa). Endpoint HTTP interno con hardening (T17B), AI guide agnostico (T19), canal inbound multi-channel con resolucion de identidad (T20), Simulation API con single-step y scenario runner, historial de conversacion activo en AI guide (T27), contactos conocidos en contexto de mediacion (T28), provider OpenAI-compatible configurable (T29), validaciones locales/gateway endurecidas (T30A) y structural cleanup con contratos compartidos (`@serena/contracts`) y modulo `channel-inbound` (T30B).
 
-**Proximo paso**: decidir entre dos caminos:
+**Decision de hosting WhatsApp/Evolution (T41):** Evolution API corre en su propio contenedor privado en VPS; `gateway-wa` es el unico adapter que habla con Evolution; Serena Core sigue aislado y solo usa el boundary interno webhook/outbound hacia `gateway-wa`.
 
-1. **Persistencia conversacional** — reemplazar stores in-memory con PostgreSQL adapters para que sesiones, contactos y auditoria sobrevivan restarts.
-2. **Adapter WhatsApp real** — integrar Evolution API / Baileys como adapter de canal real, respetando el contrato T17A y sin acoplar el core a WhatsApp.
+**Proximo paso recomendado:** persistencia durable y rehidratacion operativa del gateway.
 
-La decision depende de si queremos primero produccion real (WhatsApp) o primero datos durables (PostgreSQL).
+1. **Persistencia conversacional** — reemplazar stores in-memory con adapters PostgreSQL para sesiones/contactos/auditoria.
+2. **Gateway state durability** — resolver persistencia/rehidratacion de instancias y configuracion en `gateway-wa` (hoy sigue in-memory + archivo/env).
 
 Ver tambien:
 

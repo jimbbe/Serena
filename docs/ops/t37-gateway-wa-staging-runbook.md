@@ -1,9 +1,9 @@
-# T37 — Gateway WA staging runbook (repository-only)
+# T37/T41 — Gateway WA private staging runbook (repository-only)
 
 ## Scope
 
 This runbook defines **future operator-approved** staging steps.
-T37 does **not** deploy, mutate VPS, change Caddy, or pair real WhatsApp instances.
+T41 keeps this as **operator-only** private staging readiness: no live deploy from this task, no Caddy mutation, no public admin exposure, no real pairing, and no real send.
 
 ## Files
 
@@ -23,6 +23,7 @@ T37 does **not** deploy, mutate VPS, change Caddy, or pair real WhatsApp instanc
 
 - Caddy remains the single edge on 80/443.
 - No direct public route to `evolution-api`.
+- No public admin route to `gateway-wa` (`/instances*`, `/send`, `/webhook/evolution`).
 - Placeholder secrets only in repo.
 - Rollback must not touch `serena-core`.
 - `gateway-wa` must join the external `serena-internal` network before it can route to `http://serena-core:3000/internal/webhook/whatsapp`.
@@ -38,6 +39,7 @@ T37 does **not** deploy, mutate VPS, change Caddy, or pair real WhatsApp instanc
 6. Logs contain no secrets.
 
 Compose does not publish gateway port `3001` to the host by default. Do not assume `GATEWAY_BASE_URL=http://localhost:3001` is reachable unless an approved temporary exposure exists.
+Preferred operator path is private reachability (for example SSH tunnel, a private Docker-network helper container, or another explicitly approved internal path).
 
 ### Smoke helper coverage and explicit boundaries
 

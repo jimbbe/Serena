@@ -8,13 +8,13 @@ Define the REST endpoints for creating, listing, retrieving QR, and deleting Wha
 
 ### Requirement: Create Instance
 
-The system MUST expose `POST /instances` to create a new WhatsApp instance.
+The system MUST expose `POST /instances` to create a new WhatsApp instance without returning raw secrets.
 
 | Aspect | Detail |
 |--------|--------|
 | Auth | Admin key required |
 | Request body | `{ "name": "<instance-name>" }` — `name` is required, non-empty, alphanumeric + hyphens |
-| Success | `201` with instance info and QR/pairing code |
+| Success | `201` with safe instance metadata and QR/pairing code |
 | Conflict | `409` if instance with same name already exists |
 
 | Response (201) | Field | Description |
@@ -22,14 +22,16 @@ The system MUST expose `POST /instances` to create a new WhatsApp instance.
 | `name` | Instance name |
 | `status` | Initial status: `"disconnected"` |
 | `qr` | Pairing code string from Evolution API (NOT base64) |
-| `apiKey` | App key for this instance (same as `GATEWAY_APP_KEY`) |
 
-#### Scenario: Create instance succeeds with QR
+The success response MUST NOT include raw `apiKey`, app keys, admin keys, internal tokens, or any other credential material.
+
+#### Scenario: Create instance succeeds with safe metadata only
 
 - GIVEN valid admin key and `EVOLUTION_API_URL` configured
 - WHEN `POST /instances` with `{ "name": "serena-main" }`
 - THEN Evolution API creates the instance
-- AND response is `201` with `{ "name": "serena-main", "status": "disconnected", "qr": "<pairing-code>", "apiKey": "<app-key>" }`
+- AND response is `201` with `{ "name": "serena-main", "status": "disconnected", "qr": "<pairing-code>" }`
+- AND response does not include `apiKey` or any credential field
 
 #### Scenario: Create instance with invalid name
 

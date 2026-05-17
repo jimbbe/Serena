@@ -62,16 +62,24 @@ function makeFakeReq(): IncomingMessage {
 // ---------------------------------------------------------------------------
 
 describe("createInstanceHandler", () => {
-  it("returns 201 with instance info on success", async () => {
+  it("returns 201 with safe instance metadata only on success", async () => {
     const manager = makeFakeManager();
     const ctx: RequestContext = { body: { name: "serena-main" }, params: {} };
     const result = await createInstanceHandler(ctx, manager, "app-key-123");
 
     assert.equal(result.status, 201);
     const body = result.body as Record<string, unknown>;
+    assert.deepEqual(Object.keys(body).sort(), ["name", "qr", "status"]);
     assert.equal(body.name, "serena-main");
     assert.equal(body.status, "disconnected");
-    assert.equal(body.apiKey, "app-key-123");
+    assert.equal(body.qr, "CODE-123");
+    assert.equal(body.apiKey, undefined);
+    assert.equal(body.appKey, undefined);
+    assert.equal(body.adminKey, undefined);
+    assert.equal(body.internalToken, undefined);
+    assert.equal(body.evolutionApiKey, undefined);
+    assert.equal(body.token, undefined);
+    assert.equal(body.secret, undefined);
   });
 
   it("returns 400 for empty name", async () => {

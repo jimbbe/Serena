@@ -47,6 +47,14 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - Tightened non-destructive smoke scope: health, auth rejection, unknown route and malformed send payload only; no pairing and no real delivery.
 - No live deploy, no Caddy mutation, no public admin route, no secrets committed.
 
+## Implemented In T42: gateway-wa private staging hardening
+
+- `POST /instances` success contract was hardened to return safe metadata only (`name`, `status`, `qr`) and no credential-like fields.
+- Unit/integration tests were updated with explicit absence assertions for `apiKey`, `appKey`, `adminKey`, `internalToken`, `evolutionApiKey`, `token`, and `secret`.
+- API contract docs were synchronized to the safe response shape.
+- Private staging runbook and smoke helper were tightened with fail-closed private-only guardrails, backup/rollback evidence requirements, and explicit non-actions.
+- Live VPS mutation was deferred in this execution context; evidence doc records deferral reason and required preconditions.
+
 ## Prepared In T37: Shared gateway-wa staging platform (repo-only)
 
 - Added gateway routing table support (`instanceId -> consumer`) via file/JSON config in `apps/gateway-wa`.

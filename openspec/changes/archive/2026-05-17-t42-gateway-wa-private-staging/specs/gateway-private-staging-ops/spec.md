@@ -1,14 +1,11 @@
-# Gateway Private Staging Ops Specification
+# Delta for Gateway Private Staging Ops
 
-## Purpose
-
-Define T42 private VPS staging readiness where Evolution API runs as its own non-public service, rollout is backup-first/private-only, and validation stays non-destructive.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Private Evolution Staging Topology
 
 T42 MUST allow only a backup-first private VPS staging rollout for `gateway-wa` and Evolution API. It MUST NOT publish Evolution admin, gateway admin, Caddy routes, DNS records, or host ports unless a template-required host port is explicitly justified before use.
+(Previously: T41 prepared repo-only templates/runbooks and performed no live operation.)
 
 #### Scenario: Private rollout remains non-public
 
@@ -27,6 +24,7 @@ T42 MUST allow only a backup-first private VPS staging rollout for `gateway-wa` 
 ### Requirement: Non-Destructive Readiness Validation
 
 T42 MUST define smoke validation that proves private deployability without pairing WhatsApp, sending real messages, mutating production Core, exposing admin surfaces, deleting data, or printing secrets.
+(Previously: T41 validation was repo-only and checked configuration shape/private reachability assumptions.)
 
 #### Scenario: Smoke checks are safe and private
 
@@ -40,6 +38,8 @@ T42 MUST define smoke validation that proves private deployability without pairi
 - GIVEN the smoke or runbook inspects staging exposure
 - WHEN public Caddy routes, DNS records, admin endpoints, or host ports are required
 - THEN validation MUST fail and the rollout MUST stop
+
+## ADDED Requirements
 
 ### Requirement: Operator Evidence
 

@@ -1,5 +1,5 @@
 /**
- * T41 smoke helper (safe, non-destructive)
+ * T41 smoke helper (T42 hardened; safe, non-destructive, private-only)
  * Checks only: health, auth rejection, unknown route, malformed payload.
  * Explicitly: no real pairing, no real send.
  *
@@ -16,7 +16,9 @@ async function main(): Promise<void> {
     throw new Error("GATEWAY_BASE_URL is required (use a private reachable gateway endpoint)");
   }
 
-  console.log(`[smoke] baseUrl=${baseUrl}`);
+  assertPrivateBaseUrl(baseUrl);
+
+  console.log("[smoke] private base URL accepted");
 
   await checkHealth();
   await checkAuthRejection();
@@ -100,6 +102,23 @@ function assertStatus(response: Response, expected: number, label: string): void
 function assertEqual(actual: unknown, expected: unknown, label: string): void {
   if (actual !== expected) {
     throw new Error(`${label}: expected ${String(expected)}, got ${String(actual)}`);
+  }
+}
+
+function assertPrivateBaseUrl(url: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("GATEWAY_BASE_URL must be a valid URL");
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  const privateHosts = new Set(["localhost", "127.0.0.1", "gateway-wa"]);
+  const isPrivateHost = privateHosts.has(host) || host.endsWith(".internal") || host.endsWith(".local");
+
+  if (!isPrivateHost) {
+    throw new Error("GATEWAY_BASE_URL must be private/operator-only for T42 smoke");
   }
 }
 

@@ -1,7 +1,8 @@
 services:
   gateway-wa:
     # Only gateway-wa may bridge Serena Core <-> Evolution API.
-    # No host ports published in this template.
+    # T42 guardrail: no host ports/public admin exposure.
+    # Keep access private via operator-only path.
     build:
       context: ../../..
       dockerfile: apps/gateway-wa/Dockerfile
@@ -16,7 +17,7 @@ services:
     restart: unless-stopped
 
   evolution-api:
-    # Evolution API stays private on evolution-private (no proxy/public route).
+    # T42 guardrail: Evolution API stays private (no proxy/public route).
     image: atendai/evolution-api:latest
     env_file:
       - .env

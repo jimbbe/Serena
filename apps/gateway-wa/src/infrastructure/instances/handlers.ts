@@ -31,6 +31,7 @@ export async function createInstanceHandler(
   manager: InstanceManager,
   appKey: string,
 ): Promise<HandlerResult> {
+  void appKey;
   const body = ctx.body as Record<string, unknown> | undefined;
   const name = body?.["name"];
 
@@ -51,7 +52,6 @@ export async function createInstanceHandler(
         name: state.name,
         status: state.status,
         qr: state.qr,
-        apiKey: appKey,
       },
     };
   } catch (err: unknown) {

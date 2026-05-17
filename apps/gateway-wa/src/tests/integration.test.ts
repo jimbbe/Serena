@@ -233,7 +233,7 @@ describe("GET /health", () => {
 });
 
 describe("POST /instances", () => {
-  it("returns 201 with admin key", async () => {
+  it("returns 201 with admin key and omits credential material", async () => {
     const res = await fetch(`${baseUrl}/instances`, {
       method: "POST",
       headers: {
@@ -244,9 +244,16 @@ describe("POST /instances", () => {
     });
     assert.equal(res.status, 201);
     const body = await res.json();
+    assert.deepEqual(Object.keys(body).sort(), ["name", "qr", "status"]);
     assert.equal(body.name, "test-instance");
     assert.equal(body.status, "disconnected");
-    assert.equal(body.apiKey, "test-app-key");
+    assert.equal(body.apiKey, undefined);
+    assert.equal(body.appKey, undefined);
+    assert.equal(body.adminKey, undefined);
+    assert.equal(body.internalToken, undefined);
+    assert.equal(body.evolutionApiKey, undefined);
+    assert.equal(body.token, undefined);
+    assert.equal(body.secret, undefined);
   });
 
   it("returns 401 without key", async () => {

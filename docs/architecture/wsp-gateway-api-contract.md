@@ -45,10 +45,14 @@ Response: 200 { "status": "ok", "service": "whatsapp-gateway" }
 POST /instances
 Auth: Admin key
 Body: { "name": "serena-main" }
-Response: 201 { "name": "serena-main", "qr": "pairing-code-string", "status": "disconnected", "apiKey": "<app-key>" }
+Response: 201 { "name": "serena-main", "qr": "pairing-code-string", "status": "disconnected" }
 ```
 > **QR Format Note**: The `qr` field contains a pairing code string from Evolution API,
 > NOT base64 image data. See §3.4 for details.
+>
+> **Credential Safety Note**: `POST /instances` success responses MUST NOT include
+> `apiKey`, `appKey`, `adminKey`, `internalToken`, `evolutionApiKey`, `token`, `secret`,
+> or any other credential-like material.
 
 ### 3.3 List Instances
 

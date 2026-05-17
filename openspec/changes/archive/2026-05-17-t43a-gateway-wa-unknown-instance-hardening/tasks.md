@@ -13,7 +13,7 @@
 ## Phase 3: Spec / Docs Sync
 
 - [x] 3.1 Sync `openspec/specs/gateway-webhook-receiver/spec.md` so the requirement and scenarios explicitly cover early unknown-instance fail-closed behavior and malformed missing-instance input.
-- [x] 3.2 Verify the change proposal/design wording in `openspec/changes/t44-gateway-wa-unknown-instance-hardening/{proposal.md,design.md}` still matches the implemented scope; adjust only if implementation forces a wording correction.
+- [x] 3.2 Verify the change proposal/design wording in `openspec/changes/t43a-gateway-wa-unknown-instance-hardening/{proposal.md,design.md}` still matches the implemented scope; adjust only if implementation forces a wording correction.
 
 ## Phase 4: Validation / PR Prep
 

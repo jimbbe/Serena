@@ -1,4 +1,4 @@
-# Archive Report — t44-gateway-wa-unknown-instance-hardening
+# Archive Report — t43a-gateway-wa-unknown-instance-hardening
 
 ## Status
 
@@ -6,7 +6,7 @@ PASS
 
 ## Executive Summary
 
-T44 is archived successfully. The gateway webhook receiver spec was already synced to the main OpenSpec source of truth, and the completed change folder was moved into the archive trail.
+T43A is archived successfully as a pre-T44 hardening task. The gateway webhook receiver spec was already synced to the main OpenSpec source of truth, and the completed change folder was moved into the archive trail.
 
 ## Specs Synced
 

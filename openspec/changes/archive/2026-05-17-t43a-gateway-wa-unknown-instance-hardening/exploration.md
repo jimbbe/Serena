@@ -1,4 +1,4 @@
-## Exploration: t44-gateway-wa-unknown-instance-hardening
+## Exploration: t43a-gateway-wa-unknown-instance-hardening
 
 ### Current State
 - `apps/gateway-wa/src/infrastructure/webhook/receiver.ts` handles `connection.update` separately, but for message webhooks it currently runs `dedup -> filter -> normalize -> route`.
@@ -22,7 +22,7 @@
 
 2. **Defensive schema validation for all message webhooks** — validate required nested fields before filter/normalize and return `400 invalid_webhook_payload` on malformed bodies.
    - Pros: broader safety, removes multiple 500 paths beyond unknown instances.
-   - Cons: larger scope, more tests/spec churn, easier to broaden beyond the requested T44 boundary.
+   - Cons: larger scope, more tests/spec churn, easier to broaden beyond the requested pre-T44 boundary.
    - Effort: Medium.
 
 3. **Catch-and-downgrade around normalize/filter** — wrap message processing in targeted try/catch and convert shape errors into a controlled non-500 response.
@@ -31,12 +31,12 @@
    - Effort: Low.
 
 ### Recommendation
-Use **Approach 1** as the narrow T44 scope: in routing-table mode, resolve `instanceId` and reject unknown/unconfigured instances **before** dedup/filter/normalization. Then add one unit regression and one HTTP integration regression using a minimal synthetic unknown-instance payload shape that previously hit the server catch-all. This keeps the task tightly focused on safe fail-closed behavior without expanding into durable instance persistence or broad webhook schema redesign.
+Use **Approach 1** as the narrow pre-T44 scope: in routing-table mode, resolve `instanceId` and reject unknown/unconfigured instances **before** dedup/filter/normalization. Then add one unit regression and one HTTP integration regression using a minimal synthetic unknown-instance payload shape that previously hit the server catch-all. This keeps the task tightly focused on safe fail-closed behavior without expanding into durable instance persistence or broad webhook schema redesign.
 
 ### Risks
-- If the proposal tries to harden every malformed webhook path now, scope will sprawl past the explicit T44 follow-up.
+- If the proposal tries to harden every malformed webhook path now, scope will sprawl past the explicit pre-T44 follow-up.
 - Reordering must not break existing valid-route processing, duplicate handling, self-message discard, or `connection.update` support.
-- If staging smoke used a payload missing `instance`, the proposal must decide whether that is treated as `routing_not_configured` (`instanceId: "unknown"`) or `400 invalid_webhook_payload`; the narrower T44 reading favors fail-safe ignore in routing-table mode.
+- If staging smoke used a payload missing `instance`, the proposal must decide whether that is treated as `routing_not_configured` (`instanceId: "unknown"`) or `400 invalid_webhook_payload`; the narrower pre-T44 reading favors fail-safe ignore in routing-table mode.
 
 ### Ready for Proposal
-Yes — the change is narrow enough. The proposal should frame T44 as **gateway webhook hardening for unknown/unconfigured instances**, centered on operation ordering, regression tests, and spec sync only.
+Yes — the change is narrow enough. The proposal should frame this pre-T44 task as **gateway webhook hardening for unknown/unconfigured instances**, centered on operation ordering, regression tests, and spec sync only.

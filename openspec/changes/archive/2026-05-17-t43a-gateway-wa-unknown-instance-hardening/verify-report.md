@@ -1,6 +1,6 @@
 # Verification Report
 
-**Change**: t44-gateway-wa-unknown-instance-hardening  
+**Change**: t43a-gateway-wa-unknown-instance-hardening  
 **Mode**: Strict TDD
 
 ---
@@ -12,7 +12,7 @@
 | Tasks complete | 8 |
 | Tasks incomplete | 0 |
 
-No incomplete tasks found in `openspec/changes/t44-gateway-wa-unknown-instance-hardening/tasks.md`.
+No incomplete tasks found in `openspec/changes/t43a-gateway-wa-unknown-instance-hardening/tasks.md`.
 
 ---
 
@@ -138,4 +138,4 @@ Coverage analysis skipped — no coverage tool detected.
 ### Verdict
 **PASS**
 
-Implementation is complete and behaviorally compliant with T44 specs/tasks, with all required validations passing under Strict TDD verification.
+Implementation is complete and behaviorally compliant with T43A pre-T44 specs/tasks, with all required validations passing under Strict TDD verification.

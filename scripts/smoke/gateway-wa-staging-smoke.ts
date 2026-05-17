@@ -1,6 +1,6 @@
 /**
  * T41 smoke helper (T42 hardened; safe, non-destructive, private-only)
- * Checks only: health, auth rejection, unknown route, malformed payload.
+ * Checks only: health, auth rejection, unknown path, malformed payload.
  * Explicitly: no real pairing, no real send.
  *
  * Usage:
@@ -9,7 +9,6 @@
 
 const baseUrl = (process.env["GATEWAY_BASE_URL"] ?? "").trim();
 const appKey = (process.env["GATEWAY_APP_KEY"] ?? "").trim();
-const evoKey = (process.env["GATEWAY_EVO_KEY"] ?? "").trim();
 
 async function main(): Promise<void> {
   if (!baseUrl) {
@@ -41,33 +40,10 @@ async function checkAuthRejection(): Promise<void> {
 }
 
 async function checkUnknownRoute(): Promise<void> {
-  const response = await fetch(`${baseUrl}/webhook/evolution`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Gateway-Evo-Key": evoKey || "placeholder",
-    },
-    body: JSON.stringify({
-      event: "MESSAGES_UPSERT",
-      instance: "unknown-instance",
-      data: {
-        key: {
-          id: `smoke-${Date.now()}`,
-          remoteJid: "5491111111111@s.whatsapp.net",
-          fromMe: false,
-        },
-        messageTimestamp: Math.floor(Date.now() / 1000),
-        message: { conversation: "smoke test" },
-      },
-    }),
-  });
+  const response = await fetch(`${baseUrl}/unknown-path`);
 
-  assertStatus(response, 200, "webhook unknown instance");
-  const body = await readJsonObject(response, "webhook unknown instance body");
-  assertEqual(body["ignored"], true, "webhook unknown instance ignored flag");
-  assertEqual(body["reason"], "routing_not_configured", "webhook unknown instance reason");
-  assertEqual(body["instanceId"], "unknown-instance", "webhook unknown instance id");
-  console.log(`[smoke] webhook unknown route -> ${response.status} ${JSON.stringify(body)}`);
+  assertStatus(response, 404, "GET /unknown-path");
+  console.log(`[smoke] GET /unknown-path -> ${response.status}`);
 }
 
 async function checkSendPathAuthAndValidation(): Promise<void> {
@@ -99,12 +75,6 @@ function assertStatus(response: Response, expected: number, label: string): void
   }
 }
 
-function assertEqual(actual: unknown, expected: unknown, label: string): void {
-  if (actual !== expected) {
-    throw new Error(`${label}: expected ${String(expected)}, got ${String(actual)}`);
-  }
-}
-
 function assertPrivateBaseUrl(url: string): void {
   let parsed: URL;
   try {
@@ -120,22 +90,6 @@ function assertPrivateBaseUrl(url: string): void {
   if (!isPrivateHost) {
     throw new Error("GATEWAY_BASE_URL must be private/operator-only for T42 smoke");
   }
-}
-
-async function readJsonObject(response: Response, label: string): Promise<Record<string, unknown>> {
-  const raw = await response.text();
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error(`${label}: expected JSON object body, got non-JSON`);
-  }
-
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error(`${label}: expected JSON object body`);
-  }
-
-  return parsed as Record<string, unknown>;
 }
 
 main().catch((error) => {

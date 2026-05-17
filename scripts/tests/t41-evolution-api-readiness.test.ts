@@ -62,7 +62,7 @@ test("t41 smoke helper stays non-destructive", () => {
   const smoke = readRepoFile("scripts/smoke/gateway-wa-staging-smoke.ts");
 
   assert.match(smoke, /T41 smoke helper/);
-  assert.match(smoke, /unknown route/i);
+  assert.match(smoke, /unknown path/i);
   assert.match(smoke, /malformed payload/i);
   assert.match(smoke, /no real pairing, no real send/i);
   assert.doesNotMatch(smoke, /\/instances\/.+qr/i);

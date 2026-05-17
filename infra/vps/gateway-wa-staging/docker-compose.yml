@@ -9,7 +9,6 @@ services:
     env_file:
       - .env
     networks:
-      - proxy
       - serena-internal
       - evolution-private
     volumes:
@@ -47,8 +46,6 @@ services:
     restart: unless-stopped
 
 networks:
-  proxy:
-    external: true
   serena-internal:
     external: true
   evolution-private:

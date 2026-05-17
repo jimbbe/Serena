@@ -65,6 +65,31 @@ export async function handleWebhook(
   // --- MESSAGES_UPSERT and other message events ---
   const payload = body as EvolutionWebhookPayload;
 
+  let route: ReturnType<RoutingTable["findRoute"]> | null = null;
+  let instanceId = payload.instance ?? "unknown";
+
+  if (routingTable) {
+    if (typeof payload.instance !== "string" || payload.instance.trim().length === 0) {
+      return {
+        status: 400,
+        body: { error: "invalid_webhook_payload" },
+      };
+    }
+
+    instanceId = payload.instance.trim();
+    route = routingTable.findRoute(instanceId) ?? null;
+    if (!route) {
+      return {
+        status: 200,
+        body: {
+          ignored: true,
+          reason: "routing_not_configured",
+          instanceId,
+        },
+      };
+    }
+  }
+
   if (!payload.data || typeof payload.data !== "object") {
     return {
       status: 400,
@@ -99,11 +124,9 @@ export async function handleWebhook(
   }
 
   // Step 4: Normalize
-  const instanceId = payload.instance ?? "unknown";
   const normalized = normalizeEvolutionPayload(payload, instanceId);
 
   // Step 5: Route using instanceId -> consumer mapping
-  const route = routingTable?.findRoute(instanceId) ?? null;
   if (!route && (!config.coreUrl || !config.internalToken)) {
     console.error("[gateway-wa] No routing configured for webhook forwarding");
     return {

@@ -1,14 +1,11 @@
-# Gateway Private Staging Ops Specification
+# Delta for Gateway Private Staging Ops
 
-## Purpose
-
-Define T43 private VPS rollout for `gateway-wa` and Evolution API where the staging stack stays private, backup-first, and non-destructive.
-
-## Requirements
+## MODIFIED Requirements
 
 ### Requirement: Private Evolution Staging Topology
 
 T43 MUST allow private VPS rollout for `gateway-wa`, Evolution API, `evo-postgres`, Redis, and supporting private services only after T40 Core webhook readiness is confirmed. The rollout MUST fail closed: no host `ports:`, Caddy route, DNS mutation, public admin surface, WhatsApp pairing, real send, or `OUTBOUND_DELIVERY_ADAPTER` change away from `fake` is permitted.
+(Previously: T42 defined repo-only/private readiness and allowed a justified template-required host port.)
 
 #### Scenario: Private rollout remains non-public
 
@@ -33,6 +30,7 @@ T43 MUST allow private VPS rollout for `gateway-wa`, Evolution API, `evo-postgre
 ### Requirement: Non-Destructive Readiness Validation
 
 T43 MUST validate private deployability with operator-only, synthetic smoke checks. Smoke MUST NOT pair WhatsApp, request QR onboarding, send real messages, mutate production Core, expose admin surfaces, delete data/volumes, print secrets, or expand product outbound behavior.
+(Previously: T42 defined safe private smoke for readiness, not approved live private rollout validation.)
 
 #### Scenario: Smoke checks are safe and private
 
@@ -57,11 +55,12 @@ T43 MUST validate private deployability with operator-only, synthetic smoke chec
 ### Requirement: Operator Evidence
 
 T43 MUST leave sanitized operator evidence covering backup, exact rollout scope, private-only proof, smoke results, rollback, secrets posture, and explicit non-actions.
+(Previously: T42 evidence covered readiness actions and non-actions without live rollout completion requirements.)
 
 #### Scenario: Evidence records actions and non-actions
 
 - GIVEN T43 validation completes or aborts
-- WHEN the operator updates the runbook or verification notes
+- WHEN the operator updates evidence
 - THEN it states deployed services, backup path, private access proof, checks, rollback steps, and result
 - AND it explicitly states no Caddy/DNS change, public admin route, host port, pairing, real send, secret commit/print, or volume deletion occurred
 

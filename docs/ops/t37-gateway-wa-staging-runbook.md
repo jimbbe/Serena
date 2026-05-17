@@ -1,9 +1,9 @@
-# T37/T41/T42 — Gateway WA private staging runbook
+# T37/T41/T42/T43 — Gateway WA private staging runbook
 
 ## Scope
 
 This runbook defines **operator-approved** private staging steps and keeps operator-only access.
-T41 prepared repository-only readiness. T42 adds hard guardrails for a safe private rollout: backup-first, private-only access, rollback evidence, and explicit non-actions.
+T41 prepared repository-only readiness. T42 added hard guardrails. T43 authorizes a **private VPS rollout only** under fail-closed constraints.
 
 ## Files
 
@@ -22,6 +22,7 @@ T41 prepared repository-only readiness. T42 adds hard guardrails for a safe priv
 ## Safety constraints
 
 - Caddy remains the single edge on 80/443.
+- Do not attach `gateway-wa` to `proxy` in T43.
 - No direct public route to `evolution-api`.
 - No public admin route to `gateway-wa` (`/instances*`, `/send`, `/webhook/evolution`).
 - Placeholder secrets only in repo.
@@ -57,6 +58,28 @@ Allowed smoke scope is non-destructive only:
 - private reachability checks
 
 If any check requires public exposure or destructive action, the rollout must fail closed and be deferred.
+
+## T43 execution sequence (mandatory)
+
+Before any VPS mutation:
+
+1. Confirm task branch is `feat/t43-gateway-wa-private-rollout`.
+2. Re-read `docs/ops/t40-vps-core-readiness.md` and verify webhook readiness evidence is current.
+3. Record rollout scope in evidence (path, compose project, services, private access method).
+4. Create a restorable backup and record absolute path.
+
+Apply rollout (private only):
+
+1. In VPS staging path, provision `.env` and `routing-table.json` without echoing secrets.
+2. Validate compose statically: `docker compose config`.
+3. Deploy services privately: `docker compose up -d`.
+4. Verify no host ports and no dependency on Caddy/DNS/public route.
+
+Abort rules:
+
+- If T40 webhook readiness cannot be verified safely, STOP before mutation.
+- If backup path cannot be produced, STOP before mutation.
+- If rollout requires Caddy/DNS/public exposure or host port publication, STOP and defer.
 
 ## Suggested smoke checks (when explicitly approved)
 
@@ -96,3 +119,5 @@ Evidence MUST include:
 - smoke checks run and result
 - rollback commands/steps
 - explicit non-actions (no Caddy/DNS/public admin/pairing/real send/secrets)
+- backup absolute path
+- rollback commands (staging scope, no volume deletion)

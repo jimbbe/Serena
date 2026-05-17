@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), mock WhatsApp Gateway with dry-run adapter (T18), documentation reorganized (T18.1), AI guide module with deterministic mock provider (T19), channel-agnostic inbound with external identity resolution (T20), conversation store (T22), prompt registry with output contracts and runtime validation (T23), conversation history wired into AI guide context (T27), known contacts wired into AI guide mediation context (T28), configurable OpenAI-compatible LLM provider with env-based selection (T29), post-T29 local readiness/docs-spec sync completed (T30A), structural cleanup completed (T30B), **Phase 3 of the WhatsApp Gateway — real Evolution API integration** completed (wsp-phase3-real-gateway), `gateway-wa` staging prepared repo-only (T37), VPS core refreshed with internal WhatsApp webhook verified (T40), and configurable outbound delivery adapter toward `gateway-wa` merged while keeping `fake` as the default safe adapter (T39). The gateway now exposes a REST API with 7 endpoints, 3-tier API key auth, instance CRUD, message sending with stale-state fallback, webhook receiver with dedup and connection.update handling, and zero npm dependencies. **250 tests passing in gateway-wa** (was 59), 776 in core. Total: **1026 tests passing**.
+Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), mock WhatsApp Gateway with dry-run adapter (T18), documentation reorganized (T18.1), AI guide module with deterministic mock provider (T19), channel-agnostic inbound with external identity resolution (T20), conversation store (T22), prompt registry with output contracts and runtime validation (T23), conversation history wired into AI guide context (T27), known contacts wired into AI guide mediation context (T28), configurable OpenAI-compatible LLM provider with env-based selection (T29), post-T29 local readiness/docs-spec sync completed (T30A), structural cleanup completed (T30B), **Phase 3 of the WhatsApp Gateway — real Evolution API integration** completed (wsp-phase3-real-gateway), `gateway-wa` staging prepared repo-only (T37), VPS core refreshed with internal WhatsApp webhook verified (T40), and configurable outbound delivery adapter toward `gateway-wa` merged while keeping `fake` as the default safe adapter (T39). The gateway now exposes a REST API with 7 endpoints, 3-tier API key auth, instance CRUD, message sending with stale-state fallback, webhook receiver with dedup and connection.update handling, and zero npm dependencies. **256 tests passing in gateway-wa**, 824 in core. Total: **1080 tests passing**.
 
 ## Decided
 
@@ -33,7 +33,7 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - PostgreSQL connection usage in application code (current modules use in-memory stores).
 - Real LLM runtime configuration in deployed/local environments; OpenAI-compatible provider exists (T29) but requires env configuration. Mock remains the default.
 - Real outbound message sending (pipeline produces results but does not send messages — gateway has the `POST /send` endpoint ready but the orchestrator pipeline does not yet trigger it automatically).
-- Docker deployment and VPS integration of the real gateway (`gateway-wa` service, Docker network wiring, env configuration for production `GATEWAY_MODE`) remains pending; core-side VPS readiness is complete.
+- Public rollout remains pending by design, but **private VPS staging rollout is completed in T43** (`gateway-wa`, `evolution-api`, `evo-postgres`, `redis`) with private-only networking and no host port publication.
 - HTTP API beyond `/health` and `/internal/pipeline/process` (simulation endpoints are dev-only, gated by `ENABLE_SIMULATION_ENDPOINTS`).
 - Public/admin exposure policy for gateway-wa staging (T37 keeps it private by default).
 - HMAC webhook signature validation between Evolution API and gateway.
@@ -54,6 +54,19 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - API contract docs were synchronized to the safe response shape.
 - Private staging runbook and smoke helper were tightened with fail-closed private-only guardrails, backup/rollback evidence requirements, and explicit non-actions.
 - Live VPS mutation was deferred in this execution context; evidence doc records deferral reason and required preconditions.
+
+## Applied In T43: private rollout execution on VPS (guardrails preserved)
+
+- Staging compose template was tightened for private-only topology: `gateway-wa` no longer joins `proxy`; stack remains on `serena-internal` + `evolution-private` only.
+- Runbook was updated with T43 execution sequence, pre-mutation abort gates, backup-first requirements, and explicit fail-closed stop conditions.
+- Evidence document was upgraded to a T43 rollout ledger shape (scope, backup, smoke, rollback, non-actions, secrets posture).
+- Live VPS preflight was executed and T40 webhook readiness was re-verified from a private Docker-network path (`200` with token, `401` without token).
+- Runtime outbound policy remained enforced as `OUTBOUND_DELIVERY_ADAPTER=fake` in `serena-core`.
+- Staging stack (`gateway-wa`, `evolution-api`, `evo-postgres`, `redis`) was deployed privately with no host port publication and no Caddy/DNS/public admin exposure.
+- VPS staging compose was remediated to remove stale `proxy` attachment for `gateway-wa`; final network scope is `serena-internal` + `evolution-private` only.
+- Missing Evolution runtime env keys were provisioned on VPS-only `.env` (without secret print), allowing `evolution-api` to stabilize.
+- Non-destructive smoke passed for `/health`, auth rejection, malformed `/send`, and unknown route (`/unknown-path`).
+- No Caddy change, DNS change, public admin exposure, host port publication, pairing, real sends, secret print, or volume deletion was performed.
 
 ## Prepared In T37: Shared gateway-wa staging platform (repo-only)
 

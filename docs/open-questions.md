@@ -73,6 +73,11 @@ Idempotencia in-memory implementada en T17B. Preguntas abiertas para futuras tar
 - Do we add durable routing/instance state persistence before enabling shared multi-consumer onboarding?
 - Should webhook authenticity add HMAC signature validation between Evolution API and gateway before first live staging deploy?
 
+## T43 Follow-up Notes (resolved blocker)
+
+- Webhook-auth mismatch after recreate was resolved operationally: VPS `.env` token key, compose mapping, and runtime token equality were revalidated with redacted checks, and webhook readiness again returned `200` with token / `401` without token.
+- New follow-up: synthetic unknown-instance webhook payload currently returns `500` for at least one payload shape in staging smoke; T43 proceeded because required private smoke checks passed, but payload-level error behavior should be hardened in a future task.
+
 ## Resolved In T41
 
 - **Evolution API hosting model** — Resolved: Evolution API runs in its own private VPS Docker container; `gateway-wa` is the only adapter allowed to call it; Serena Core must not call Evolution directly.

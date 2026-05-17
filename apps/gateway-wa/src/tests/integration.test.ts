@@ -9,6 +9,7 @@ import { describe, it, after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { loadConfig, type GatewayRuntimeConfig } from "../infrastructure/config.ts";
 import type { Server } from "node:http";
+import { loadRoutingTable } from "../infrastructure/routing/table.ts";
 
 // ---------------------------------------------------------------------------
 // State
@@ -703,6 +704,82 @@ describe("POST /webhook/evolution", () => {
       body: JSON.stringify({}),
     });
     assert.equal(res.status, 403);
+  });
+
+  it("returns routing_not_configured (non-500) for malformed unknown instance in routing-table mode", async () => {
+    process.env["SERENA_INTERNAL_TOKEN"] = "routing-table-token";
+    const routingTable = loadRoutingTable({
+      routingTablePath: undefined,
+      routingTableJson: JSON.stringify({
+        routes: [
+          {
+            instanceId: "serena-main",
+            consumerId: "serena-core",
+            internalWebhookUrl: "http://core:3000/internal/webhook/whatsapp",
+            auth: { header: "X-Serena-Internal-Token", env: "SERENA_INTERNAL_TOKEN" },
+          },
+        ],
+      }),
+    });
+    assert.ok(routingTable);
+
+    const previousFetch = globalThis.fetch;
+    let outboundCalls = 0;
+    globalThis.fetch = ((...args: Parameters<typeof fetch>) => {
+      const firstArg = args[0];
+      const url = typeof firstArg === "string" ? firstArg : firstArg instanceof URL ? firstArg.toString() : firstArg.url;
+      if (url.includes("/internal/webhook/whatsapp")) {
+        outboundCalls += 1;
+      }
+
+      return previousFetch(...args);
+    }) as typeof globalThis.fetch;
+
+    const { createServer, startServer, stopServer } = await import("../infrastructure/server.ts");
+    const { Router } = await import("../infrastructure/router.ts");
+    const { handleWebhook } = await import("../infrastructure/webhook/receiver.ts");
+    const { InstanceManager } = await import("../infrastructure/instances/manager.ts");
+    const { createEvolutionClient } = await import("../infrastructure/evolution/client.ts");
+
+    const evoClient = createEvolutionClient({
+      baseUrl: testConfig.evolutionApiUrl,
+      apiKey: testConfig.evolutionApiKey,
+    });
+    const instanceManager = new InstanceManager(evoClient);
+    const isolatedRouter = new Router<any>();
+    isolatedRouter.register("POST", "/webhook/evolution", async (ctx: any) =>
+      handleWebhook(ctx, testConfig, instanceManager, routingTable),
+    );
+
+    const isolatedServer = createServer(testConfig, isolatedRouter);
+    const isolatedPort = await startServer(isolatedServer, 0);
+    const isolatedBaseUrl = `http://localhost:${isolatedPort}`;
+
+    try {
+      const res = await fetch(`${isolatedBaseUrl}/webhook/evolution`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Gateway-Evo-Key": "test-evo-key",
+        },
+        body: JSON.stringify({
+          event: "MESSAGES_UPSERT",
+          instance: "unknown-instance",
+        }),
+      });
+
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.deepEqual(body, {
+        ignored: true,
+        reason: "routing_not_configured",
+        instanceId: "unknown-instance",
+      });
+      assert.equal(outboundCalls, 0);
+    } finally {
+      await stopServer(isolatedServer);
+      globalThis.fetch = previousFetch;
+    }
   });
 });
 

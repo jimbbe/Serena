@@ -265,6 +265,70 @@ describe("handleWebhook", () => {
     });
   });
 
+  it("returns routing_not_configured for unknown instance before payload normalization", async () => {
+    const ctx: RequestContext = {
+      body: {
+        event: "MESSAGES_UPSERT",
+        instance: "unknown-instance",
+      },
+      params: {},
+    };
+
+    const result = await handleWebhook(ctx, validConfig, makeFakeManager(), buildRoutingTable());
+
+    assert.equal(result.status, 200);
+    assert.deepEqual(result.body, {
+      ignored: true,
+      reason: "routing_not_configured",
+      instanceId: "unknown-instance",
+    });
+  });
+
+  it("returns 400 when instance is missing in routing-table mode", async () => {
+    const ctx: RequestContext = {
+      body: {
+        event: "MESSAGES_UPSERT",
+        data: validTextPayload.data,
+      },
+      params: {},
+    };
+
+    const result = await handleWebhook(ctx, validConfig, makeFakeManager(), buildRoutingTable());
+
+    assert.equal(result.status, 400);
+    assert.deepEqual(result.body, { error: "invalid_webhook_payload" });
+  });
+
+  it("returns 400 when instance is blank in routing-table mode", async () => {
+    const ctx: RequestContext = {
+      body: {
+        ...validTextPayload,
+        instance: "   ",
+      },
+      params: {},
+    };
+
+    const result = await handleWebhook(ctx, validConfig, makeFakeManager(), buildRoutingTable());
+
+    assert.equal(result.status, 400);
+    assert.deepEqual(result.body, { error: "invalid_webhook_payload" });
+  });
+
+  it("returns 400 when instance is non-string in routing-table mode", async () => {
+    const ctx: RequestContext = {
+      body: {
+        ...validTextPayload,
+        instance: 123,
+      },
+      params: {},
+    };
+
+    const result = await handleWebhook(ctx, validConfig, makeFakeManager(), buildRoutingTable());
+
+    assert.equal(result.status, 400);
+    assert.deepEqual(result.body, { error: "invalid_webhook_payload" });
+  });
+
   it("falls back to legacy SERENA_* routing when table is absent", async () => {
     const noCoreConfig = { ...validConfig, coreUrl: "" as unknown as string };
     const ctx: RequestContext = { body: validTextPayload, params: {} };

@@ -53,7 +53,7 @@ Allowed smoke scope is non-destructive only:
 
 - `GET /health`
 - auth rejection on protected endpoints
-- unknown route (`routing_not_configured`)
+- unknown path (`GET /unknown-path` returns 404)
 - malformed `/send` payload validation
 - private reachability checks
 
@@ -85,7 +85,7 @@ Abort rules:
 
 1. `GET /health` returns 200.
 2. Missing API key on protected route returns 401/403.
-3. Unknown `instanceId` returns `routing_not_configured`.
+3. Unknown path (`GET /unknown-path`) returns 404.
 4. `/send` auth + payload-validation path is non-destructively exercised (no real delivery).
 5. Known `instanceId` routes to Serena internal webhook (**manual/optional** in staging unless an internal stub receiver is available).
 6. Logs contain no secrets.

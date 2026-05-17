@@ -38,7 +38,7 @@ T43 MUST validate private deployability with operator-only, synthetic smoke chec
 
 - GIVEN private staging is reachable by an approved operator-only path
 - WHEN smoke validation runs
-- THEN it checks health, auth rejection, unknown route, malformed `/send`, and private reachability
+- THEN it checks health, auth rejection, unknown path (`GET /unknown-path` returns 404), malformed `/send`, and private reachability
 - AND it does not pair WhatsApp, request QR onboarding, or send real messages
 
 #### Scenario: Outbound remains fake

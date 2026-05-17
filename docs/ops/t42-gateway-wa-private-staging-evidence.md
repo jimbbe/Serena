@@ -41,6 +41,7 @@
   - `SMOKE_UNKNOWN_ROUTE_STATUS=404` (GET `/unknown-path`)
 - Additional synthetic webhook probe:
   - `SMOKE_WEBHOOK_UNKNOWN_STATUS=500` for one payload shape; treated as non-blocking for T43 because private-only exposure checks passed and required smoke assertions above passed.
+  - This probe is a follow-up hardening signal only. It is **not** part of the successful T43 mandatory smoke, whose versioned helper checks `/health` => `200`, `/send` without auth => `401`, malformed `/send` => `400`, and `GET /unknown-path` => `404`.
 
 ## Secrets Posture
 

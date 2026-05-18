@@ -67,6 +67,14 @@
 - No Docker volume deletion.
 - No host port publication.
 
+## T44 Readiness Input Note
+
+This T43 rollout ledger is the baseline evidence input for T44 readiness/go-no-go review:
+
+- `docs/ops/t44-private-staging-readiness.md`
+
+T44 consumes this evidence as historical input only and does not authorize new runtime actions.
+
 ## Sanitized Preflight Evidence
 
 - `OUTBOUND_RUNTIME=fake` (runtime check inside `serena-core`)

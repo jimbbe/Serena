@@ -4,6 +4,9 @@
 
 This runbook defines **operator-approved** private staging steps and keeps operator-only access.
 T41 prepared repository-only readiness. T42 added hard guardrails. T43 authorizes a **private VPS rollout only** under fail-closed constraints.
+T44 adds the canonical readiness/go-no-go handoff package at `docs/ops/t44-private-staging-readiness.md`.
+
+T44 review is strictly repo-only: it does not authorize any additional runtime mutation.
 
 ## Files
 

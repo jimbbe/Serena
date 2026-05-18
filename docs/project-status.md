@@ -68,6 +68,13 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - Non-destructive smoke passed for `/health`, auth rejection, malformed `/send`, and unknown route (`/unknown-path`).
 - No Caddy change, DNS change, public admin exposure, host port publication, pairing, real sends, secret print, or volume deletion was performed.
 
+## Prepared In T44: private staging operational readiness (repo-only)
+
+- Added canonical readiness/go-no-go artifact at `docs/ops/t44-private-staging-readiness.md` with checklist, evidence inputs, decision ledger, operator handoff, rollback ownership, explicit non-actions, and blocked follow-ups.
+- Explicitly bounded T44 to repo-only readiness validation; no VPS/Caddy/DNS/Docker runtime mutation, pairing, public/admin exposure, real sends, or secret changes are authorized.
+- Added machine-checkable guardrail validation via `scripts/tests/t44-private-staging-readiness.test.ts` and wired it into `npm run check`.
+- T43 evidence remains baseline input and historical source; T44 does not rewrite or broaden T43 runtime scope.
+
 ## Prepared In T37: Shared gateway-wa staging platform (repo-only)
 
 - Added gateway routing table support (`instanceId -> consumer`) via file/JSON config in `apps/gateway-wa`.

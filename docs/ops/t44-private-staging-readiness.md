@@ -8,7 +8,7 @@
 - [x] Rollback ownership defined and bounded to staging scope.
 - [x] Explicit non-actions and blocked follow-ups documented.
 - [x] Machine-checkable repo validation added.
-- [ ] GO/NO-GO decision fields completed by reviewer/operator.
+- [x] GO/NO-GO decision fields completed by reviewer/operator.
 
 Any unchecked gate means **NO-GO**.
 
@@ -24,16 +24,22 @@ These are inputs only. Citing them does not authorize runtime actions.
 
 ## Go/No-Go Ledger
 
-- **Decision**: `GO | NO-GO` (operator/reviewer must fill)
-- **Reviewer**: `________________`
-- **Operator**: `________________`
-- **Timestamp (UTC)**: `________________`
+- **Decision**: `GO` for T45 planning only
+- **Reviewer**: `Marco`
+- **Operator**: `Marco`
+- **Timestamp (UTC)**: `2026-05-18` (post-PR #70 merge)
 - **Scope approved**: Private operator-only staging readiness review, repo-only
-- **Rationale**: `________________`
-- **Unmet gate(s)** (if NO-GO): `________________`
-- **Required remediation** (if NO-GO): `________________`
+- **Rationale**: T44 readiness package, archived SDD evidence, runbook/evidence links, and `validate:t44` guardrails are complete enough to plan T45.
+- **Unmet gate(s)** (if NO-GO): `none for T45 planning`
+- **Required remediation** (if NO-GO): `none for T45 planning`
 
 Boundary statement: even with GO, pairing, public/admin exposure, real sends, host-port publication, Caddy/DNS change, secrets handling changes, HMAC rollout, durable state rollout, and VPS/Docker runtime mutation remain out of scope for T44.
+
+## T44 Closeout
+
+- **Status**: closed after PR #70 merge.
+- **Next allowed step**: plan T45 as a controlled pairing readiness gate.
+- **Still not approved**: pairing execution, real sends, public/admin exposure, host ports, Caddy/DNS changes, VPS/Docker mutation, secret changes, HMAC rollout, durable state rollout, or production use.
 
 ## Operator Handoff
 

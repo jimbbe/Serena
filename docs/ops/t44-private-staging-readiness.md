@@ -16,9 +16,9 @@ Any unchecked gate means **NO-GO**.
 
 - Baseline rollout evidence: `docs/ops/t42-gateway-wa-private-staging-evidence.md`
 - Operational runbook: `docs/ops/t37-gateway-wa-staging-runbook.md`
-- T44 readiness spec: `openspec/changes/t44-private-staging-operational-readiness/specs/gateway-private-staging-readiness/spec.md`
-- T44 ops delta spec: `openspec/changes/t44-private-staging-operational-readiness/specs/gateway-private-staging-ops/spec.md`
-- T44 design: `openspec/changes/t44-private-staging-operational-readiness/design.md`
+- T44 readiness spec: `openspec/changes/archive/2026-05-17-t44-private-staging-operational-readiness/specs/gateway-private-staging-readiness/spec.md`
+- T44 ops delta spec: `openspec/changes/archive/2026-05-17-t44-private-staging-operational-readiness/specs/gateway-private-staging-ops/spec.md`
+- T44 design: `openspec/changes/archive/2026-05-17-t44-private-staging-operational-readiness/design.md`
 
 These are inputs only. Citing them does not authorize runtime actions.
 

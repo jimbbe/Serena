@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -6,6 +6,10 @@ const ROOT = new URL("../../", import.meta.url);
 
 function readRepoFile(relativePath: string): string {
   return readFileSync(new URL(relativePath, ROOT), "utf8");
+}
+
+function repoFileExists(relativePath: string): boolean {
+  return existsSync(new URL(relativePath, ROOT));
 }
 
 function escapeForRegex(value: string): string {
@@ -34,13 +38,18 @@ function validateReadinessDocument(content: string): string[] {
   const requiredEvidenceLinks = [
     "docs/ops/t42-gateway-wa-private-staging-evidence.md",
     "docs/ops/t37-gateway-wa-staging-runbook.md",
-    "openspec/changes/t44-private-staging-operational-readiness/specs/gateway-private-staging-readiness/spec.md",
-    "openspec/changes/t44-private-staging-operational-readiness/specs/gateway-private-staging-ops/spec.md",
+    "openspec/changes/archive/2026-05-17-t44-private-staging-operational-readiness/specs/gateway-private-staging-readiness/spec.md",
+    "openspec/changes/archive/2026-05-17-t44-private-staging-operational-readiness/specs/gateway-private-staging-ops/spec.md",
+    "openspec/changes/archive/2026-05-17-t44-private-staging-operational-readiness/design.md",
   ];
 
   for (const link of requiredEvidenceLinks) {
     if (!content.includes(link)) {
       errors.push(`Missing evidence link: ${link}`);
+    }
+
+    if (!repoFileExists(link)) {
+      errors.push(`Evidence link points to missing file: ${link}`);
     }
   }
 

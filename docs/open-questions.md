@@ -73,10 +73,18 @@ Idempotencia in-memory implementada en T17B. Preguntas abiertas para futuras tar
 - Do we add durable routing/instance state persistence before enabling shared multi-consumer onboarding?
 - Should webhook authenticity add HMAC signature validation between Evolution API and gateway before first live staging deploy?
 
-## T43 Follow-up Notes (resolved blocker)
+## Resolved In T43A
 
 - Webhook-auth mismatch after recreate was resolved operationally: VPS `.env` token key, compose mapping, and runtime token equality were revalidated with redacted checks, and webhook readiness again returned `200` with token / `401` without token.
-- New follow-up: synthetic unknown-instance webhook payload currently returns `500` for at least one payload shape in staging smoke; T43 proceeded because required private smoke checks passed, but payload-level error behavior should be hardened in a future task.
+- Synthetic unknown-instance webhook payload hardening was completed as T43A/pre-T44. Routing-table mode now fails closed with non-500 behavior for unknown or malformed instance routing before payload-dependent processing.
+
+## T45 Planning Questions
+
+- What exact evidence is required before approving controlled WhatsApp pairing?
+- Who is the operator/reviewer for pairing, abort, rollback and evidence recording?
+- Is HMAC webhook authenticity required before pairing, or can a private-only pairing rehearsal proceed with documented risk acceptance?
+- Is in-memory instance state acceptable for a controlled pairing rehearsal, or must startup rehydration/persistence happen first?
+- What is explicitly still forbidden after T45: real sends, public/admin exposure, Caddy/DNS changes, host ports, or production use?
 
 ## Resolved In T41
 

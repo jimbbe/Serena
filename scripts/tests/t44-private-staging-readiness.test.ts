@@ -25,6 +25,7 @@ function validateReadinessDocument(content: string): string[] {
     "## Go/No-Go Ledger",
     "## Operator Handoff",
     "## Rollback Ownership",
+    "## T44 Closeout",
     "## Explicit Non-Actions",
     "## Blocked Follow-ups",
   ];
@@ -57,6 +58,10 @@ function validateReadinessDocument(content: string): string[] {
     errors.push("Missing fail-closed checklist statement");
   }
 
+  if (!/\*\*Decision\*\*:\s*`GO` for T45 planning only/.test(content)) {
+    errors.push("Missing T44 closeout GO decision limited to T45 planning");
+  }
+
   if (!/\*\*Unmet gate\(s\)\*\* \(if NO-GO\):\s*`[^`]*`/.test(content)) {
     errors.push("Missing unmet gate field for NO-GO");
   }
@@ -77,6 +82,7 @@ test("t44 readiness keeps private-only scope and fail-closed wording", () => {
   const readiness = readRepoFile("docs/ops/t44-private-staging-readiness.md");
 
   assert.match(readiness, /NO-GO/i);
+  assert.match(readiness, /GO` for T45 planning only/i);
   assert.match(readiness, /private operator-only staging/i);
   assert.match(readiness, /repo-only/i);
   assert.match(readiness, /no runtime mutation is authorized/i);
@@ -96,10 +102,10 @@ test("t44 readiness fails closed when evidence or checklist fields are missing",
   assert.ok(errors.some((error) => error.includes("Missing required remediation field for NO-GO")));
 });
 
-test("t44 no-go ledger records remediation fields explicitly", () => {
+test("t44 closeout records GO decision and remediation fields explicitly", () => {
   const readiness = readRepoFile("docs/ops/t44-private-staging-readiness.md");
 
-  assert.match(readiness, /\*\*Decision\*\*: `GO \| NO-GO`/);
+  assert.match(readiness, /\*\*Decision\*\*: `GO` for T45 planning only/);
   assert.match(readiness, /\*\*Unmet gate\(s\)\*\* \(if NO-GO\):\s*`[^`]*`/);
   assert.match(readiness, /\*\*Required remediation\*\* \(if NO-GO\):\s*`[^`]*`/);
 });

@@ -61,8 +61,9 @@ Este repositorio funciona como centro operativo del proyecto Serena. Contiene do
 - **T43 completado**: staging privado en VPS desplegado para `gateway-wa`, `evolution-api`, `evo-postgres` y `redis`, con redes privadas (`serena-internal` + `evolution-private`) y sin host ports publicados.
 - **T43A completado**: hardening de webhook `unknown-instance` cerrado como pre-T44; el gateway falla cerrado con respuestas no-500 para instancias no configuradas/malformadas en routing-table mode.
 - **T44 completado**: readiness operacional repo-only cerrada con `docs/ops/t44-private-staging-readiness.md`, validacion `validate:t44`, evidencia archivada y decision GO limitada a pasar a planificacion T45.
+- **T45 completado**: gate canonico repo-only para controlled pairing readiness con `docs/ops/t45-controlled-pairing-readiness.md`, validacion fail-closed `validate:t45` y aprobacion limitada a planificar T46 (sin pairing en T45).
 - Guardrails preservados: sin cambios de Caddy/DNS/public route/public admin, sin pairing WhatsApp, sin envios reales y con `OUTBOUND_DELIVERY_ADAPTER=fake` mantenido en `serena-core`.
-- Siguiente paso recomendado: T45 como gate de readiness para pairing controlado, todavia con aprobacion explicita y sin asumir envios reales/productivos.
+- Siguiente paso recomendado: T46 como primer paso permitido para ejecucion de pairing controlado (con aprobacion explicita y evidencia), manteniendo bloqueados envios reales/productivos fuera del alcance aprobado.
 
 **Simulation API (T20):**
 - Endpoint `POST /dev/simulate/inbound-message` — ejecuta el pipeline completo (inbound gate → AI guide) con mock LLM, sin WhatsApp real ni envio de mensajes. Devuelve traza completa: identidad resuelta, decision del gate, perfil LLM, resultado del AI guide. Solo habilitado con `ENABLE_SIMULATION_ENDPOINTS=true`.

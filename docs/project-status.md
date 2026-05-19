@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), mock WhatsApp Gateway with dry-run adapter (T18), documentation reorganized (T18.1), AI guide module with deterministic mock provider (T19), channel-agnostic inbound with external identity resolution (T20), conversation store (T22), prompt registry with output contracts and runtime validation (T23), conversation history wired into AI guide context (T27), known contacts wired into AI guide mediation context (T28), configurable OpenAI-compatible LLM provider with env-based selection (T29), post-T29 local readiness/docs-spec sync completed (T30A), structural cleanup completed (T30B), **Phase 3 of the WhatsApp Gateway — real Evolution API integration** completed (wsp-phase3-real-gateway), `gateway-wa` staging prepared repo-only (T37), VPS core refreshed with internal WhatsApp webhook verified (T40), and configurable outbound delivery adapter toward `gateway-wa` merged while keeping `fake` as the default safe adapter (T39). The gateway now exposes a REST API with 7 endpoints, 3-tier API key auth, instance CRUD, message sending with stale-state fallback, webhook receiver with dedup and connection.update handling, and zero npm dependencies. **256 tests passing in gateway-wa**, 824 in core. Total: **1080 tests passing**.
+Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), business logic modules implemented with testing (T06-T09, T11-T15), the orchestrator pipeline exposed via HTTP (T16), the WhatsApp Gateway contract specified (T17A), internal hardening completed (T17B), mock WhatsApp Gateway with dry-run adapter (T18), documentation reorganized (T18.1), AI guide module with deterministic mock provider (T19), channel-agnostic inbound with external identity resolution (T20), conversation store (T22), prompt registry with output contracts and runtime validation (T23), conversation history wired into AI guide context (T27), known contacts wired into AI guide mediation context (T28), configurable OpenAI-compatible LLM provider with env-based selection (T29), post-T29 local readiness/docs-spec sync completed (T30A), structural cleanup completed (T30B), **Phase 3 of the WhatsApp Gateway — real Evolution API integration** completed (wsp-phase3-real-gateway), `gateway-wa` staging prepared repo-only (T37), VPS core refreshed with internal WhatsApp webhook verified (T40), configurable outbound delivery adapter toward `gateway-wa` merged while keeping `fake` as the default safe adapter (T39), private staging operational readiness closed as planning-only (T44), and controlled pairing readiness gate closed repo-only (T45). The gateway now exposes a REST API with 7 endpoints, 3-tier API key auth, instance CRUD, message sending with stale-state fallback, webhook receiver with dedup and connection.update handling, and zero npm dependencies. **261 tests passing in gateway-wa**, 824 in core. Total: **1085 tests passing**.
 
 ## Decided
 
@@ -76,11 +76,18 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - T43 evidence remains baseline input and historical source; T44 does not rewrite or broaden T43 runtime scope.
 - T44 close decision is **GO for T45 planning only**; it does not approve pairing, real sends, public/admin exposure, Caddy/DNS changes, host-port publication, VPS/Docker runtime mutation, HMAC rollout, durable state rollout, or secret changes.
 
-## Next Candidate: T45 controlled pairing readiness gate
+## Completed In T45: controlled pairing readiness gate (repo-only)
 
-- Recommended scope: plan a controlled WhatsApp pairing readiness gate with explicit operator/reviewer approval, abort criteria, rollback ownership, evidence requirements, and blocked non-actions.
-- T45 should not assume live sends or public exposure. If pairing is approved later, it must happen in a separate explicitly guarded operational task.
-- Open preconditions to decide before any pairing task: HMAC authenticity posture, instance state persistence/rehydration risk acceptance, first-number ownership, audit expectations, and human review responsibilities.
+- Added canonical T45 GO/NO-GO readiness artifact at `docs/ops/t45-controlled-pairing-readiness.md` with checklist, bounded-risk posture, explicit non-actions, abort/revalidate triggers, and <=4-task runway.
+- Added machine-checkable `scripts/tests/t45-controlled-pairing-readiness.test.ts` and wired `validate:t45` into `npm run check` after `validate:t44`.
+- T45 decision remains planning-only: GO is limited to T46 rehearsal planning and does not authorize pairing execution in T45.
+- Remain blocked: real sends, public/admin exposure, host ports, Caddy/DNS/VPS/Docker runtime mutation, secret changes, PostgreSQL rollout, HMAC rollout, durable state rollout, and sustained/production usage.
+
+## Next Candidate: T46 controlled pairing rehearsal execution (guarded)
+
+- Recommended scope: execute first controlled pairing rehearsal with explicit operator/reviewer approval, fail-closed abort criteria, and full evidence capture.
+- T46 must keep non-actions from T45/T44: no broad public exposure and no production/sustained rollout assumptions.
+- Open preconditions before/within T46-T48 hardening path: HMAC authenticity posture, instance state persistence/rehydration risk acceptance, first-number ownership, and audit/review responsibilities.
 
 ## Prepared In T37: Shared gateway-wa staging platform (repo-only)
 

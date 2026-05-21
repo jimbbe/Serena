@@ -83,10 +83,17 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - T45 decision remains planning-only: GO is limited to T46 rehearsal planning and does not authorize pairing execution in T45.
 - Remain blocked: real sends, public/admin exposure, host ports, Caddy/DNS/VPS/Docker runtime mutation, secret changes, PostgreSQL rollout, HMAC rollout, durable state rollout, and sustained/production usage.
 
-## Next Candidate: T46 controlled pairing rehearsal execution (guarded)
+## Completed In T46: controlled pairing rehearsal gate (repo-side apply)
 
-- Recommended scope: execute first controlled pairing rehearsal with explicit operator/reviewer approval, fail-closed abort criteria, and full evidence capture.
-- T46 must keep non-actions from T45/T44: no broad public exposure and no production/sustained rollout assumptions.
+- Added canonical guarded artifact `docs/ops/t46-controlled-pairing-rehearsal.md` as T46 GO/NO-GO ledger with explicit activation gates, private-operator sequence, mandatory redaction policy, abort/revalidate triggers, fake-outbound invariant, and deferred branch.
+- Added machine-checkable `scripts/tests/t46-controlled-pairing-rehearsal.test.ts` and wired `validate:t46` into `npm run check` after `validate:t45`.
+- Runtime rehearsal outcome in this execution context is **NO-GO/deferred** (fail-closed): private operator runtime path + live approvals were not safely executable from this environment, so success was not simulated.
+- Guardrails preserved: no public/admin exposure, no host ports, no Caddy/DNS/VPS/Docker runtime mutation, no real sends, no PostgreSQL/HMAC/durable-state rollout.
+
+## Next Candidate: T47 controlled end-to-end send rehearsal (still guarded)
+
+- Recommended scope: first controlled end-to-end send rehearsal only if a future approved task explicitly authorizes it.
+- T47 must keep non-actions from T46/T45/T44: no broad public exposure and no production/sustained rollout assumptions.
 - Open preconditions before/within T46-T48 hardening path: HMAC authenticity posture, instance state persistence/rehydration risk acceptance, first-number ownership, and audit/review responsibilities.
 
 ## Prepared In T37: Shared gateway-wa staging platform (repo-only)

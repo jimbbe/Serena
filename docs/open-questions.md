@@ -91,6 +91,11 @@ Idempotencia in-memory implementada en T17B. Preguntas abiertas para futuras tar
 - Before sustained usage, should durable instance/session state + startup rehydration be mandatory instead of in-memory acceptance?
 - What minimum evidence retention/audit policy should apply once controlled rehearsals become recurrent?
 
+## Updated In T46
+
+- Runtime controlled pairing rehearsal execution remained **deferred/NO-GO** in repo-side apply context because private operator runtime access + live approval could not be safely proven from this environment.
+- Follow-up remains open: what is the minimum operator-run evidence package format/versioning policy for repeated T46/T47 attempts without leaking sensitive data?
+
 ## Resolved In T41
 
 - **Evolution API hosting model** — Resolved: Evolution API runs in its own private VPS Docker container; `gateway-wa` is the only adapter allowed to call it; Serena Core must not call Evolution directly.

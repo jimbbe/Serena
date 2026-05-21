@@ -83,11 +83,18 @@ Serena has the base VPS stack deployed (T04), MVP architecture defined (T10), bu
 - T45 decision remains planning-only: GO is limited to T46 rehearsal planning and does not authorize pairing execution in T45.
 - Remain blocked: real sends, public/admin exposure, host ports, Caddy/DNS/VPS/Docker runtime mutation, secret changes, PostgreSQL rollout, HMAC rollout, durable state rollout, and sustained/production usage.
 
-## Next Candidate: T46 controlled pairing rehearsal execution (guarded)
+## Completed In T47: controlled pairing execution evidence + fail-closed closeout
 
-- Recommended scope: execute first controlled pairing rehearsal with explicit operator/reviewer approval, fail-closed abort criteria, and full evidence capture.
-- T46 must keep non-actions from T45/T44: no broad public exposure and no production/sustained rollout assumptions.
-- Open preconditions before/within T46-T48 hardening path: HMAC authenticity posture, instance state persistence/rehydration risk acceptance, first-number ownership, and audit/review responsibilities.
+- Added canonical sanitized evidence artifact at `docs/ops/t47-controlled-pairing-execution-evidence.md` with mandatory gates, single-attempt ledger, NO-GO closeout branch, and explicit non-actions.
+- Added machine-checkable `scripts/tests/t47-controlled-pairing-execution.test.ts` and wired `validate:t47` into `npm run check` after `validate:t45`.
+- Private VPS checks were executed with secret-safe outputs for path/services/networks/no-host-ports/no-proxy/core outbound fake and private smoke (`/health` 200, `/send` without key 401, unknown path 404).
+- T47 runtime pairing remains **NO-GO** in this execution window: PR #76 merge gate was not provable on `origin/main`, and mandatory runtime approval/instance-route-allowlist capture for one attempt was incomplete.
+
+## Next Candidate: T47 re-attempt under private operator window (guarded)
+
+- Recommended scope: unblock missing gates (PR #76 merged in main, one-window operator/reviewer approval, approved redacted instance + route/allowlist proof, authenticated malformed `/send` = 400 check), then execute exactly one private pairing attempt.
+- Keep non-actions from T45/T46/T44: no public/admin exposure, no host ports, no Caddy/DNS mutation, no real sends, no secret disclosure.
+- Open preconditions before/within T47-T48 hardening path: HMAC authenticity posture, instance state persistence/rehydration risk acceptance, first-number ownership, and audit/review responsibilities.
 
 ## Prepared In T37: Shared gateway-wa staging platform (repo-only)
 
